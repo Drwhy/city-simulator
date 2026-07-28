@@ -21,6 +21,7 @@ function snapshot(tick = 1): CitySnapshot {
       busLines: [{ id: 1, name: "Ligne A", stopIds: [1], route: [], fare: 2 }],
       operating: true,
     },
+    health: { tick, metrics: { activeMedicalCases: 0 }, hospital: null, cases: [] },
   } as unknown as CitySnapshot;
 }
 
@@ -36,6 +37,7 @@ function delta(): CityDelta {
       congestion: [{ x: 1, y: 2, vehicles: 3, level: "moderate" }],
     },
     transport: { operating: false },
+    health: { tick: 2, metrics: { activeMedicalCases: 1 }, hospital: null, cases: [] },
   } as unknown as CityDelta;
 }
 
@@ -64,6 +66,7 @@ describe("mergeCityMessage", () => {
     expect(merged?.transport.busStops).toBe(current.transport.busStops);
     expect(merged?.transport.busLines).toBe(current.transport.busLines);
     expect(merged?.transport.operating).toBe(false);
+    expect(merged?.health.metrics.activeMedicalCases).toBe(1);
     expect(current.tick).toBe(1);
     expect(current.transport.operating).toBe(true);
   });

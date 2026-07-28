@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { CityEvent } from "../types/city";
 
-type EventFilter = "all" | "economy" | "social" | "mobility" | "incidents" | "alerts";
+type EventFilter = "all" | "economy" | "health" | "social" | "mobility" | "incidents" | "alerts";
 
 const ECONOMY_TYPES = new Set([
   "vacancy_opened",
@@ -13,6 +13,8 @@ const ECONOMY_TYPES = new Set([
   "salary_paid",
   "shopping_completed",
 ]);
+
+const HEALTH_TYPES = new Set(["medical_emergency", "medical_case", "ambulance_dispatched", "medical_transport", "medical_discharge", "illness"]);
 
 const SOCIAL_TYPES = new Set([
   "positive_meeting",
@@ -49,6 +51,7 @@ const INCIDENT_TYPES = new Set([
 function matchesFilter(event: CityEvent, filter: EventFilter): boolean {
   if (filter === "all") return true;
   if (filter === "economy") return ECONOMY_TYPES.has(event.eventType);
+  if (filter === "health") return HEALTH_TYPES.has(event.eventType);
   if (filter === "social") return SOCIAL_TYPES.has(event.eventType);
   if (filter === "mobility") return MOBILITY_TYPES.has(event.eventType);
   if (filter === "incidents") return INCIDENT_TYPES.has(event.eventType) || event.incidentId !== null;
@@ -83,6 +86,7 @@ export function EventLog({
           {([
             ["all", "Tous"],
             ["economy", "Économie"],
+            ["health", "Santé"],
             ["social", "Social"],
             ["mobility", "Mobilité"],
             ["incidents", "Incidents"],
@@ -103,8 +107,9 @@ export function EventLog({
           <p className="empty-events">Aucun événement dans cette catégorie.</p>
         ) : visibleEvents.map((event) => {
           const isEconomyEvent = ECONOMY_TYPES.has(event.eventType);
-          const citizenId = isEconomyEvent ? (event.citizenIds[0] ?? null) : null;
-          const buildingId = isEconomyEvent ? event.buildingId : null;
+          const isHealthEvent = HEALTH_TYPES.has(event.eventType);
+          const citizenId = isEconomyEvent || isHealthEvent ? (event.citizenIds[0] ?? null) : null;
+          const buildingId = isEconomyEvent || isHealthEvent ? event.buildingId : null;
           const actionable = event.incidentId !== null || citizenId !== null || buildingId !== null;
           const content = (
             <>

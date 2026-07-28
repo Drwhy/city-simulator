@@ -21,7 +21,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="City Simulator MVP",
-    version="0.7.0",
+    version="0.8.0",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -53,6 +53,11 @@ async def health() -> dict:
 @app.get("/api/city")
 async def city_snapshot() -> dict:
     return await service.snapshot()
+
+
+@app.get("/api/healthcare")
+async def healthcare_overview() -> dict:
+    return await service.health_overview()
 
 
 @app.get("/api/citizens/{citizen_id}")

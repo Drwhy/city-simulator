@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .economy import record_purchase, record_salary_payment, record_work_minute
-from .models import Activity, BuildingType, BusinessStatus, Citizen, PoliceMeasure, TravelStage, VehicleStatus, VehicleType
+from .models import Activity, BuildingType, BusinessStatus, CareStatus, Citizen, PoliceMeasure, TravelStage, VehicleStatus, VehicleType
 
 if TYPE_CHECKING:
     from .world import World
@@ -15,7 +15,12 @@ def weekday(world: "World") -> int:
 
 
 def scheduled_today(world: "World", citizen: Citizen) -> bool:
-    return citizen.workplace_id is not None and weekday(world) in citizen.work_days
+    medically_available = (
+        (citizen.medical_leave_until_tick is None or world.tick >= citizen.medical_leave_until_tick)
+        and (citizen.incapacity_until_tick is None or world.tick >= citizen.incapacity_until_tick)
+        and citizen.care_status in {CareStatus.NONE, CareStatus.RECOVERING}
+    )
+    return medically_available and citizen.workplace_id is not None and weekday(world) in citizen.work_days
 
 
 def shift_bounds(citizen: Citizen) -> tuple[int, int]:
@@ -255,6 +260,7 @@ def apply_police_measure(
         "temporary_cell": "Mise en cellule",
         "sobering_cell": "Cellule de dégrisement",
         "custody": "Garde à vue",
+        "medical_exam": "Examen médical préalable",
     }
     measure = PoliceMeasure(
         tick=world.tick,

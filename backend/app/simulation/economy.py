@@ -28,8 +28,9 @@ EMPLOYER_TYPES = {
     BuildingType.CAFE,
     BuildingType.PUBLIC,
     BuildingType.POLICE,
+    BuildingType.HOSPITAL,
 }
-PUBLIC_EMPLOYER_TYPES = {BuildingType.PUBLIC, BuildingType.POLICE}
+PUBLIC_EMPLOYER_TYPES = {BuildingType.PUBLIC, BuildingType.POLICE, BuildingType.HOSPITAL}
 MIN_JOB_CHANGE_MINUTES = 7 * 24 * 60
 MAX_APPLICATION_HISTORY = 40
 MAX_FINANCIAL_HISTORY = 30
@@ -42,6 +43,7 @@ JOB_PROFILES: dict[BuildingType, tuple[str, float]] = {
     BuildingType.CAFE: ("Serveur", 78.0),
     BuildingType.PUBLIC: ("Agent municipal", 92.0),
     BuildingType.POLICE: ("Policier municipal", 108.0),
+    BuildingType.HOSPITAL: ("Infirmier", 118.0),
 }
 
 
@@ -59,7 +61,7 @@ def assigned_staff_count(world: World, building_id: int) -> int:
 
 def job_offer(building: Building, employee_index: int = 0) -> tuple[str, float, int, int, tuple[int, ...]]:
     title, salary = JOB_PROFILES[building.building_type]
-    if building.building_type == BuildingType.POLICE:
+    if building.building_type in {BuildingType.POLICE, BuildingType.HOSPITAL}:
         start_hour, end_hour = ((6, 14) if employee_index % 2 == 0 else (14, 22))
         work_days = (1, 2, 3, 4, 5, 6, 7)
     elif building.building_type == BuildingType.FACTORY:

@@ -16,6 +16,9 @@ class Activity(StrEnum):
     AT_HOME = "at_home"
     DETAINED = "detained"
     SHOPPING = "shopping"
+    WAITING_MEDICAL = "waiting_medical"
+    IN_TREATMENT = "in_treatment"
+    HOSPITALIZED = "hospitalized"
 
 
 class BuildingType(StrEnum):
@@ -27,6 +30,7 @@ class BuildingType(StrEnum):
     PARK = "park"
     PUBLIC = "public"
     POLICE = "police"
+    HOSPITAL = "hospital"
 
 
 class TransportMode(StrEnum):
@@ -49,6 +53,7 @@ class VehicleType(StrEnum):
     CAR = "car"
     BUS = "bus"
     POLICE = "police"
+    AMBULANCE = "ambulance"
 
 
 class VehicleStatus(StrEnum):
@@ -59,8 +64,27 @@ class VehicleStatus(StrEnum):
     RESPONDING = "responding"
     ON_SCENE = "on_scene"
     RETURNING = "returning"
+    TRANSPORTING = "transporting"
 
 
+class HealthCondition(StrEnum):
+    HEALTHY = "healthy"
+    MINOR_INJURY = "minor_injury"
+    SERIOUS_INJURY = "serious_injury"
+    MILD_ILLNESS = "mild_illness"
+    SEVERE_ILLNESS = "severe_illness"
+    RECOVERING = "recovering"
+
+
+class CareStatus(StrEnum):
+    NONE = "none"
+    WAITING_AMBULANCE = "waiting_ambulance"
+    AMBULANCE_DISPATCHED = "ambulance_dispatched"
+    IN_AMBULANCE = "in_ambulance"
+    WAITING_CONSULTATION = "waiting_consultation"
+    IN_CONSULTATION = "in_consultation"
+    HOSPITALIZED = "hospitalized"
+    RECOVERING = "recovering"
 
 
 class IncidentStatus(StrEnum):
@@ -243,6 +267,11 @@ class Building:
     productive_minutes_today: int = 0
     financial_history: list[BusinessFinancialRecord] = field(default_factory=list)
     employment_events: list[EmploymentRecord] = field(default_factory=list)
+    medical_beds: int = 0
+    medical_queue: list[int] = field(default_factory=list)
+    hospitalized_ids: set[int] = field(default_factory=set)
+    patients_treated_today: int = 0
+    medical_wait_minutes_today: int = 0
 
     @property
     def entrance(self) -> tuple[int, int]:
@@ -327,6 +356,7 @@ class Vehicle:
     incident_id: int | None = None
     service_started_tick: int | None = None
     crew_ids: set[int] = field(default_factory=set)
+    health_case_id: int | None = None
 
 
 @dataclass(slots=True)
@@ -396,6 +426,16 @@ class Citizen:
     arrests: int = 0
     detained_until_tick: int | None = None
     active_case_ids: list[int] = field(default_factory=list)
+    health_condition: HealthCondition = HealthCondition.HEALTHY
+    care_status: CareStatus = CareStatus.NONE
+    pain: float = 0.0
+    injury_severity: float = 0.0
+    illness_severity: float = 0.0
+    active_health_case_id: int | None = None
+    medical_leave_until_tick: int | None = None
+    incapacity_until_tick: int | None = None
+    hospitalized_until_tick: int | None = None
+    health_history: list[MedicalRecord] = field(default_factory=list)
 
     # Emploi persistant et suivi des shifts.
     work_start_hour: int = 8
@@ -428,7 +468,7 @@ class Citizen:
     shopping_visits: int = 0
     intoxication: float = 0.0
 
-    # Police et conséquences immédiates.
+    # Police et consÃ©quences immÃ©diates.
     police_history: list[PoliceMeasure] = field(default_factory=list)
     current_detention_type: str | None = None
 
@@ -466,6 +506,37 @@ class Incident:
     police_action: str | None = None
     police_officer_ids: tuple[int, ...] = ()
     detained_ids: tuple[int, ...] = ()
+    health_case_ids: tuple[int, ...] = ()
+
+
+@dataclass(slots=True)
+class MedicalRecord:
+    tick: int
+    event_type: str
+    label: str
+    severity: float
+    source: str
+    incident_id: int | None = None
+    hospital_id: int | None = None
+    incapacity_minutes: int = 0
+
+
+@dataclass(slots=True)
+class HealthCase:
+    id: int
+    citizen_id: int
+    source: str
+    severity: float
+    created_tick: int
+    status: CareStatus
+    hospital_id: int | None = None
+    ambulance_id: int | None = None
+    incident_id: int | None = None
+    queued_tick: int | None = None
+    consultation_started_tick: int | None = None
+    completed_tick: int | None = None
+    transport_required: bool = False
+    medical_report_created: bool = False
 
 
 @dataclass(slots=True)

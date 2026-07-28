@@ -40,6 +40,16 @@ def test_api_exposes_city_and_commands(tmp_path) -> None:
         assert economy.json()["businesses"]
         assert "unemploymentRate" in economy.json()["metrics"]
 
+        healthcare = client.get("/api/healthcare")
+        assert healthcare.status_code == 200
+        assert healthcare.json()["hospital"]["name"] == "Centre médical Saint-Roch"
+        assert healthcare.json()["metrics"]["hospitalBeds"] == 8
+        hospital_id = healthcare.json()["hospital"]["id"]
+        hospital = client.get(f"/api/buildings/{hospital_id}")
+        assert hospital.status_code == 200
+        assert hospital.json()["healthcare"]["beds"] == 8
+        assert hospital.json()["employees"]
+
         assert "workersOnDuty" in payload["stats"]
         assert "policeOfficersOnDuty" in payload["stats"]
         assert "shoppingTripsToday" in payload["stats"]
@@ -83,7 +93,9 @@ def test_websocket_stream_contains_mobility_data(tmp_path) -> None:
             delta = websocket.receive_json()
             assert delta["type"] == "city_delta"
             assert "economy" in delta
+            assert "health" in delta
             assert "unemploymentRate" in delta["stats"]
+            assert "medicalStaffOnDuty" in delta["stats"]
             assert "cells" not in delta["roads"]
 
 

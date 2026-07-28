@@ -4,6 +4,7 @@ from collections import Counter
 from typing import TYPE_CHECKING, Any
 
 from .economy import economy_metrics, economy_overview
+from .health import health_metrics, health_overview
 from .models import (
     BuildingType,
     IncidentStatus,
@@ -98,6 +99,7 @@ def build_dynamic_snapshot(world: World) -> dict[str, Any]:
         "timeLabel": world.simulation_time_label,
         "stats": {
             **economy_metrics(world),
+            **health_metrics(world),
             "population": len(world.citizens),
             "averageMoney": round(
                 sum(citizen.money for citizen in world.citizens.values())
@@ -184,6 +186,7 @@ def build_dynamic_snapshot(world: World) -> dict[str, Any]:
             "households": [world._household_summary(household) for household in world.households.values()],
         },
         "economy": economy_overview(world),
+        "health": health_overview(world),
         "incidents": [world._incident_summary(incident) for incident in active_incidents],
         "events": [world._event_to_dict(event) for event in world.events[-80:]],
     }

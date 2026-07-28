@@ -9,7 +9,10 @@ export type Activity =
   | "relaxing"
   | "at_home"
   | "detained"
-  | "shopping";
+  | "shopping"
+  | "waiting_medical"
+  | "in_treatment"
+  | "hospitalized";
 
 export type TransportMode = "walk" | "car" | "bus";
 export type TravelStage =
@@ -25,7 +28,7 @@ export type RelationshipStatus = "unknown" | "acquaintance" | "friend" | "close_
 export type SocialEventType = "coffee" | "park_meetup";
 export type SocialEventStatus = "planned" | "active" | "completed" | "cancelled";
 export type IncidentStatus = "active" | "reported" | "responding" | "on_scene" | "resolved" | "expired";
-export type VehicleType = "car" | "bus" | "police";
+export type VehicleType = "car" | "bus" | "police" | "ambulance";
 export type VehicleStatus =
   | "parked"
   | "driving"
@@ -33,7 +36,8 @@ export type VehicleStatus =
   | "stopped"
   | "responding"
   | "on_scene"
-  | "returning";
+  | "returning"
+  | "transporting";
 
 export type BusinessStatus = "healthy" | "fragile" | "deficit" | "closed";
 export type JobApplicationStatus = "pending" | "accepted" | "rejected" | "withdrawn";
@@ -96,12 +100,17 @@ export interface CitizenSummary {
   friendCount: number;
   jobTitle: string | null;
   onDuty: boolean;
+  health: number;
+  healthCondition: "healthy" | "minor_injury" | "serious_injury" | "mild_illness" | "severe_illness" | "recovering";
+  careStatus: string;
+  pain: number;
+  activeHealthCaseId: number | null;
 }
 
 export interface BuildingSummary {
   id: number;
   name: string;
-  type: "home" | "office" | "factory" | "shop" | "cafe" | "park" | "public" | "police";
+  type: "home" | "office" | "factory" | "shop" | "cafe" | "park" | "public" | "police" | "hospital";
   x: number;
   y: number;
   width: number;
@@ -124,6 +133,10 @@ export interface BuildingSummary {
   employeeCapacity: number;
   targetEmployees: number;
   openPositions: number;
+  medicalBeds: number;
+  patientsWaiting: number;
+  hospitalizedPatients: number;
+  patientsTreatedToday: number;
 }
 
 export interface VehicleSummary {
@@ -137,6 +150,7 @@ export interface VehicleSummary {
   ownerId: number | null;
   lineId: number | null;
   crewIds: number[];
+  healthCaseId: number | null;
 }
 
 export interface BusStopSummary {
@@ -202,6 +216,16 @@ export interface IncidentSummary {
   policeAction: string | null;
   policeOfficerIds: number[];
   detainedIds: number[];
+}
+
+export interface HealthCaseSummary {
+  id: number; citizen: { id: number; name: string }; source: string; severity: number; status: string; hospitalId: number | null; ambulanceId: number | null; incidentId: number | null; createdTick: number; waitingMinutes: number;
+}
+
+export interface HealthOverview {
+  tick: number;
+  metrics: { activeMedicalCases: number; medicalEmergencies: number; patientsWaiting: number; hospitalizedPatients: number; hospitalBeds: number; medicalStaffOnDuty: number; ambulancesAvailable: number; ambulanceDispatchesToday: number; averageMedicalWaitMinutes: number };
+  hospital: { id: number; name: string } | null; cases: HealthCaseSummary[];
 }
 
 export interface CityEvent {
@@ -292,6 +316,7 @@ export interface CitySnapshot {
     shopSalesToday: number;
     marketFoodStock: number;
     marketGoodsStock: number;
+    activeMedicalCases: number; medicalEmergencies: number; patientsWaiting: number; hospitalizedPatients: number; hospitalBeds: number; medicalStaffOnDuty: number; ambulancesAvailable: number; ambulanceDispatchesToday: number; averageMedicalWaitMinutes: number;
     activityCounts: Record<string, number>;
     transportModeCounts: Record<TransportMode, number>;
     tripCountsToday: Record<TransportMode, number>;
@@ -334,6 +359,7 @@ export interface CitySnapshot {
     households: HouseholdSummary[];
   };
   economy: EconomyOverview;
+  health: HealthOverview;
   incidents: IncidentSummary[];
   events: CityEvent[];
   simulation: {
@@ -357,6 +383,7 @@ export type CityDelta = Pick<
   | "vehicles"
   | "social"
   | "economy"
+  | "health"
   | "incidents"
   | "events"
   | "simulation"
@@ -379,6 +406,7 @@ export interface CitizenDetail extends CitizenSummary {
   salaryDaily: number;
   money: number;
   health: number;
+  medical: { condition: CitizenSummary["healthCondition"]; careStatus: string; pain: number; injurySeverity: number; illnessSeverity: number; activeCaseId: number | null; medicalLeaveUntilTick: number | null; incapacityUntilTick: number | null; hospitalizedUntilTick: number | null; history: Array<{ tick: number; eventType: string; label: string; severity: number; source: string; incidentId: number | null; hospitalId: number | null; incapacityMinutes: number }> };
   employment: {
     status: "employed" | "unemployed";
     workStartHour: number;
@@ -546,6 +574,7 @@ export interface IncidentDetail extends IncidentSummary {
   policeOfficers: Array<{ id: number; name: string } | null>;
   detained: Array<{ id: number; name: string } | null>;
   investigation: InvestigationDetail | null;
+  healthCases: HealthCaseSummary[];
 }
 
 export interface BuildingDetail extends BuildingSummary {
@@ -560,6 +589,7 @@ export interface BuildingDetail extends BuildingSummary {
     satisfaction: number;
   }>;
   occupants: Array<{ id: number; name: string }>;
+  healthcare: { beds: number; queue: HealthCaseSummary[]; hospitalized: Array<{ id: number; name: string } | null>; patientsTreatedToday: number; ambulances: VehicleSummary[] } | null;
   services: {
     operational: boolean;
     staffOnDuty: number;

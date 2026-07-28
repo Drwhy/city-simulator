@@ -23,6 +23,10 @@ interface CityMapProps {
   showTraffic: boolean;
   showIncidents: boolean;
   showSocial: boolean;
+  showHealth: boolean;
+  showEmergencies: boolean;
+  showAmbulances: boolean;
+  showMedicalFacilities: boolean;
   selectedRelationships: Array<{ citizenId: number; status: string; affection: number }>;
 }
 
@@ -47,6 +51,7 @@ interface SceneState {
   trafficLayer: Container;
   buildingsLayer: Container;
   socialLayer: Container;
+  healthLayer: Container;
   vehiclesLayer: Container;
   citizensLayer: Container;
   incidentsLayer: Container;
@@ -85,6 +90,7 @@ const BUILDING_COLORS: Record<string, number> = {
   park: 0x397a4c,
   public: 0x8067a6,
   police: 0x315d87,
+  hospital: 0xb4435d,
 };
 
 function destroyChildren(container: Container): void {
@@ -139,11 +145,12 @@ function drawVehicleGraphic(graphics: Graphics, vehicle: VehicleSummary, selecte
   graphics.clear();
   const isBus = vehicle.type === "bus";
   const isPolice = vehicle.type === "police";
+  const isAmbulance = vehicle.type === "ambulance";
   const fill = isBus
     ? 0x52c7cf
     : isPolice
       ? vehicle.status === "on_scene" ? 0x4f8fd8 : 0x3f75b5
-      : vehicle.status === "parked" ? 0x778394 : 0xf0a654;
+      : isAmbulance ? 0xf4f7fb : vehicle.status === "parked" ? 0x778394 : 0xf0a654;
   graphics.lineStyle(selected ? 3 : 1, selected ? 0xffffff : 0x10141b, 1);
   graphics.beginFill(fill, vehicle.status === "parked" ? 0.75 : 1);
   graphics.drawRoundedRect(
@@ -163,6 +170,11 @@ function drawVehicleGraphic(graphics: Graphics, vehicle: VehicleSummary, selecte
     graphics.beginFill(0xdcecff, 0.95);
     graphics.drawRect(-2, -5, 4, 2);
     graphics.endFill();
+  } else if (isAmbulance) {
+    graphics.beginFill(0xe13f55, 1);
+    graphics.drawRect(-2, -3, 4, 6);
+    graphics.drawRect(-4, -1, 8, 2);
+    graphics.endFill();
   }
 }
 
@@ -175,6 +187,7 @@ function createScene(app: Application): SceneState {
   const trafficLayer = new Container();
   const buildingsLayer = new Container();
   const socialLayer = new Container();
+  const healthLayer = new Container();
   const vehiclesLayer = new Container();
   const citizensLayer = new Container();
   const incidentsLayer = new Container();
@@ -187,6 +200,7 @@ function createScene(app: Application): SceneState {
     trafficLayer,
     buildingsLayer,
     socialLayer,
+    healthLayer,
     vehiclesLayer,
     citizensLayer,
     incidentsLayer,
@@ -202,6 +216,7 @@ function createScene(app: Application): SceneState {
     trafficLayer,
     buildingsLayer,
     socialLayer,
+    healthLayer,
     vehiclesLayer,
     citizensLayer,
     incidentsLayer,
@@ -387,6 +402,10 @@ export function CityMap({
   showTraffic,
   showIncidents,
   showSocial,
+  showHealth,
+  showEmergencies,
+  showAmbulances,
+  showMedicalFacilities,
   selectedRelationships,
 }: CityMapProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -444,13 +463,13 @@ export function CityMap({
     scene.transitLayer.visible = showTransit;
     scene.trafficLayer.visible = showTraffic;
 
-    const nextBuildingSignature = buildingSignature(snapshot.buildings);
+    const nextBuildingSignature = `${buildingSignature(snapshot.buildings)}:${showBuildings}:${showMedicalFacilities}`;
     if (scene.buildingSignature !== nextBuildingSignature) {
       destroyChildren(scene.buildingsLayer);
-      snapshot.buildings.forEach((building) => drawBuilding(scene.buildingsLayer, building, (id) => onSelectBuildingRef.current(id)));
+      snapshot.buildings.filter((building) => building.type === "hospital" ? showMedicalFacilities : showBuildings).forEach((building) => drawBuilding(scene.buildingsLayer, building, (id) => onSelectBuildingRef.current(id)));
       scene.buildingSignature = nextBuildingSignature;
     }
-    scene.buildingsLayer.visible = showBuildings;
+    scene.buildingsLayer.visible = true;
 
     drawSocialLinks(scene, snapshot, selectedEntity, selectedRelationships);
     scene.socialLayer.visible = showSocial;
@@ -494,6 +513,7 @@ export function CityMap({
         : 0;
       graphics.x = vehicle.x * CELL_SIZE + CELL_SIZE / 2 + parkedOffset;
       graphics.y = vehicle.y * CELL_SIZE + CELL_SIZE / 2 + (vehicle.status === "parked" ? 4 : 0);
+      graphics.visible = vehicle.type === "ambulance" ? showAmbulances : showVehicles;
     });
     scene.vehicles.forEach((graphics, vehicleId) => {
       if (visibleVehicleIds.has(vehicleId)) return;
@@ -501,7 +521,7 @@ export function CityMap({
       scene.vehicleVisualStates.delete(vehicleId);
       graphics.destroy();
     });
-    scene.vehiclesLayer.visible = showVehicles;
+    scene.vehiclesLayer.visible = showVehicles || showAmbulances;
 
     const visibleCitizenIds = new Set<number>();
     snapshot.citizens.forEach((citizen) => {
@@ -535,6 +555,18 @@ export function CityMap({
     });
     scene.citizensLayer.visible = showCitizens;
 
+    destroyChildren(scene.healthLayer);
+    if (showHealth || showEmergencies) {
+      snapshot.citizens.filter((citizen) => citizen.healthCondition !== "healthy").forEach((citizen) => {
+        const marker = new Graphics(); marker.eventMode = "static"; marker.cursor = "pointer";
+        if (showHealth) { marker.lineStyle(3, citizen.healthCondition.includes("serious") || citizen.healthCondition.includes("severe") ? 0xff5964 : 0xffb347, 0.9); marker.drawCircle(0, 0, 10); }
+        if (showEmergencies && citizen.activeHealthCaseId !== null && citizen.careStatus !== "recovering") { marker.beginFill(0xff3655, 0.95); marker.drawRect(-3, -15, 6, 10); marker.drawRect(-5, -13, 10, 6); marker.endFill(); }
+        marker.x = citizen.x * CELL_SIZE + CELL_SIZE / 2; marker.y = citizen.y * CELL_SIZE + CELL_SIZE / 2;
+        marker.on("pointertap", () => onSelectCitizenRef.current(citizen.id)); scene.healthLayer.addChild(marker);
+      });
+    }
+    scene.healthLayer.visible = showHealth || showEmergencies;
+
     destroyChildren(scene.incidentsLayer);
     if (showIncidents) {
       snapshot.incidents.forEach((incident) => {
@@ -567,6 +599,10 @@ export function CityMap({
     showBuildings,
     showCitizens,
     showIncidents,
+    showHealth,
+    showEmergencies,
+    showAmbulances,
+    showMedicalFacilities,
     showRoads,
     showSocial,
     selectedRelationships,

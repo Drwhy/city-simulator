@@ -14,6 +14,7 @@ from .economy import (
 )
 
 from .generator import generate_buildings, generate_citizens, generate_households, generate_vehicles
+from .health import apply_injury, health_overview, initialize_health, requires_medical_exam, update_health
 from .models import (
     Activity,
     Building,
@@ -24,12 +25,15 @@ from .models import (
     JobApplication,
     JobApplicationStatus,
     BuildingType,
+    CareStatus,
     BusLine,
     BusStop,
     Citizen,
     ConflictRecord,
     DomainEvent,
     Evidence,
+    HealthCase,
+    HealthCondition,
     Household,
     Incident,
     IncidentStatus,
@@ -37,6 +41,7 @@ from .models import (
     InvestigationStatus,
     JudicialCase,
     JudicialCaseStatus,
+    MedicalRecord,
     Needs,
     PoliceMeasure,
     Relationship,
@@ -96,6 +101,7 @@ class World:
     def __init__(self, *, seed: int = 12345, citizen_count: int = 100) -> None:
         self.seed = seed
         self.rng = random.Random(seed)
+        self.health_rng = random.Random(seed ^ 0x48EA17)
         self.tick = 0
         self.day = 1
         self.hour = 6
@@ -162,6 +168,7 @@ class World:
         self.layoffs_today = 0
         self.resignations_today = 0
         self.public_spending_total = 0.0
+        initialize_health(self)
         initialize_economy(self)
         self._emit("simulation_started", "La ville commence une nouvelle journée.")
 
@@ -199,6 +206,7 @@ class World:
         self._move_cars()
         self._resolve_activities()
         update_work_and_consumption(self)
+        update_health(self)
         self._resolve_social_life()
         resolve_household_life(self)
         self._resolve_incidents()
@@ -230,6 +238,9 @@ class World:
         self.shopping_trips_today = 0
         self.police_warnings_today = 0
         self.police_detentions_today = 0
+        self.medical_cases_today = 0
+        self.ambulance_dispatches_today = 0
+        self.medical_wait_minutes_today = 0
         cool_down_conflicts(self)
         for citizen in self.citizens.values():
             citizen.minutes_late_today = 0
@@ -237,7 +248,8 @@ class World:
             citizen.trips_today = 0
             citizen.social_interactions_today = 0
             citizen.minutes_worked_today = 0
-            citizen.health = min(100.0, citizen.health + 2.0)
+            if citizen.care_status == CareStatus.NONE:
+                citizen.health = min(100.0, citizen.health + 0.5)
         for vehicle in self.vehicles.values():
             vehicle.delay_minutes = 0
             vehicle.distance_today = 0
@@ -300,12 +312,16 @@ class World:
         market = self._first_building(BuildingType.SHOP)
 
         for citizen in self.citizens.values():
+            if citizen.care_status in {CareStatus.WAITING_AMBULANCE, CareStatus.AMBULANCE_DISPATCHED, CareStatus.IN_AMBULANCE, CareStatus.WAITING_CONSULTATION, CareStatus.IN_CONSULTATION, CareStatus.HOSPITALIZED}:
+                citizen.last_decision_reason = "La prise en charge médicale est prioritaire."
+                continue
+
             # Les policiers engagés dans une intervention suivent leur équipage, pas le planificateur civil.
             if citizen.active_vehicle_id is not None:
                 active_vehicle = self.vehicles.get(citizen.active_vehicle_id)
                 if (
                     active_vehicle is not None
-                    and active_vehicle.vehicle_type == VehicleType.POLICE
+                    and active_vehicle.vehicle_type in {VehicleType.POLICE, VehicleType.AMBULANCE}
                     and active_vehicle.status != VehicleStatus.PARKED
                 ):
                     continue
@@ -826,6 +842,12 @@ class World:
                 measure_type, duration = "warning", 0
                 reason = "cessation du trouble et rappel des obligations légales"
 
+            if requires_medical_exam(offender):
+                measure_type, duration = "medical_exam", 0
+                reason = "examen médical obligatoire avant toute mesure de cellule"
+                if self.health_cases.get(offender.active_health_case_id or -1) is None:
+                    apply_injury(self, offender, max(55.0, offender.pain), source="transfert police-hôpital", incident_id=incident.id)
+
             measure = apply_police_measure(
                 self,
                 offender,
@@ -948,12 +970,13 @@ class World:
 
         if incident.victim_ids:
             victim = self.citizens.get(incident.victim_ids[0])
-            if victim is not None and victim.health < 99.0:
+            medical_record = next((record for record in reversed(victim.health_history) if record.incident_id == incident.id and record.event_type == "consultation"), None) if victim is not None else None
+            if victim is not None and medical_record is not None:
                 self._add_evidence(
                     investigation,
                     "medical_report",
-                    f"Constat médical des blessures de {victim.full_name}.",
-                    0.88,
+                    f"Certificat médical établi après consultation de {victim.full_name}.",
+                    0.9,
                     citizen_id=victim.id,
                 )
 
@@ -1364,19 +1387,12 @@ class World:
         reported_probability = {1: 0.05, 2: 0.28, 3: 0.68, 4: 0.9, 5: 0.99}[level]
         reported = bool(witnesses) and self.rng.random() < reported_probability
 
-        damage = 0.0
-        if level == 3:
-            damage = self.rng.uniform(2.0, 6.0)
-        elif level == 4:
-            damage = self.rng.uniform(8.0, 16.0)
-        elif level == 5:
-            damage = self.rng.uniform(18.0, 32.0)
-        if damage:
-            victim.health = max(0.0, victim.health - damage)
+        injury_severity = {3: 28.0, 4: 58.0, 5: 86.0}.get(level, 0.0)
+        if injury_severity:
             victim.victimizations += 1
             offender.offenses_committed += 1
-            victim.needs.stress = min(100.0, victim.needs.stress + damage * 0.8)
-            offender.needs.stress = min(100.0, offender.needs.stress + damage * 0.25)
+            victim.needs.stress = min(100.0, victim.needs.stress + injury_severity * 0.3)
+            offender.needs.stress = min(100.0, offender.needs.stress + injury_severity * 0.1)
 
         descriptions = {
             1: f"Une dispute oppose {a.full_name} et {b.full_name} à {building.name}.",
@@ -1414,6 +1430,10 @@ class World:
             lifetime_minutes=lifetime,
             conflict_level=level,
         )
+        if injury_severity:
+            apply_injury(self, victim, injury_severity, source=incident_type, incident_id=incident.id)
+            if level == 3 and self.rng.random() < 0.35:
+                apply_injury(self, offender, 18.0, source="bagarre", incident_id=incident.id)
         self._remember_conflict(a, b, incident, offender_id=offender.id if level >= 3 else None)
         return incident
 
@@ -1607,8 +1627,8 @@ class World:
         )
         self._next_event_id += 1
         self.events.append(event)
-        if len(self.events) > 500:
-            self.events = self.events[-500:]
+        if len(self.events) > 1200:
+            self.events = self.events[-1200:]
 
     def get_citizen_detail(self, citizen_id: int) -> dict[str, Any]:
         citizen = self.citizens[citizen_id]
@@ -1737,6 +1757,14 @@ class World:
             "salaryDaily": citizen.salary_daily,
             "money": citizen.money,
             "health": round(citizen.health, 1),
+            "medical": {
+                "condition": citizen.health_condition.value, "careStatus": citizen.care_status.value,
+                "pain": round(citizen.pain, 1), "injurySeverity": round(citizen.injury_severity, 1),
+                "illnessSeverity": round(citizen.illness_severity, 1), "activeCaseId": citizen.active_health_case_id,
+                "medicalLeaveUntilTick": citizen.medical_leave_until_tick, "incapacityUntilTick": citizen.incapacity_until_tick,
+                "hospitalizedUntilTick": citizen.hospitalized_until_tick,
+                "history": [{"tick": row.tick, "eventType": row.event_type, "label": row.label, "severity": row.severity, "source": row.source, "incidentId": row.incident_id, "hospitalId": row.hospital_id, "incapacityMinutes": row.incapacity_minutes} for row in reversed(citizen.health_history[-30:])],
+            },
             "employment": {
                 "status": "employed" if citizen.workplace_id is not None else "unemployed",
                 "workStartHour": citizen.work_start_hour,
@@ -1941,6 +1969,7 @@ class World:
             "policeOfficers": [self._citizen_ref(citizen_id) for citizen_id in incident.police_officer_ids],
             "detained": [self._citizen_ref(citizen_id) for citizen_id in incident.detained_ids],
             "investigation": self._investigation_detail(incident.investigation_id),
+            "healthCases": [self._health_case_summary(case_id) for case_id in incident.health_case_ids if case_id in self.health_cases],
         }
 
     def get_building_detail(self, building_id: int) -> dict[str, Any]:
@@ -1966,6 +1995,13 @@ class World:
                 for employee in employees
             ],
             "occupants": [{"id": person.id, "name": person.full_name} for person in occupants[:40]],
+            "healthcare": {
+                "beds": building.medical_beds,
+                "queue": [self._health_case_summary(case_id) for case_id in building.medical_queue if case_id in self.health_cases],
+                "hospitalized": [self._citizen_ref(citizen_id) for citizen_id in sorted(building.hospitalized_ids)],
+                "patientsTreatedToday": building.patients_treated_today,
+                "ambulances": [self._vehicle_summary(vehicle) for vehicle in self.vehicles.values() if vehicle.vehicle_type == VehicleType.AMBULANCE],
+            } if building.building_type == BuildingType.HOSPITAL else None,
             "services": {
                 "operational": building_operational(self, building.id),
                 "staffOnDuty": staff_count(self, building.id),
@@ -2002,6 +2038,13 @@ class World:
 
     def get_economy_overview(self) -> dict[str, object]:
         return economy_overview(self)
+
+    def get_health_overview(self) -> dict[str, object]:
+        return health_overview(self)
+
+    def _health_case_summary(self, case_id: int) -> dict[str, object]:
+        from .health import case_summary
+        return case_summary(self, self.health_cases[case_id])
 
     def _case_summary(self, case: JudicialCase) -> dict[str, Any]:
         defendant = self.citizens.get(case.defendant_id)
@@ -2153,7 +2196,7 @@ class World:
 
     def export_state(self) -> dict[str, Any]:
         return {
-            "version": 7,
+            "version": 8,
             "seed": self.seed,
             "tick": self.tick,
             "day": self.day,
@@ -2166,6 +2209,7 @@ class World:
             "nextCaseId": self._next_case_id,
             "nextSocialEventId": self._next_social_event_id,
             "nextJobApplicationId": self._next_job_application_id,
+            "nextHealthCaseId": self._next_health_case_id,
             "lastSocialSlot": self._last_social_slot,
             "lastSocialPlanningDay": self._last_social_planning_day,
             "lastHouseholdSlot": self._last_household_slot,
@@ -2191,13 +2235,19 @@ class World:
             "layoffsToday": self.layoffs_today,
             "resignationsToday": self.resignations_today,
             "publicSpendingTotal": self.public_spending_total,
+            "lastHealthHour": self._last_health_hour,
+            "medicalCasesToday": self.medical_cases_today,
+            "ambulanceDispatchesToday": self.ambulance_dispatches_today,
+            "medicalWaitMinutesToday": self.medical_wait_minutes_today,
             "rngState": self.rng.getstate(),
+            "healthRngState": self.health_rng.getstate(),
             "buildings": [self._export_building(building) for building in self.buildings.values()],
             "citizens": [self._export_citizen(citizen) for citizen in self.citizens.values()],
             "households": [self._export_household(household) for household in self.households.values()],
             "socialEvents": [self._export_social_event(event) for event in self.social_events.values()],
             "vehicles": [self._export_vehicle(vehicle) for vehicle in self.vehicles.values()],
             "incidents": [self._export_incident(incident) for incident in self.incidents.values()],
+            "healthCases": [self._export_health_case(case) for case in self.health_cases.values()],
             "evidence": [self._export_evidence(item) for item in self.evidence.values()],
             "investigations": [self._export_investigation(item) for item in self.investigations.values()],
             "judicialCases": [self._export_case(item) for item in self.judicial_cases.values()],
@@ -2208,13 +2258,15 @@ class World:
     @classmethod
     def from_state(cls, state: dict[str, Any]) -> "World":
         version = int(state.get("version", 0))
-        if version != 7:
+        if version != 8:
             raise ValueError("Version de sauvegarde non prise en charge.")
 
         world = cls.__new__(cls)
         world.seed = int(state["seed"])
         world.rng = random.Random()
         world.rng.setstate(cls._nested_tuple(state["rngState"]))
+        world.health_rng = random.Random()
+        world.health_rng.setstate(cls._nested_tuple(state["healthRngState"]))
         world.tick = int(state["tick"])
         world.day = int(state["day"])
         world.hour = int(state["hour"])
@@ -2226,6 +2278,7 @@ class World:
         world._next_case_id = int(state.get("nextCaseId", 1))
         world._next_social_event_id = int(state.get("nextSocialEventId", 1))
         world._next_job_application_id = int(state.get("nextJobApplicationId", 1))
+        world._next_health_case_id = int(state.get("nextHealthCaseId", 1))
         world._last_social_slot = int(state.get("lastSocialSlot", -1))
         world._last_social_planning_day = int(state.get("lastSocialPlanningDay", 0))
         world._last_household_slot = int(state.get("lastHouseholdSlot", -1))
@@ -2253,6 +2306,10 @@ class World:
         world.layoffs_today = int(state.get("layoffsToday", 0))
         world.resignations_today = int(state.get("resignationsToday", 0))
         world.public_spending_total = float(state.get("publicSpendingTotal", 0.0))
+        world._last_health_hour = int(state.get("lastHealthHour", -1))
+        world.medical_cases_today = int(state.get("medicalCasesToday", 0))
+        world.ambulance_dispatches_today = int(state.get("ambulanceDispatchesToday", 0))
+        world.medical_wait_minutes_today = int(state.get("medicalWaitMinutesToday", 0))
 
         world.road_cells = generate_road_cells()
         world.bus_stops, world.bus_lines = generate_bus_network(world.road_cells)
@@ -2287,6 +2344,11 @@ class World:
                 business_status=BusinessStatus(row.get("businessStatus", "healthy")),
                 deficit_days=int(row.get("deficitDays", 0)),
                 productive_minutes_today=int(row.get("productiveMinutesToday", 0)),
+                medical_beds=int(row.get("medicalBeds", 0)),
+                medical_queue=[int(value) for value in row.get("medicalQueue", [])],
+                hospitalized_ids={int(value) for value in row.get("hospitalizedIds", [])},
+                patients_treated_today=int(row.get("patientsTreatedToday", 0)),
+                medical_wait_minutes_today=int(row.get("medicalWaitMinutesToday", 0)),
                 financial_history=[
                     BusinessFinancialRecord(
                         day=int(item["day"]),
@@ -2399,6 +2461,15 @@ class World:
                 travel_minutes_today=int(row.get("travelMinutesToday", 0)),
                 trips_today=int(row.get("tripsToday", 0)),
                 health=float(row.get("health", 100.0)),
+                health_condition=HealthCondition(row.get("healthCondition", "healthy")),
+                care_status=CareStatus(row.get("careStatus", "none")),
+                pain=float(row.get("pain", 0.0)), injury_severity=float(row.get("injurySeverity", 0.0)),
+                illness_severity=float(row.get("illnessSeverity", 0.0)),
+                active_health_case_id=int(row["activeHealthCaseId"]) if row.get("activeHealthCaseId") is not None else None,
+                medical_leave_until_tick=int(row["medicalLeaveUntilTick"]) if row.get("medicalLeaveUntilTick") is not None else None,
+                incapacity_until_tick=int(row["incapacityUntilTick"]) if row.get("incapacityUntilTick") is not None else None,
+                hospitalized_until_tick=int(row["hospitalizedUntilTick"]) if row.get("hospitalizedUntilTick") is not None else None,
+                health_history=[MedicalRecord(tick=int(item["tick"]), event_type=str(item["eventType"]), label=str(item["label"]), severity=float(item["severity"]), source=str(item["source"]), incident_id=int(item["incidentId"]) if item.get("incidentId") is not None else None, hospital_id=int(item["hospitalId"]) if item.get("hospitalId") is not None else None, incapacity_minutes=int(item.get("incapacityMinutes", 0))) for item in row.get("healthHistory", [])],
                 offenses_committed=int(row.get("offensesCommitted", 0)),
                 victimizations=int(row.get("victimizations", 0)),
                 arrests=int(row.get("arrests", 0)),
@@ -2536,6 +2607,7 @@ class World:
                         if row.get("serviceStartedTick") is not None else None
                     ),
                     crew_ids={int(value) for value in row.get("crewIds", [])},
+                    health_case_id=int(row["healthCaseId"]) if row.get("healthCaseId") is not None else None,
                 )
                 world.vehicles[vehicle.id] = vehicle
         else:
@@ -2674,6 +2746,7 @@ class World:
                     police_action=row.get("policeAction"),
                     police_officer_ids=tuple(int(value) for value in row.get("policeOfficerIds", [])),
                     detained_ids=tuple(int(value) for value in row.get("detainedIds", [])),
+                    health_case_ids=tuple(int(value) for value in row.get("healthCaseIds", [])),
                 )
                 for row in state.get("incidents", [])
             }
@@ -2724,6 +2797,21 @@ class World:
                     relation.peak_conflict_level = max(
                         relation.peak_conflict_level, incident.conflict_level
                     )
+
+        world.health_cases = {
+            int(row["id"]): HealthCase(
+                id=int(row["id"]), citizen_id=int(row["citizenId"]), source=str(row["source"]),
+                severity=float(row["severity"]), created_tick=int(row["createdTick"]), status=CareStatus(row["status"]),
+                hospital_id=int(row["hospitalId"]) if row.get("hospitalId") is not None else None,
+                ambulance_id=int(row["ambulanceId"]) if row.get("ambulanceId") is not None else None,
+                incident_id=int(row["incidentId"]) if row.get("incidentId") is not None else None,
+                queued_tick=int(row["queuedTick"]) if row.get("queuedTick") is not None else None,
+                consultation_started_tick=int(row["consultationStartedTick"]) if row.get("consultationStartedTick") is not None else None,
+                completed_tick=int(row["completedTick"]) if row.get("completedTick") is not None else None,
+                transport_required=bool(row.get("transportRequired", False)), medical_report_created=bool(row.get("medicalReportCreated", False)),
+            ) for row in state.get("healthCases", [])
+        }
+        world._next_health_case_id = max(world._next_health_case_id, max(world.health_cases, default=0) + 1)
 
         world.evidence = {}
         world.investigations = {}
@@ -2846,6 +2934,11 @@ class World:
             ),
             "jobTitle": citizen.job_title,
             "onDuty": is_on_duty(self, citizen),
+            "health": round(citizen.health, 1),
+            "healthCondition": citizen.health_condition.value,
+            "careStatus": citizen.care_status.value,
+            "pain": round(citizen.pain, 1),
+            "activeHealthCaseId": citizen.active_health_case_id,
         }
 
     def _building_to_dict(self, building: Building) -> dict[str, Any]:
@@ -2875,6 +2968,10 @@ class World:
             "employeeCapacity": building.employee_capacity,
             "targetEmployees": building.target_employees,
             "openPositions": building.open_positions,
+            "medicalBeds": building.medical_beds,
+            "patientsWaiting": len(building.medical_queue),
+            "hospitalizedPatients": len(building.hospitalized_ids),
+            "patientsTreatedToday": building.patients_treated_today,
         }
 
     @staticmethod
@@ -2890,6 +2987,7 @@ class World:
             "ownerId": vehicle.owner_id,
             "lineId": vehicle.line_id,
             "crewIds": sorted(vehicle.crew_ids),
+            "healthCaseId": vehicle.health_case_id,
         }
 
     @staticmethod
@@ -3081,9 +3179,10 @@ class World:
                 }
                 for item in building.financial_history
             ],
-            "employmentEvents": [
-                World._export_employment_record(item) for item in building.employment_events
-            ],
+            "employmentEvents": [World._export_employment_record(item) for item in building.employment_events],
+            "medicalBeds": building.medical_beds, "medicalQueue": list(building.medical_queue),
+            "hospitalizedIds": sorted(building.hospitalized_ids), "patientsTreatedToday": building.patients_treated_today,
+            "medicalWaitMinutesToday": building.medical_wait_minutes_today,
         }
 
     @staticmethod
@@ -3170,6 +3269,12 @@ class World:
             "travelMinutesToday": citizen.travel_minutes_today,
             "tripsToday": citizen.trips_today,
             "health": citizen.health,
+            "healthCondition": citizen.health_condition.value,
+            "careStatus": citizen.care_status.value,
+            "pain": citizen.pain, "injurySeverity": citizen.injury_severity, "illnessSeverity": citizen.illness_severity,
+            "activeHealthCaseId": citizen.active_health_case_id, "medicalLeaveUntilTick": citizen.medical_leave_until_tick,
+            "incapacityUntilTick": citizen.incapacity_until_tick, "hospitalizedUntilTick": citizen.hospitalized_until_tick,
+            "healthHistory": [{"tick": row.tick, "eventType": row.event_type, "label": row.label, "severity": row.severity, "source": row.source, "incidentId": row.incident_id, "hospitalId": row.hospital_id, "incapacityMinutes": row.incapacity_minutes} for row in citizen.health_history],
             "offensesCommitted": citizen.offenses_committed,
             "victimizations": citizen.victimizations,
             "arrests": citizen.arrests,
@@ -3290,6 +3395,7 @@ class World:
             "incidentId": vehicle.incident_id,
             "serviceStartedTick": vehicle.service_started_tick,
             "crewIds": sorted(vehicle.crew_ids),
+            "healthCaseId": vehicle.health_case_id,
         }
 
     @staticmethod
@@ -3319,7 +3425,19 @@ class World:
             "resolution": incident.resolution,
             "conflictLevel": incident.conflict_level,
             "investigationId": incident.investigation_id,
+            "policeAction": incident.police_action,
+            "policeOfficerIds": list(incident.police_officer_ids),
+            "detainedIds": list(incident.detained_ids),
+            "healthCaseIds": list(incident.health_case_ids),
         }
+
+    @staticmethod
+    def _export_health_case(case: HealthCase) -> dict[str, Any]:
+        return {"id": case.id, "citizenId": case.citizen_id, "source": case.source, "severity": case.severity,
+                "createdTick": case.created_tick, "status": case.status.value, "hospitalId": case.hospital_id,
+                "ambulanceId": case.ambulance_id, "incidentId": case.incident_id, "queuedTick": case.queued_tick,
+                "consultationStartedTick": case.consultation_started_tick, "completedTick": case.completed_tick,
+                "transportRequired": case.transport_required, "medicalReportCreated": case.medical_report_created}
 
     @staticmethod
     def _export_evidence(item: Evidence) -> dict[str, Any]:

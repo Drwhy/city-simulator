@@ -3,7 +3,7 @@ import type { MouseEvent } from "react";
 import { getCitizen } from "../api";
 import type { CitizenDetail, ConflictHistoryEntry, JudicialCaseSummary } from "../types/city";
 
-type CitizenTab = "overview" | "work" | "social" | "conflicts" | "justice";
+type CitizenTab = "overview" | "health" | "work" | "social" | "conflicts" | "justice";
 
 interface CitizenModalProps {
   citizenId: number | null;
@@ -28,6 +28,9 @@ const ACTIVITY_LABELS: Record<string, string> = {
   at_home: "À domicile",
   detained: "Retenu au commissariat",
   shopping: "Fait des courses",
+  waiting_medical: "Attend une consultation",
+  in_treatment: "En consultation",
+  hospitalized: "Hospitalisé",
 };
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
@@ -204,6 +207,7 @@ export function CitizenModal({ citizenId, graphContext = false, paused, snapshot
         <nav className="citizen-tabs" aria-label="Sections de la fiche">
           {([
             ["overview", "Vue générale"],
+            ["health", "Santé"],
             ["work", "Travail et finances"],
             ["social", "Réseau social"],
             ["conflicts", `Conflits${citizen ? ` (${citizen.conflictHistory.length})` : ""}`],
@@ -253,6 +257,38 @@ export function CitizenModal({ citizenId, graphContext = false, paused, snapshot
                 <MetricBar label="Impulsivité" value={citizen.personality.impulsivity} warning />
                 <MetricBar label="Tendance à la rancune" value={citizen.personality.grudgeTendency} warning />
                 <MetricBar label="Propension globale au conflit" value={citizen.personality.conflictPropensity} warning />
+              </section>
+            </div>
+          ) : tab === "health" ? (
+            <div className="profile-grid profile-grid-health">
+              <section className="profile-section">
+                <h3>État de santé</h3>
+                <MetricBar label="Santé générale" value={citizen.health} />
+                <MetricBar label="Douleur" value={citizen.medical.pain} warning />
+                <MetricBar label="Blessure" value={citizen.medical.injurySeverity} warning />
+                <MetricBar label="Maladie" value={citizen.medical.illnessSeverity} warning />
+                <dl className="profile-facts">
+                  <div><dt>État</dt><dd>{citizen.medical.condition.replace(/_/g, " ")}</dd></div>
+                  <div><dt>Prise en charge</dt><dd>{citizen.medical.careStatus.replace(/_/g, " ")}</dd></div>
+                  <div><dt>Dossier actif</dt><dd>{citizen.medical.activeCaseId ? `#${citizen.medical.activeCaseId}` : "Aucun"}</dd></div>
+                  <div><dt>Arrêt de travail</dt><dd>{citizen.medical.medicalLeaveUntilTick && citizen.medical.medicalLeaveUntilTick > citizen.currentTick ? `${citizen.medical.medicalLeaveUntilTick - citizen.currentTick} min restantes` : "Non"}</dd></div>
+                  <div><dt>Incapacité temporaire</dt><dd>{citizen.medical.incapacityUntilTick && citizen.medical.incapacityUntilTick > citizen.currentTick ? `${citizen.medical.incapacityUntilTick - citizen.currentTick} min restantes` : "Non"}</dd></div>
+                </dl>
+              </section>
+              <section className="profile-section profile-section-wide">
+                <h3>Historique médical</h3>
+                {citizen.medical.history.length === 0 ? <p className="muted">Aucun épisode médical enregistré.</p> : (
+                  <div className="economy-history">
+                    {citizen.medical.history.map((record, index) => (
+                      <article className="economy-card medical-record" key={`${record.tick}-${index}`}>
+                        <div><strong>{record.label}</strong><span>Gravité {Math.round(record.severity)} %</span></div>
+                        <p>{record.source}</p>
+                        <small><TickLabel tick={record.tick} currentTick={citizen.currentTick} />{record.incapacityMinutes ? ` · incapacité ${record.incapacityMinutes} min` : ""}</small>
+                        {record.incidentId !== null && <button onClick={() => onSelectIncident(record.incidentId!)}>Ouvrir l’incident #{record.incidentId}</button>}
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
             </div>
           ) : tab === "work" ? (

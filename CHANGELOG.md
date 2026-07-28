@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.8.0 — Santé, blessures et secours
+
+### Ajouté
+
+- Modèle individuel de santé, douleur, blessures, maladies, incapacité, arrêt de travail, hospitalisation, convalescence et guérison.
+- Moteur `health.py` isolé avec événements de maladie, épuisement, nutrition, alcool, âge et accidents routiers rares.
+- Centre médical de huit lits, médecins et infirmiers citoyens en équipes, file et délais sensibles au sous-effectif.
+- Deux ambulances avec équipage citoyen obligatoire, trajet routier, embarquement et transport réel du patient.
+- Examen médical préalable à certaines cellules et transfert police-hôpital.
+- Certificats médicaux post-consultation renforçant la confiance des enquêtes.
+- Endpoint `/api/healthcare`, données santé dans les snapshots/deltas et détails enrichis.
+- Onglet Santé, fenêtre hospitalière, fiche ambulance, filtre d’événements et quatre couches cartographiques.
+- Six tests d’acceptation santé, dont transport, sous-effectif, preuve, sauvegarde et anti-blocage.
+
+### Modifié
+
+- Format de sauvegarde strict 8, incluant dossiers, files, lits, véhicules, équipages et générateur aléatoire santé.
+- Capacité globale d’emploi conservée : huit emplois médicaux remplacent huit emplois ordinaires.
+- Les absences médicales empêchent présence, salaire et départ vers le travail pendant l’incapacité.
+- Versions backend et frontend portées à 0.8.0.
+
+### Compatibilité
+
+- Les sauvegardes v1 à v7 sont rejetées explicitement.
+
+### Limites connues
+
+- Modèle médical simplifié, sans diagnostic clinique, médicaments, chirurgie ni mortalité.
+- Relève nocturne par transport non urgent après 120 minutes si aucun équipage n’est disponible.
+
 ## 0.7.0 — Économie locale et marché du travail
 
 ### Ajouté

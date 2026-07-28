@@ -55,6 +55,7 @@ def generate_buildings() -> dict[int, Building]:
         ("Parc des Tilleuls", BuildingType.PARK, 10, 11, 40),
         ("Mairie", BuildingType.PUBLIC, 26, 15, 12),
         ("Commissariat central", BuildingType.POLICE, 34, 15, 12),
+        ("Centre médical Saint-Roch", BuildingType.HOSPITAL, 36, 7, 16),
     ]
     for name, building_type, x, y, capacity in workplaces:
         building = Building(
@@ -73,10 +74,11 @@ def generate_buildings() -> dict[int, Building]:
                 BuildingType.CAFE: 1,
                 BuildingType.PUBLIC: 2,
                 BuildingType.POLICE: 2,
+                BuildingType.HOSPITAL: 3,
                 BuildingType.PARK: 0,
             }.get(building_type, 1),
-            employee_capacity=capacity,
-            target_employees=capacity,
+            employee_capacity=(8 if building_type == BuildingType.HOSPITAL else capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity),
+            target_employees=(8 if building_type == BuildingType.HOSPITAL else capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity),
             cash={
                 BuildingType.OFFICE: 14_000.0,
                 BuildingType.FACTORY: 12_000.0,
@@ -84,6 +86,7 @@ def generate_buildings() -> dict[int, Building]:
                 BuildingType.CAFE: 6_000.0,
                 BuildingType.PUBLIC: 20_000.0,
                 BuildingType.POLICE: 25_000.0,
+                BuildingType.HOSPITAL: 24_000.0,
                 BuildingType.PARK: 0.0,
             }.get(building_type, 6_000.0),
             fixed_cost_daily={
@@ -93,10 +96,12 @@ def generate_buildings() -> dict[int, Building]:
                 BuildingType.CAFE: 160.0,
                 BuildingType.PUBLIC: 260.0,
                 BuildingType.POLICE: 340.0,
+                BuildingType.HOSPITAL: 420.0,
                 BuildingType.PARK: 0.0,
             }.get(building_type, 160.0),
             food_stock=420.0 if building_type == BuildingType.SHOP else 0.0,
             goods_stock=220.0 if building_type == BuildingType.SHOP else 0.0,
+            medical_beds=8 if building_type == BuildingType.HOSPITAL else 0,
         )
         buildings[next_id] = building
         next_id += 1
@@ -113,6 +118,7 @@ def generate_citizens(
     rng = random.Random(seed)
     homes = [b for b in buildings.values() if b.building_type == BuildingType.HOME]
     police_station = next(b for b in buildings.values() if b.building_type == BuildingType.POLICE)
+    medical_center = next(b for b in buildings.values() if b.building_type == BuildingType.HOSPITAL)
     ordinary_workplaces = [
         b for b in buildings.values()
         if b.building_type in {
@@ -131,12 +137,14 @@ def generate_citizens(
         BuildingType.CAFE: ("Serveur", 78.0),
         BuildingType.PUBLIC: ("Agent municipal", 92.0),
         BuildingType.POLICE: ("Policier municipal", 108.0),
+        BuildingType.HOSPITAL: ("Infirmier", 118.0),
     }
 
     citizens: dict[int, Citizen] = {}
     home_load = {home.id: 0 for home in homes}
-    work_load = {work.id: 0 for work in [*ordinary_workplaces, police_station]}
+    work_load = {work.id: 0 for work in [*ordinary_workplaces, police_station, medical_center]}
     police_target = min(police_station.capacity, max(4, round(count * 0.08)))
+    medical_target = min(8, max(4, round(count * 0.08)))
 
     for citizen_id in range(1, count + 1):
         available_homes = [h for h in homes if home_load[h.id] < h.capacity]
@@ -145,14 +153,20 @@ def generate_citizens(
 
         if citizen_id <= police_target:
             workplace = police_station
+        elif citizen_id <= police_target + medical_target:
+            # Conserve le flux aléatoire historique des affectations ordinaires.
+            rng.choice(ordinary_workplaces)
+            workplace = medical_center
         else:
             available_workplaces = [
-                w for w in ordinary_workplaces if work_load[w.id] < w.capacity
+                w for w in ordinary_workplaces if work_load[w.id] < w.employee_capacity
             ]
             workplace = rng.choice(available_workplaces) if available_workplaces else None
         if workplace:
             work_load[workplace.id] += 1
             job_title, salary = job_by_type[workplace.building_type]
+            if workplace.building_type == BuildingType.HOSPITAL and work_load[workplace.id] % 3 == 1:
+                job_title, salary = "Médecin", 145.0
         else:
             job_title, salary = None, 0.0
 
@@ -160,6 +174,10 @@ def generate_citizens(
             start_hour, end_hour, work_days = 0, 0, ()
         elif workplace.building_type == BuildingType.POLICE:
             # Deux équipes donnent une couverture réelle sans transformer les agents en robots.
+            shift = (work_load[workplace.id] - 1) % 2
+            start_hour, end_hour = ((6, 14) if shift == 0 else (14, 22))
+            work_days = (1, 2, 3, 4, 5, 6, 7)
+        elif workplace.building_type == BuildingType.HOSPITAL:
             shift = (work_load[workplace.id] - 1) % 2
             start_hour, end_hour = ((6, 14) if shift == 0 else (14, 22))
             work_days = (1, 2, 3, 4, 5, 6, 7)
@@ -275,6 +293,17 @@ def generate_vehicles(
                 current_building_id=police_station.id,
             )
             vehicles[patrol.id] = patrol
+            next_id += 1
+
+    medical_center = next((building for building in buildings.values() if building.building_type == BuildingType.HOSPITAL), None)
+    if medical_center is not None:
+        for _ in range(2):
+            x, y = medical_center.entrance
+            ambulance = Vehicle(
+                id=next_id, vehicle_type=VehicleType.AMBULANCE, x=x, y=y, capacity=4,
+                status=VehicleStatus.PARKED, current_building_id=medical_center.id,
+            )
+            vehicles[ambulance.id] = ambulance
             next_id += 1
 
     return vehicles

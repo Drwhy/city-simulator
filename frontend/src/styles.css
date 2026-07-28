@@ -870,3 +870,9 @@ body { min-width: 1280px; }
   .workspace { height: 580px; }
   .entity-modal-window { height: 90vh; }
 }
+
+.health-stat { border-color: rgba(225, 63, 85, 0.42); }
+.health-stat strong { color: #ff8999; }
+.dot-health { background: #f4f7fb; box-shadow: inset 0 0 0 3px #e13f55; }
+.profile-grid-health .medical-record { border-left: 3px solid #e13f55; }
+.healthcare-grid dd { color: #ff8999; }

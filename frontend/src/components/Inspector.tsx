@@ -23,6 +23,9 @@ const ACTIVITY_LABELS: Record<string, string> = {
   at_home: "À domicile",
   detained: "Retenu au commissariat",
   shopping: "Fait des courses",
+  waiting_medical: "Attend une consultation",
+  in_treatment: "En consultation",
+  hospitalized: "Hospitalisé",
 };
 
 const MODE_LABELS: Record<string, string> = {
@@ -48,7 +51,8 @@ const VEHICLE_STATUS_LABELS: Record<string, string> = {
   stopped: "Hors service",
   responding: "En intervention",
   on_scene: "Sur place",
-  returning: "Retour au commissariat",
+  returning: "Retour à la base",
+  transporting: "Transport vers l’hôpital",
 };
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
@@ -250,7 +254,7 @@ function VehicleInspector({
     ? `Bus #${vehicle.id}`
     : vehicle.type === "police"
       ? `Unité de police #${vehicle.id}`
-      : `Voiture #${vehicle.id}`;
+      : vehicle.type === "ambulance" ? `Ambulance #${vehicle.id}` : `Voiture #${vehicle.id}`;
   return (
     <div className="inspector-content">
       <div className="eyebrow">Véhicule</div>
@@ -258,7 +262,7 @@ function VehicleInspector({
       <p className="subtitle">
         {vehicle.type === "bus"
           ? vehicle.line?.name ?? "Transport public"
-          : vehicle.type === "police" ? "Patrouille municipale" : "Véhicule particulier"}
+          : vehicle.type === "police" ? "Patrouille municipale" : vehicle.type === "ambulance" ? "Secours médical" : "Véhicule particulier"}
       </p>
 
       <dl className="facts">
@@ -282,9 +286,9 @@ function VehicleInspector({
         </button>
       )}
 
-      {vehicle.type === "police" && (
+      {(vehicle.type === "police" || vehicle.type === "ambulance") && (
         <>
-          <h3>Équipage citoyen</h3>
+          <h3>{vehicle.type === "ambulance" ? "Équipage soignant citoyen" : "Équipage citoyen"}</h3>
           {vehicle.crew.length === 0 ? <p className="muted">Aucun agent affecté : l'unité ne peut pas intervenir.</p> : (
             <div className="passenger-list">
               {vehicle.crew.map((officer) => (
@@ -297,7 +301,7 @@ function VehicleInspector({
         </>
       )}
 
-      <h3>{vehicle.type === "police" ? "Personnes transportées" : "Passagers"}</h3>
+      <h3>{vehicle.type === "police" ? "Personnes transportées" : vehicle.type === "ambulance" ? "Patient transporté" : "Passagers"}</h3>
       {vehicle.passengers.length === 0 ? (
         <p className="muted">Aucun passager actuellement.</p>
       ) : (
@@ -490,6 +494,19 @@ function BuildingInspector({
         {building.type === "shop" && <div><dt>Stock nourriture</dt><dd>{building.services.foodStock.toFixed(0)} unités</dd></div>}
         {building.type === "shop" && <div><dt>Stock biens courants</dt><dd>{building.services.goodsStock.toFixed(0)} unités</dd></div>}
       </dl>
+      {building.healthcare && <>
+        <h3>Monitoring hospitalier</h3>
+        <dl className="facts healthcare-grid">
+          <div><dt>Lits occupés</dt><dd>{building.healthcare.hospitalized.length} / {building.healthcare.beds}</dd></div>
+          <div><dt>File d’attente</dt><dd>{building.healthcare.queue.length}</dd></div>
+          <div><dt>Patients traités aujourd’hui</dt><dd>{building.healthcare.patientsTreatedToday}</dd></div>
+          <div><dt>Ambulances suivies</dt><dd>{building.healthcare.ambulances.length}</dd></div>
+        </dl>
+        <h3>File de consultation</h3>
+        <div className="passenger-list">{building.healthcare.queue.map((item) => <button key={item.id} onClick={() => onSelectCitizen(item.citizen.id)}>{item.citizen.name} · gravité {Math.round(item.severity)} % · {item.waitingMinutes} min</button>)}</div>
+        <h3>Patients hospitalisés</h3>
+        <div className="passenger-list">{building.healthcare.hospitalized.filter((person): person is { id: number; name: string } => person !== null).map((person) => <button key={person.id} onClick={() => onSelectCitizen(person.id)}>{person.name}</button>)}</div>
+      </>}
       {isEmployer && <>
         <h3>Économie de l’établissement</h3>
         <dl className="facts business-financial-grid">

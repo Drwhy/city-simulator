@@ -63,6 +63,10 @@ export default function App() {
   const [showTraffic, setShowTraffic] = useState(true);
   const [showIncidents, setShowIncidents] = useState(true);
   const [showSocial, setShowSocial] = useState(true);
+  const [showHealth, setShowHealth] = useState(true);
+  const [showEmergencies, setShowEmergencies] = useState(true);
+  const [showAmbulances, setShowAmbulances] = useState(true);
+  const [showMedicalFacilities, setShowMedicalFacilities] = useState(true);
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -207,7 +211,7 @@ export default function App() {
   const selectedLabel = inspectorEntity?.kind === "citizen"
     ? inspectorEntity.name
     : inspectorEntity?.kind === "vehicle"
-      ? `${inspectorEntity.type === "police" ? "Unité de police" : inspectorEntity.type === "bus" ? "Bus" : "Véhicule"} #${inspectorEntity.id}`
+      ? `${inspectorEntity.type === "police" ? "Unité de police" : inspectorEntity.type === "ambulance" ? "Ambulance" : inspectorEntity.type === "bus" ? "Bus" : "Véhicule"} #${inspectorEntity.id}`
       : inspectorEntity?.kind === "incident"
         ? inspectorEntity.title
         : inspectorEntity?.kind === "building"
@@ -224,7 +228,7 @@ export default function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <div className="eyebrow">Monitoring urbain · v0.7</div>
+          <div className="eyebrow">Monitoring urbain · v0.8</div>
           <h1>City Simulator</h1>
         </div>
         <div className="time-block">
@@ -250,6 +254,12 @@ export default function App() {
       </header>
 
       <section className="stats-grid">
+        <div className="stat-card health-stat"><span>Urgences médicales</span><strong>{snapshot?.stats.medicalEmergencies ?? 0}</strong></div>
+        <div className="stat-card health-stat"><span>File d’attente médicale</span><strong>{snapshot?.stats.patientsWaiting ?? 0}</strong></div>
+        <div className="stat-card health-stat"><span>Hospitalisés</span><strong>{snapshot?.stats.hospitalizedPatients ?? 0} / {snapshot?.stats.hospitalBeds ?? 0}</strong></div>
+        <div className="stat-card health-stat"><span>Soignants en service</span><strong>{snapshot?.stats.medicalStaffOnDuty ?? 0}</strong></div>
+        <div className="stat-card health-stat"><span>Ambulances disponibles</span><strong>{snapshot?.stats.ambulancesAvailable ?? 0}</strong></div>
+        <div className="stat-card health-stat"><span>Attente médicale moyenne</span><strong>{snapshot?.stats.averageMedicalWaitMinutes ?? 0} min</strong></div>
         <div className="stat-card"><span>Population</span><strong>{snapshot?.stats.population ?? 0}</strong></div>
         <div className="stat-card"><span>Argent moyen</span><strong>{moneyFormatter.format(snapshot?.stats.averageMoney ?? 0)}</strong></div>
         <div className="stat-card"><span>Travailleurs en service</span><strong>{snapshot?.stats.workersOnDuty ?? 0} / {snapshot?.stats.employedCitizens ?? 0}</strong></div>
@@ -296,6 +306,11 @@ export default function App() {
           <label><input type="checkbox" checked={showTraffic} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowTraffic(event.target.checked)} /> Congestion</label>
           <label><input type="checkbox" checked={showIncidents} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowIncidents(event.target.checked)} /> Incidents</label>
           <label><input type="checkbox" checked={showSocial} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowSocial(event.target.checked)} /> Liens sociaux</label>
+          <label><input type="checkbox" checked={showHealth} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowHealth(event.target.checked)} /> État de santé</label>
+          <label><input type="checkbox" checked={showEmergencies} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowEmergencies(event.target.checked)} /> Urgences médicales</label>
+          <label><input type="checkbox" checked={showAmbulances} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowAmbulances(event.target.checked)} /> Ambulances</label>
+          <label><input type="checkbox" checked={showMedicalFacilities} onChange={(event: ChangeEvent<HTMLInputElement>) => setShowMedicalFacilities(event.target.checked)} /> Structures médicales</label>
+          {snapshot?.health.hospital && <button className="graph-open-button" onClick={() => selectBuilding(snapshot.health.hospital!.id)}>Ouvrir {snapshot.health.hospital.name}</button>}
 
           <h3>Mobilité aujourd’hui</h3>
           <MobilityShare label="Marche" value={trips.walk} total={totalTrips} />
@@ -325,6 +340,7 @@ export default function App() {
           <div className="legend"><i className="dot dot-driving" /> Voiture</div>
           <div className="legend"><i className="dot dot-bus" /> Bus / arrêt</div>
           <div className="legend"><i className="dot dot-police" /> Police</div>
+          <div className="legend"><i className="dot dot-health" /> Santé / ambulance</div>
           <div className="legend"><i className="incident-legend" /> Incident</div>
           <div className="legend"><i className="dot dot-working" /> Travail</div>
           <div className="legend"><i className="dot dot-shopping" /> Courses</div>
@@ -349,6 +365,10 @@ export default function App() {
           showTraffic={showTraffic}
           showIncidents={showIncidents}
           showSocial={showSocial}
+          showHealth={showHealth}
+          showEmergencies={showEmergencies}
+          showAmbulances={showAmbulances}
+          showMedicalFacilities={showMedicalFacilities}
           selectedRelationships={selectedRelationships}
         />
 

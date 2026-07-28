@@ -95,6 +95,10 @@ class SimulationService:
         async with self._lock:
             return self.world.get_economy_overview()
 
+    async def health_overview(self) -> dict:
+        async with self._lock:
+            return self.world.get_health_overview()
+
     async def social_graph(self) -> dict:
         async with self._lock:
             return self.world.get_social_graph()

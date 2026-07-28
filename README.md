@@ -1,6 +1,36 @@
-# City Simulator — v0.7.0 Économie locale et marché du travail
+# City Simulator — v0.8.0 Santé, blessures et secours
 
-Prototype web d'une ville persistante simulant 100 habitants, leurs déplacements, relations, conflits, emplois, finances domestiques, entreprises, consommation, incidents, interventions policières et premières procédures judiciaires.
+Prototype web d'une ville persistante simulant 100 habitants, leurs déplacements, relations, conflits, emplois, santé, blessures, maladies, secours médicalisés, finances, incidents, interventions policières et premières procédures judiciaires.
+
+## Nouveautés v0.8.0
+
+### Santé individuelle
+
+- État général, douleur, blessure légère ou grave, maladie bénigne ou sévère, incapacité temporaire, arrêt de travail, convalescence et guérison.
+- Origines intégrées : bagarre ou agression, accident de circulation rare, fatigue, mauvaise nutrition, alcool, maladie et risque lié à l’âge.
+- La mort reste volontairement désactivée dans cette version.
+
+### Centre médical et secours
+
+- Le Centre médical Saint-Roch possède huit lits, une capacité, une file de consultation et des délais dépendant du personnel réellement présent.
+- Huit citoyens exercent comme médecins ou infirmiers en équipes 06:00–14:00 et 14:00–22:00.
+- Deux ambulances nécessitent chacune deux soignants en service. Le véhicule se rend réellement auprès du patient, l’embarque et le transporte au centre médical.
+- Une relève bornée par transport non urgent après 120 minutes et des durées maximales de consultation/hospitalisation empêchent les patients bloqués.
+
+### Police, justice et preuve médicale
+
+- Une personne gravement blessée ou malade ne peut pas être placée en cellule avant examen médical.
+- La mesure policière devient un examen préalable et le patient est transféré vers le dispositif de soins.
+- Un certificat médical n’est créé qu’après une consultation réelle ; sa fiabilité augmente la confiance de l’enquête.
+
+### Monitoring
+
+- Tableau de bord : urgences, file d’attente, lits occupés, soignants en service, ambulances disponibles et attente moyenne.
+- Onglet Santé de la fiche citoyen avec douleur, gravité, incapacité, arrêt et historique cliquable.
+- Fenêtre hospitalière avec personnel, capacité, patients, file, ambulances et niveau de service.
+- Couches carte indépendantes : état de santé, urgences, ambulances et structures médicales.
+- Filtre Santé du journal avec navigation vers citoyen, incident ou centre médical.
+- Endpoint `GET /api/healthcare` et domaine `health` dans les instantanés et deltas WebSocket.
 
 ## Nouveautés v0.7.0
 
@@ -92,7 +122,7 @@ La mesure, sa durée, son motif, les agents et l'incident associé sont enregist
 
 ## Rupture de compatibilité des sauvegardes
 
-Le format de sauvegarde passe à la version 7 et conserve entreprises, candidatures, carrières, finances domestiques et historiques bornés. La v0.7.0 accepte uniquement les sauvegardes créées par la v0.7.0 ; les formats 1 à 6 reçoivent une erreur explicite. Pour migrer une ancienne ville, il faut repartir d'une nouvelle génération.
+Le format de sauvegarde passe à la version 8 et conserve dossiers médicaux, files, hospitalisations, ambulances, équipages, historiques, générateur santé, ainsi que tout l’état v0.7. La v0.8.0 accepte uniquement les sauvegardes créées par la v0.8.0 ; les formats 1 à 7 reçoivent une erreur explicite. Pour migrer une ancienne ville, il faut repartir d'une nouvelle génération.
 
 Pour repartir proprement :
 
@@ -148,6 +178,7 @@ city-simulator-mvp/
 │   │   └── simulation/
 │   │       ├── economy.py
 │   │       ├── snapshot.py
+│   │       ├── health.py
 │   │       ├── generator.py
 │   │       ├── models.py
 │   │       ├── service.py
@@ -178,6 +209,7 @@ GET  /api/citizens/{id}
 GET  /api/buildings/{id}
 GET  /api/enterprises/{id}
 GET  /api/economy
+GET  /api/healthcare
 GET  /api/vehicles/{id}
 GET  /api/incidents/{id}
 GET  /api/social/graph
@@ -202,6 +234,9 @@ POST /api/city/reset
 - Les entreprises publiques sont financées par la ville et ne ferment pas ; la dépense publique cumulée est visible dans les métriques.
 - Les historiques financiers et professionnels sont limités à 30 entrées pour éviter une croissance mémoire illimitée.
 - Le marché du travail est volontairement local : une candidature compare salaire, distance, horaires, satisfaction, expérience et adéquation, sans formation ni immigration.
+- Le modèle médical est volontairement agrégé : pas de diagnostic clinique, médicament, spécialité, chirurgie, assurance ou protocole réel.
+- La nuit, une urgence attend un équipage du matin ; au-delà de 120 minutes, un transport non urgent de secours évite le blocage.
+- Les décès sont désactivés et les maladies graves restent rares.
 
 ## Tests
 

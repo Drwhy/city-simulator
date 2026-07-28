@@ -204,7 +204,7 @@ export function CitizenModal({ citizenId, graphContext = false, paused, snapshot
         <nav className="citizen-tabs" aria-label="Sections de la fiche">
           {([
             ["overview", "Vue générale"],
-            ["work", "Travail & consommation"],
+            ["work", "Travail et finances"],
             ["social", "Réseau social"],
             ["conflicts", `Conflits${citizen ? ` (${citizen.conflictHistory.length})` : ""}`],
             ["justice", "Police & justice"],
@@ -269,19 +269,66 @@ export function CitizenModal({ citizenId, graphContext = false, paused, snapshot
                   <div><dt>Shifts terminés</dt><dd>{citizen.employment.shiftsCompleted}</dd></div>
                   <div><dt>Shifts manqués / incomplets</dt><dd>{citizen.employment.missedShifts}</dd></div>
                   <div><dt>Salaire journalier</dt><dd>{moneyFormatter.format(citizen.salaryDaily)}</dd></div>
+                  <div><dt>Recherche active</dt><dd>{citizen.employment.jobSearchActive ? "Oui" : "Non"}</dd></div>
+                  <div><dt>Dernier changement</dt><dd>{citizen.employment.lastJobChangeTick > 0 ? <TickLabel tick={citizen.employment.lastJobChangeTick} currentTick={citizen.currentTick} /> : "Emploi initial"}</dd></div>
+                  <div><dt>Revenus aujourd’hui</dt><dd>{moneyFormatter.format(citizen.employment.incomeToday)}</dd></div>
+                  <div><dt>Dépenses aujourd’hui</dt><dd>{moneyFormatter.format(citizen.employment.expensesToday)}</dd></div>
                 </dl>
                 <MetricBar label="Performance" value={citizen.employment.performance} />
                 <MetricBar label="Satisfaction professionnelle" value={citizen.employment.satisfaction} />
+                <MetricBar label="Stress financier" value={citizen.employment.financialStress} warning />
               </section>
               <section className="profile-section">
-                <h3>Réserves du foyer</h3>
+                <h3>Budget et réserves du foyer</h3>
                 <dl className="profile-facts">
                   <div><dt>Nourriture</dt><dd>{citizen.consumption.foodUnits.toFixed(1)} unités</dd></div>
                   <div><dt>Biens courants</dt><dd>{citizen.consumption.goodsUnits.toFixed(1)} unités</dd></div>
                   <div><dt>Visites au marché</dt><dd>{citizen.consumption.shoppingVisits}</dd></div>
                   <div><dt>Alcoolémie simulée</dt><dd>{Math.round(citizen.consumption.intoxication)} %</dd></div>
+                  {citizen.household && <>
+                    <div><dt>Revenus du foyer</dt><dd>{moneyFormatter.format(citizen.household.incomeToday)}</dd></div>
+                    <div><dt>Charges récurrentes</dt><dd>{moneyFormatter.format(citizen.household.recurringExpensesToday)}</dd></div>
+                    <div><dt>Dépenses alimentaires</dt><dd>{moneyFormatter.format(citizen.household.foodExpensesToday)}</dd></div>
+                    <div><dt>Dépenses en biens</dt><dd>{moneyFormatter.format(citizen.household.goodsExpensesToday)}</dd></div>
+                    <div><dt>Dette du foyer</dt><dd>{moneyFormatter.format(citizen.household.debt)}</dd></div>
+                    <div><dt>Découvert autorisé</dt><dd>{moneyFormatter.format(citizen.household.overdraftLimit)}</dd></div>
+                    <div><dt>Budget nourriture</dt><dd>{moneyFormatter.format(citizen.household.budgets.foodDaily)} / jour</dd></div>
+                    <div><dt>Budget biens</dt><dd>{moneyFormatter.format(citizen.household.budgets.goodsDaily)} / jour</dd></div>
+                  </>}
                 </dl>
+                {citizen.household && <MetricBar label="Stress financier du foyer" value={citizen.household.financialStress} warning />}
                 <p className="muted">Les réserves couvrent volontairement de grandes catégories : alimentation et biens de consommation courante.</p>
+              </section>
+              <section className="profile-section profile-section-wide">
+                <h3>Candidatures</h3>
+                {citizen.employment.applications.length === 0 ? <p className="muted">Aucune candidature enregistrée.</p> : (
+                  <div className="economy-history">
+                    {[...citizen.employment.applications].reverse().map((application) => (
+                      <article className={`economy-card application-${application.status}`} key={application.id}>
+                        <div><strong>{application.jobTitle}</strong><span>{application.building.name}</span></div>
+                        <div><b>{moneyFormatter.format(application.salaryDaily)} / jour</b><span>{application.status}</span></div>
+                        <small>
+                          Déposée <TickLabel tick={application.submittedTick} currentTick={citizen.currentTick} />
+                          {application.reason ? ` · ${application.reason}` : ""}
+                        </small>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+              <section className="profile-section profile-section-wide">
+                <h3>Historique professionnel</h3>
+                {citizen.employment.history.length === 0 ? <p className="muted">Emploi initial, aucun changement enregistré.</p> : (
+                  <div className="economy-history">
+                    {[...citizen.employment.history].reverse().map((record, index) => (
+                      <article className={`economy-card employment-${record.eventType}`} key={`${record.tick}-${record.eventType}-${index}`}>
+                        <div><strong>{record.label}</strong><span>{record.jobTitle ?? "Sans fonction"}</span></div>
+                        <div><b>{moneyFormatter.format(record.salaryDaily)} / jour</b><span>{record.reason}</span></div>
+                        <small><TickLabel tick={record.tick} currentTick={citizen.currentTick} /></small>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
             </div>
           ) : tab === "social" ? (

@@ -30,10 +30,23 @@ def test_api_exposes_city_and_commands(tmp_path) -> None:
         assert building.json()["kind"] == "building"
         assert "employees" in building.json()
         assert "foodStock" in building.json()["services"]
+        enterprise = client.get(f"/api/enterprises/{market['id']}")
+        assert enterprise.status_code == 200
+        assert "finance" in enterprise.json()
+        assert "employmentHistory" in enterprise.json()["finance"]
+
+        economy = client.get("/api/economy")
+        assert economy.status_code == 200
+        assert economy.json()["businesses"]
+        assert "unemploymentRate" in economy.json()["metrics"]
 
         assert "workersOnDuty" in payload["stats"]
         assert "policeOfficersOnDuty" in payload["stats"]
         assert "shoppingTripsToday" in payload["stats"]
+        assert "unemploymentRate" in payload["stats"]
+        assert "openPositions" in payload["stats"]
+        assert "medianSalary" in payload["stats"]
+        assert "economy" in payload
 
         assert client.post("/api/simulation/pause").status_code == 200
         assert client.post("/api/simulation/speed", json={"speed": 20}).status_code == 200
@@ -67,6 +80,11 @@ def test_websocket_stream_contains_mobility_data(tmp_path) -> None:
             assert payload["vehicles"]
             assert payload["roads"]["cells"]
             assert payload["transport"]["busStops"]
+            delta = websocket.receive_json()
+            assert delta["type"] == "city_delta"
+            assert "economy" in delta
+            assert "unemploymentRate" in delta["stats"]
+            assert "cells" not in delta["roads"]
 
 
 def test_city_and_citizen_expose_social_monitoring(tmp_path) -> None:

@@ -60,6 +60,17 @@ class SimulationService:
             }
             return data
 
+    async def delta(self) -> dict:
+        async with self._lock:
+            data = self.world.delta_snapshot()
+            data["simulation"] = {
+                "paused": self.status.paused,
+                "speed": self.status.speed,
+                "allowedSpeeds": sorted(self.ALLOWED_SPEEDS),
+                "hasSave": self.save_path.exists(),
+            }
+            return data
+
     async def citizen_detail(self, citizen_id: int) -> dict:
         async with self._lock:
             return self.world.get_citizen_detail(citizen_id)
@@ -75,6 +86,14 @@ class SimulationService:
     async def building_detail(self, building_id: int) -> dict:
         async with self._lock:
             return self.world.get_building_detail(building_id)
+
+    async def enterprise_detail(self, building_id: int) -> dict:
+        async with self._lock:
+            return self.world.get_enterprise_detail(building_id)
+
+    async def economy_overview(self) -> dict:
+        async with self._lock:
+            return self.world.get_economy_overview()
 
     async def social_graph(self) -> dict:
         async with self._lock:

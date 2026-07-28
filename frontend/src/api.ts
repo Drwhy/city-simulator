@@ -1,6 +1,7 @@
 import type {
   BuildingDetail,
   CitizenDetail,
+  EconomyOverview,
   IncidentDetail,
   SocialGraphData,
   VehicleDetail,
@@ -32,6 +33,12 @@ export function getIncident(id: number): Promise<IncidentDetail> {
 }
 export function getBuilding(id: number): Promise<BuildingDetail> {
   return request<BuildingDetail>(`/api/buildings/${id}`);
+}
+export function getEnterprise(id: number): Promise<BuildingDetail> {
+  return request<BuildingDetail>(`/api/enterprises/${id}`);
+}
+export function getEconomy(): Promise<EconomyOverview> {
+  return request<EconomyOverview>("/api/economy");
 }
 export function getSocialGraph(): Promise<SocialGraphData> {
   return request<SocialGraphData>("/api/social/graph");

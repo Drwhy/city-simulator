@@ -263,7 +263,7 @@ def test_conflict_pressure_keeps_full_precision_across_save() -> None:
 
 def test_old_save_versions_are_explicitly_rejected() -> None:
     state = World(seed=111, citizen_count=20).export_state()
-    for version in range(1, 6):
+    for version in range(1, 7):
         legacy = copy.deepcopy(state)
         legacy["version"] = version
         with pytest.raises(ValueError, match="Version de sauvegarde non prise en charge"):
@@ -375,3 +375,19 @@ def test_police_intervention_records_a_consequence_on_the_citizen() -> None:
     assert offender.detained_until_tick is not None
     assert incident.detained_ids == (offender.id,)
 
+
+def test_delta_snapshot_does_not_serialize_static_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    world = World(seed=321, citizen_count=30)
+
+    def fail_if_called(*_: object) -> dict:
+        raise AssertionError("A static serializer was called while building a delta")
+
+    monkeypatch.setattr(World, "_bus_stop_to_dict", fail_if_called)
+    monkeypatch.setattr(World, "_bus_line_to_dict", fail_if_called)
+    delta = world.delta_snapshot()
+
+    assert delta["type"] == "city_delta"
+    assert "map" not in delta
+    assert "cells" not in delta["roads"]
+    assert "busStops" not in delta["transport"]
+    assert "busLines" not in delta["transport"]

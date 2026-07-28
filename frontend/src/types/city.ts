@@ -35,6 +35,53 @@ export type VehicleStatus =
   | "on_scene"
   | "returning";
 
+export type BusinessStatus = "healthy" | "fragile" | "deficit" | "closed";
+export type JobApplicationStatus = "pending" | "accepted" | "rejected" | "withdrawn";
+
+export interface EmploymentRecord {
+  tick: number;
+  eventType: string;
+  label: string;
+  buildingId: number | null;
+  jobTitle: string | null;
+  salaryDaily: number;
+  reason: string;
+}
+
+export interface JobApplicationSummary {
+  id: number;
+  citizenId: number;
+  building: { id: number; name: string };
+  jobTitle: string;
+  salaryDaily: number;
+  submittedTick: number;
+  score: number;
+  status: JobApplicationStatus;
+  resolvedTick: number | null;
+  reason: string | null;
+}
+
+export interface BusinessFinancialRecord {
+  day: number;
+  revenue: number;
+  payroll: number;
+  fixedCosts: number;
+  result: number;
+  cash: number;
+  serviceLevel: number;
+  status: BusinessStatus;
+}
+
+export interface HouseholdFinancialRecord {
+  day: number;
+  income: number;
+  recurringExpenses: number;
+  foodExpenses: number;
+  goodsExpenses: number;
+  debt: number;
+  financialStress: number;
+}
+
 export interface CitizenSummary {
   id: number;
   name: string;
@@ -67,6 +114,16 @@ export interface BuildingSummary {
   foodStock: number;
   goodsStock: number;
   revenueToday: number;
+  cash: number;
+  payrollToday: number;
+  fixedCostsToday: number;
+  resultToday: number;
+  serviceLevel: number;
+  businessStatus: BusinessStatus;
+  assignedEmployees: number;
+  employeeCapacity: number;
+  targetEmployees: number;
+  openPositions: number;
 }
 
 export interface VehicleSummary {
@@ -119,6 +176,10 @@ export interface HouseholdSummary {
   cohesion: number;
   sharedMeals: number;
   conflicts: number;
+  incomeToday: number;
+  expensesToday: number;
+  debt: number;
+  financialStress: number;
 }
 
 export interface IncidentSummary {
@@ -159,6 +220,43 @@ export interface CityEvent {
   incidentId: number | null;
 }
 
+export interface EconomyMetrics {
+  unemployedCitizens: number;
+  unemploymentRate: number;
+  openPositions: number;
+  deficitBusinesses: number;
+  closedBusinesses: number;
+  medianSalary: number;
+  medianHouseholdIncome: number;
+  hiresToday: number;
+  layoffsToday: number;
+  resignationsToday: number;
+  publicSpendingTotal: number;
+}
+
+export interface EconomyBusinessSummary {
+  id: number;
+  name: string;
+  type: BuildingSummary["type"];
+  status: BusinessStatus;
+  cash: number;
+  revenueToday: number;
+  payrollToday: number;
+  fixedCostsToday: number;
+  resultToday: number;
+  serviceLevel: number;
+  employees: number;
+  employeesRequired: number;
+  employeeCapacity: number;
+  openPositions: number;
+}
+
+export interface EconomyOverview {
+  tick: number;
+  metrics: EconomyMetrics;
+  businesses: EconomyBusinessSummary[];
+}
+
 export interface CitySnapshot {
   type: "city_snapshot";
   tick: number;
@@ -167,7 +265,7 @@ export interface CitySnapshot {
   minute: number;
   timeLabel: string;
   map: { width: number; height: number };
-  stats: {
+  stats: EconomyMetrics & {
     population: number;
     averageMoney: number;
     reportedIncidents: number;
@@ -235,6 +333,7 @@ export interface CitySnapshot {
     events: SocialEventSummary[];
     households: HouseholdSummary[];
   };
+  economy: EconomyOverview;
   incidents: IncidentSummary[];
   events: CityEvent[];
   simulation: {
@@ -244,6 +343,30 @@ export interface CitySnapshot {
     hasSave: boolean;
   };
 }
+
+export type CityDelta = Pick<
+  CitySnapshot,
+  | "tick"
+  | "day"
+  | "hour"
+  | "minute"
+  | "timeLabel"
+  | "stats"
+  | "citizens"
+  | "buildings"
+  | "vehicles"
+  | "social"
+  | "economy"
+  | "incidents"
+  | "events"
+  | "simulation"
+> & {
+  type: "city_delta";
+  roads: Pick<CitySnapshot["roads"], "congestion">;
+  transport: Pick<CitySnapshot["transport"], "operating">;
+};
+
+export type CityStreamMessage = CitySnapshot | CityDelta;
 
 export interface CitizenDetail extends CitizenSummary {
   kind: "citizen";
@@ -268,6 +391,15 @@ export interface CitizenDetail extends CitizenSummary {
     missedShifts: number;
     performance: number;
     satisfaction: number;
+    jobSearchActive: boolean;
+    jobSearchSinceTick: number | null;
+    lastJobChangeTick: number;
+    incomeToday: number;
+    expensesToday: number;
+    financialStress: number;
+    experienceByJob: Record<string, number>;
+    applications: JobApplicationSummary[];
+    history: EmploymentRecord[];
   };
   consumption: {
     foodUnits: number;
@@ -322,6 +454,18 @@ export interface CitizenDetail extends CitizenSummary {
     cohesion: number;
     sharedMeals: number;
     conflicts: number;
+    incomeToday: number;
+    recurringExpensesToday: number;
+    foodExpensesToday: number;
+    goodsExpensesToday: number;
+    debt: number;
+    overdraftLimit: number;
+    financialStress: number;
+    budgets: {
+      foodDaily: number;
+      goodsDaily: number;
+    };
+    financialHistory: HouseholdFinancialRecord[];
     members: Array<{ id: number; name: string }>;
   } | null;
   social: {
@@ -413,6 +557,7 @@ export interface BuildingDetail extends BuildingSummary {
     onDuty: boolean;
     shift: string;
     performance: number;
+    satisfaction: number;
   }>;
   occupants: Array<{ id: number; name: string }>;
   services: {
@@ -422,6 +567,20 @@ export interface BuildingDetail extends BuildingSummary {
     foodStock: number;
     goodsStock: number;
     revenueToday: number;
+  };
+  finance: {
+    status: BusinessStatus;
+    cash: number;
+    totalRevenue: number;
+    payrollToday: number;
+    fixedCostsToday: number;
+    resultToday: number;
+    serviceLevel: number;
+    employeeCapacity: number;
+    targetEmployees: number;
+    openPositions: number;
+    financialHistory: BusinessFinancialRecord[];
+    employmentHistory: EmploymentRecord[];
   };
 }
 

@@ -512,7 +512,8 @@ def resolve_household_life(world: World) -> None:
         average_volatility = sum(conflict_propensity(citizen) for citizen in participants) / len(participants)
         positive = world.rng.random() > max(
             0.08,
-            average_stress / 150.0 + active_conflict * 0.06 + average_volatility * 0.05,
+            average_stress / 150.0 + active_conflict * 0.06 + average_volatility * 0.05
+            + household.financial_stress / 260.0,
         )
         for a, b in combinations(participants, 2):
             apply_interaction(world, a, b, home.id, positive=positive, strength=0.75, emit=False)

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .models import Activity, BuildingType, Citizen, PoliceMeasure, TravelStage, VehicleStatus, VehicleType
+from .economy import record_purchase, record_salary_payment, record_work_minute
+from .models import Activity, BuildingType, BusinessStatus, Citizen, PoliceMeasure, TravelStage, VehicleStatus, VehicleType
 
 if TYPE_CHECKING:
     from .world import World
@@ -58,6 +59,8 @@ def staff_count(world: "World", building_id: int) -> int:
 
 def building_operational(world: "World", building_id: int) -> bool:
     building = world.buildings[building_id]
+    if building.business_status == BusinessStatus.CLOSED:
+        return False
     if building.building_type in {BuildingType.HOME, BuildingType.PARK}:
         return True
     return staff_count(world, building_id) >= building.employees_required
@@ -93,6 +96,7 @@ def update_work_and_consumption(world: "World") -> None:
                 citizen.job_performance = min(100.0, citizen.job_performance + 0.002)
             else:
                 citizen.job_performance = max(0.0, citizen.job_performance - 0.006)
+            record_work_minute(world, citizen)
 
         # Un repas à domicile consomme le stock du foyer. Un cooldown évite les achats/repas répétés.
         if (
@@ -128,16 +132,32 @@ def update_work_and_consumption(world: "World") -> None:
                 citizen.needs.stress = min(100.0, citizen.needs.stress + 3.0)
                 citizen.last_decision_reason = "Le commerce manque de personnel et ne peut pas servir correctement."
                 continue
+            household = world.households.get(citizen.household_id) if citizen.household_id else None
             food_wanted = max(0.0, 8.0 - citizen.food_units)
             goods_wanted = max(0.0, 3.0 - citizen.goods_units)
-            food_bought = min(food_wanted, market.food_stock, citizen.money / 3.2)
-            remaining_money = max(0.0, citizen.money - food_bought * 3.2)
-            goods_bought = min(goods_wanted, market.goods_stock, remaining_money / 7.5)
-            cost = round(food_bought * 3.2 + goods_bought * 7.5, 2)
+            food_budget = max(
+                0.0,
+                (household.food_budget_daily - household.food_expenses_today) if household else 28.0,
+            )
+            goods_budget = max(
+                0.0,
+                (household.goods_budget_daily - household.goods_expenses_today) if household else 12.0,
+            )
+            if citizen.financial_stress >= 55.0 or citizen.workplace_id is None:
+                goods_budget *= 0.35
+                goods_wanted *= 0.5
+            available_credit = max(0.0, citizen.money + citizen.overdraft_limit)
+            food_bought = min(food_wanted, market.food_stock, available_credit / 3.2, food_budget / 3.2)
+            food_cost = round(food_bought * 3.2, 2)
+            remaining_credit = max(0.0, available_credit - food_cost)
+            goods_bought = min(goods_wanted, market.goods_stock, remaining_credit / 7.5, goods_budget / 7.5)
+            goods_cost = round(goods_bought * 7.5, 2)
+            cost = round(food_cost + goods_cost, 2)
             if cost <= 0:
                 citizen.needs.stress = min(100.0, citizen.needs.stress + 2.0)
                 continue
             citizen.money = round(citizen.money - cost, 2)
+            record_purchase(world, citizen, food_cost=food_cost, goods_cost=goods_cost)
             citizen.food_units += food_bought
             citizen.goods_units += goods_bought
             citizen.last_shopping_tick = world.tick
@@ -166,6 +186,7 @@ def update_work_and_consumption(world: "World") -> None:
         if ratio >= 0.45:
             pay = round(citizen.salary_daily * ratio, 2)
             citizen.money = round(citizen.money + pay, 2)
+            record_salary_payment(world, citizen, pay)
             if ratio >= 0.82:
                 citizen.shifts_completed += 1
                 citizen.job_satisfaction = min(100.0, citizen.job_satisfaction + 0.12)

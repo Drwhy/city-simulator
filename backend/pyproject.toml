@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "city-simulator-mvp"
-version = "0.6.0"
+version = "0.7.0"
 description = "Serveur de simulation urbaine observable en temps réel"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,7 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.2,<9.0",
-  "httpx>=0.27,<1.0",
+  "httpx2>=2.9,<3.0",
 ]
 
 [tool.pytest.ini_options]

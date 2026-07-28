@@ -18,7 +18,8 @@ import { EntityModal } from "./components/EntityModal";
 import { EventLog } from "./components/EventLog";
 import { SocialGraph } from "./components/SocialGraph";
 import { CityMap } from "./map/CityMap";
-import type { CitySnapshot, InspectorEntity, SelectedEntity } from "./types/city";
+import { mergeCityMessage } from "./stream";
+import type { CitySnapshot, CityStreamMessage, InspectorEntity, SelectedEntity } from "./types/city";
 
 function websocketUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -73,8 +74,8 @@ export default function App() {
       socket = new WebSocket(websocketUrl());
       socket.onopen = () => setConnectionState("Connecté");
       socket.onmessage = (message) => {
-        const data = JSON.parse(message.data) as CitySnapshot;
-        setSnapshot(data);
+        const data = JSON.parse(message.data) as CityStreamMessage;
+        setSnapshot((current) => mergeCityMessage(current, data));
       };
       socket.onerror = () => setConnectionState("Erreur de connexion");
       socket.onclose = () => {
@@ -223,7 +224,7 @@ export default function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <div className="eyebrow">Monitoring urbain · v0.6</div>
+          <div className="eyebrow">Monitoring urbain · v0.7</div>
           <h1>City Simulator</h1>
         </div>
         <div className="time-block">
@@ -253,6 +254,13 @@ export default function App() {
         <div className="stat-card"><span>Argent moyen</span><strong>{moneyFormatter.format(snapshot?.stats.averageMoney ?? 0)}</strong></div>
         <div className="stat-card"><span>Travailleurs en service</span><strong>{snapshot?.stats.workersOnDuty ?? 0} / {snapshot?.stats.employedCitizens ?? 0}</strong></div>
         <div className="stat-card"><span>Performance moyenne</span><strong>{snapshot?.stats.averageJobPerformance ?? 0} %</strong></div>
+        <div className="stat-card economy-stat"><span>Taux de chômage</span><strong>{snapshot?.stats.unemploymentRate ?? 0} %</strong></div>
+        <div className="stat-card economy-stat"><span>Postes vacants</span><strong>{snapshot?.stats.openPositions ?? 0}</strong></div>
+        <div className="stat-card economy-stat"><span>Entreprises déficitaires</span><strong>{snapshot?.stats.deficitBusinesses ?? 0}</strong></div>
+        <div className="stat-card economy-stat"><span>Salaire médian</span><strong>{moneyFormatter.format(snapshot?.stats.medianSalary ?? 0)}</strong></div>
+        <div className="stat-card economy-stat"><span>Revenu médian des foyers</span><strong>{moneyFormatter.format(snapshot?.stats.medianHouseholdIncome ?? 0)}</strong></div>
+        <div className="stat-card economy-stat"><span>Recrutements aujourd’hui</span><strong>{snapshot?.stats.hiresToday ?? 0}</strong></div>
+        <div className="stat-card economy-stat"><span>Licenciements aujourd’hui</span><strong>{snapshot?.stats.layoffsToday ?? 0}</strong></div>
         <div className="stat-card"><span>Courses aujourd’hui</span><strong>{snapshot?.stats.shoppingTripsToday ?? 0}</strong></div>
         <div className="stat-card"><span>Ventes du marché</span><strong>{moneyFormatter.format(snapshot?.stats.shopSalesToday ?? 0)}</strong></div>
         <div className="stat-card"><span>En déplacement</span><strong>{(activities.walking ?? 0) + (activities.driving ?? 0) + (activities.riding_bus ?? 0) + (activities.waiting_bus ?? 0)}</strong></div>
@@ -357,7 +365,12 @@ export default function App() {
         </aside>
       </section>
 
-      <EventLog events={snapshot?.events ?? []} onSelectIncident={selectIncident} />
+      <EventLog
+        events={snapshot?.events ?? []}
+        onSelectIncident={selectIncident}
+        onSelectCitizen={selectCitizen}
+        onSelectBuilding={selectBuilding}
+      />
       <SocialGraph
         open={socialGraphOpen}
         onClose={() => setSocialGraphOpen(false)}

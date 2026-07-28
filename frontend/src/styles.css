@@ -793,6 +793,79 @@ body { min-width: 1280px; }
 .employee-list b.off-duty { color: #9ba6b6; }
 .dot-shopping { background: #f0c45c; }
 
+.business-status {
+  display: inline-flex;
+  margin: 0 8px 10px 0;
+  padding: 6px 9px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.business-status-healthy { color: #98e0b1; border-color: #39714d; background: #173223; }
+.business-status-fragile { color: #f7d989; border-color: #796732; background: #363019; }
+.business-status-deficit { color: #ffb39f; border-color: #7c473c; background: #3b211c; }
+.business-status-closed { color: #c5c9d0; border-color: #555d69; background: #282d34; }
+
+.business-financial-grid .finance-positive dd,
+.finance-positive { color: #9de2b4; }
+.business-financial-grid .finance-negative dd,
+.finance-negative { color: #ff9d91; }
+
+.economy-history {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+}
+.economy-card {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid #303b4d;
+  border-left: 3px solid #5678a1;
+  border-radius: 8px;
+  background: #141d29;
+}
+.economy-card > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.economy-card span,
+.economy-card small { color: #91a0b4; }
+.economy-card small { line-height: 1.45; }
+.economy-card.application-accepted,
+.economy-card.employment-hired { border-left-color: #55b579; }
+.economy-card.application-rejected,
+.economy-card.employment-dismissed { border-left-color: #d66d62; }
+.economy-card.employment-resigned { border-left-color: #d7ad58; }
+
+.financial-history {
+  display: grid;
+  gap: 6px;
+}
+.financial-history-row {
+  display: grid;
+  grid-template-columns: 68px repeat(3, minmax(100px, 1fr)) minmax(90px, auto);
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid #2b3546;
+  border-radius: 7px;
+  background: #141d29;
+  font-size: 11px;
+}
+.financial-history-row span { color: #98a6b9; }
+.financial-history-row b { text-align: right; }
+
+@media (max-width: 760px) {
+  .profile-grid-work { grid-template-columns: 1fr; }
+  .financial-history-row { grid-template-columns: 60px 1fr 1fr; }
+  .financial-history-row span:nth-of-type(3) { display: none; }
+}
+
 @media (max-height: 850px) {
   .workspace { height: 580px; }
   .entity-modal-window { height: 90vh; }

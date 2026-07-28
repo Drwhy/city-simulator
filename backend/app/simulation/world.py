@@ -4,10 +4,25 @@ import random
 from collections import Counter
 from typing import Any
 
+from .economy import (
+    assigned_staff_count,
+    close_economic_day,
+    economy_overview,
+    initialize_economy,
+    is_employer,
+    update_economy,
+)
+
 from .generator import generate_buildings, generate_citizens, generate_households, generate_vehicles
 from .models import (
     Activity,
     Building,
+    BusinessFinancialRecord,
+    BusinessStatus,
+    EmploymentRecord,
+    HouseholdFinancialRecord,
+    JobApplication,
+    JobApplicationStatus,
     BuildingType,
     BusLine,
     BusStop,
@@ -38,7 +53,6 @@ from .social import (
     conflict_label,
     conflict_propensity,
     cool_down_conflicts,
-    friendship_counts,
     relationship_label,
     temperament_label,
     resolve_ambient_social_life,
@@ -46,6 +60,7 @@ from .social import (
     social_commitment,
     update_social_calendar,
 )
+from .snapshot import build_dynamic_snapshot
 from .work import (
     apply_police_measure,
     building_operational,
@@ -140,6 +155,14 @@ class World:
         self.shopping_trips_today = 0
         self.police_warnings_today = 0
         self.police_detentions_today = 0
+        self.job_applications: dict[int, JobApplication] = {}
+        self._next_job_application_id = 1
+        self._last_labor_market_day = 0
+        self.hires_today = 0
+        self.layoffs_today = 0
+        self.resignations_today = 0
+        self.public_spending_total = 0.0
+        initialize_economy(self)
         self._emit("simulation_started", "La ville commence une nouvelle journée.")
 
     @property
@@ -167,6 +190,7 @@ class World:
             self._emit("new_day", f"Le jour {self.day} commence.")
 
         self._update_needs()
+        update_economy(self)
         update_social_calendar(self)
         self._plan_activities()
         self._move_walkers()
@@ -189,6 +213,10 @@ class World:
 
     def _reset_daily_counters(self) -> None:
         self.trip_counts_today = Counter({mode.value: 0 for mode in TransportMode})
+        self.hires_today = 0
+        self.layoffs_today = 0
+        self.resignations_today = 0
+        close_economic_day(self, self.day - 1)
         self.bus_boardings_today = 0
         self.traffic_delay_today = 0
         self.social_invitations_today = 0
@@ -1721,6 +1749,22 @@ class World:
                 "missedShifts": citizen.missed_shifts,
                 "performance": round(citizen.job_performance, 1),
                 "satisfaction": round(citizen.job_satisfaction, 1),
+                "jobSearchActive": citizen.job_search_active,
+                "jobSearchSinceTick": citizen.job_search_since_tick,
+                "lastJobChangeTick": citizen.last_job_change_tick,
+                "incomeToday": round(citizen.income_today, 2),
+                "expensesToday": round(citizen.expenses_today, 2),
+                "financialStress": round(citizen.financial_stress, 1),
+                "experienceByJob": {key: round(value, 1) for key, value in citizen.experience_by_job.items()},
+                "applications": [
+                    self._job_application_to_dict(self.job_applications[application_id])
+                    for application_id in reversed(citizen.application_ids)
+                    if application_id in self.job_applications
+                ][:20],
+                "history": [
+                    self._employment_record_to_dict(record)
+                    for record in reversed(citizen.employment_history)
+                ][:20],
             },
             "consumption": {
                 "foodUnits": round(citizen.food_units, 1),
@@ -1759,6 +1803,21 @@ class World:
                     "cohesion": round(household.cohesion, 1),
                     "sharedMeals": household.shared_meals,
                     "conflicts": household.conflicts,
+                    "incomeToday": round(household.income_today, 2),
+                    "recurringExpensesToday": round(household.recurring_expenses_today, 2),
+                    "foodExpensesToday": round(household.food_expenses_today, 2),
+                    "goodsExpensesToday": round(household.goods_expenses_today, 2),
+                    "debt": round(household.debt, 2),
+                    "overdraftLimit": round(household.overdraft_limit, 2),
+                    "financialStress": round(household.financial_stress, 1),
+                    "budgets": {
+                        "foodDaily": round(household.food_budget_daily, 2),
+                        "goodsDaily": round(household.goods_budget_daily, 2),
+                    },
+                    "financialHistory": [
+                        self._household_financial_to_dict(record)
+                        for record in reversed(household.financial_history)
+                    ][:14],
                     "members": [
                         {"id": member.id, "name": member.full_name} for member in household_members
                     ],
@@ -1902,6 +1961,7 @@ class World:
                     "onDuty": is_on_duty(self, employee),
                     "shift": f"{employee.work_start_hour:02d}:00–{employee.work_end_hour:02d}:00",
                     "performance": round(employee.job_performance, 1),
+                    "satisfaction": round(employee.job_satisfaction, 1),
                 }
                 for employee in employees
             ],
@@ -1914,7 +1974,34 @@ class World:
                 "goodsStock": round(building.goods_stock, 1),
                 "revenueToday": round(building.revenue_today, 2),
             },
+            "finance": {
+                "status": building.business_status.value,
+                "cash": round(building.cash, 2),
+                "totalRevenue": round(building.total_revenue, 2),
+                "payrollToday": round(building.payroll_today, 2),
+                "fixedCostsToday": round(building.fixed_costs_today, 2),
+                "resultToday": round(building.result_today, 2),
+                "serviceLevel": round(building.service_level, 1),
+                "employeeCapacity": building.employee_capacity,
+                "targetEmployees": building.target_employees,
+                "openPositions": building.open_positions,
+                "financialHistory": [
+                    self._business_financial_to_dict(record) for record in reversed(building.financial_history)
+                ][:14],
+                "employmentHistory": [
+                    self._employment_record_to_dict(record) for record in reversed(building.employment_events)
+                ][:20],
+            },
         }
+
+    def get_enterprise_detail(self, building_id: int) -> dict[str, Any]:
+        building = self.buildings[building_id]
+        if not is_employer(building):
+            raise KeyError(building_id)
+        return self.get_building_detail(building_id)
+
+    def get_economy_overview(self) -> dict[str, object]:
+        return economy_overview(self)
 
     def _case_summary(self, case: JudicialCase) -> dict[str, Any]:
         defendant = self.citizens.get(case.defendant_id)
@@ -2026,166 +2113,27 @@ class World:
         return {"id": citizen.id, "name": citizen.full_name}
 
     def snapshot(self) -> dict[str, Any]:
-        activity_counts = Counter(citizen.activity.value for citizen in self.citizens.values())
-        transport_mode_counts = Counter(
-            citizen.transport_mode.value
-            for citizen in self.citizens.values()
-            if citizen.travel_stage != TravelStage.IDLE
-        )
-        moving_vehicles = [
-            vehicle
-            for vehicle in self.vehicles.values()
-            if vehicle.status in {
-                VehicleStatus.DRIVING, VehicleStatus.IN_SERVICE,
-                VehicleStatus.RESPONDING, VehicleStatus.RETURNING,
-            }
-        ]
-        buses = [vehicle for vehicle in self.vehicles.values() if vehicle.vehicle_type == VehicleType.BUS]
-        recent_events = [self._event_to_dict(event) for event in self.events[-80:]]
-        completed_trip_times = [citizen.last_trip_minutes for citizen in self.citizens.values() if citizen.last_trip_minutes]
-        friendships, rivalries, isolated, average_network = friendship_counts(self)
-        active_social_events = [
-            event for event in self.social_events.values()
-            if event.status in {SocialEventStatus.PLANNED, SocialEventStatus.ACTIVE}
-        ]
-        active_incidents = [
-            incident for incident in self.incidents.values()
-            if incident.status != IncidentStatus.EXPIRED and self.tick < incident.expires_tick
-        ]
-        police_units = [
-            vehicle for vehicle in self.vehicles.values()
-            if vehicle.vehicle_type == VehicleType.POLICE
-        ]
-        response_times = [
-            incident.police_arrival_tick - incident.dispatched_tick
-            for incident in self.incidents.values()
-            if incident.police_arrival_tick is not None and incident.dispatched_tick is not None
-        ]
-        open_investigations = [
-            investigation for investigation in self.investigations.values()
-            if investigation.status in {InvestigationStatus.OPEN, InvestigationStatus.SUSPECT_IDENTIFIED}
-        ]
-        awaiting_cases = [
-            case for case in self.judicial_cases.values()
-            if case.status == JudicialCaseStatus.AWAITING_HEARING
-        ]
-        market = self._first_building(BuildingType.SHOP)
-        employed = [citizen for citizen in self.citizens.values() if citizen.workplace_id is not None]
-        on_duty = [citizen for citizen in employed if is_on_duty(self, citizen)]
-        police_officers = [
-            citizen for citizen in employed
-            if self.buildings[citizen.workplace_id].building_type == BuildingType.POLICE
-        ]
-        staffed_patrols = [
-            unit for unit in police_units if len(unit.crew_ids) >= min(2, unit.capacity)
-        ]
-        operational_workplaces = [
-            building for building in self.buildings.values()
-            if building.building_type not in {BuildingType.HOME, BuildingType.PARK}
-            and building_operational(self, building.id)
-        ]
-        return {
-            "type": "city_snapshot",
-            "tick": self.tick,
-            "day": self.day,
-            "hour": self.hour,
-            "minute": self.minute,
-            "timeLabel": self.simulation_time_label,
-            "map": {"width": self.MAP_WIDTH, "height": self.MAP_HEIGHT},
-            "stats": {
-                "population": len(self.citizens),
-                "averageMoney": round(
-                    sum(citizen.money for citizen in self.citizens.values()) / max(1, len(self.citizens)),
-                    2,
-                ),
-                "reportedIncidents": sum(1 for incident in self.incidents.values() if incident.reported),
-                "activeIncidents": len(active_incidents),
-                "seriousIncidents": sum(
-                    1 for incident in active_incidents if incident.severity == "danger"
-                ),
-                "policeUnitsAvailable": sum(
-                    1 for unit in staffed_patrols if unit.status == VehicleStatus.PARKED
-                ),
-                "policeOfficersOnDuty": sum(1 for citizen in police_officers if is_on_duty(self, citizen)),
-                "staffedPatrols": len(staffed_patrols),
-                "policeWarningsToday": self.police_warnings_today,
-                "policeDetentionsToday": self.police_detentions_today,
-                "policeResponsesToday": self.police_responses_today,
-                "averagePoliceResponseMinutes": round(
-                    sum(response_times) / max(1, len(response_times)), 1
-                ),
-                "openInvestigations": len(open_investigations),
-                "suspectsIdentified": sum(
-                    1 for investigation in open_investigations
-                    if investigation.lead_suspect_id is not None
-                ),
-                "arrestsToday": self.arrests_today,
-                "casesFiledToday": self.cases_filed_today,
-                "casesAwaitingHearing": len(awaiting_cases),
-                "casesDecided": sum(
-                    1 for case in self.judicial_cases.values()
-                    if case.status in {JudicialCaseStatus.DECIDED, JudicialCaseStatus.DISMISSED}
-                ),
-                "employedCitizens": len(employed),
-                "workersOnDuty": len(on_duty),
-                "operationalWorkplaces": len(operational_workplaces),
-                "averageJobPerformance": round(
-                    sum(citizen.job_performance for citizen in employed) / max(1, len(employed)), 1
-                ),
-                "shoppingTripsToday": self.shopping_trips_today,
-                "shopSalesToday": round(self.shop_sales_today, 2),
-                "marketFoodStock": round(market.food_stock, 1) if market else 0.0,
-                "marketGoodsStock": round(market.goods_stock, 1) if market else 0.0,
-                "activityCounts": dict(activity_counts),
-                "transportModeCounts": {
-                    mode.value: transport_mode_counts.get(mode.value, 0) for mode in TransportMode
-                },
-                "tripCountsToday": {
-                    mode.value: self.trip_counts_today.get(mode.value, 0) for mode in TransportMode
-                },
-                "carOwners": sum(1 for citizen in self.citizens.values() if citizen.owned_vehicle_id),
-                "movingVehicles": len(moving_vehicles),
-                "busPassengers": sum(len(bus.passenger_ids) for bus in buses),
-                "busBoardingsToday": self.bus_boardings_today,
-                "trafficDelayToday": self.traffic_delay_today,
-                "averageTripMinutes": round(
-                    sum(completed_trip_times) / max(1, len(completed_trip_times)),
-                    1,
-                ),
-                "households": len(self.households),
-                "averageHouseholdCohesion": round(
-                    sum(household.cohesion for household in self.households.values())
-                    / max(1, len(self.households)),
-                    1,
-                ),
-                "friendships": friendships,
-                "rivalries": rivalries,
-                "isolatedCitizens": isolated,
-                "averageSocialNetwork": round(average_network, 1),
-                "socialInvitationsToday": self.social_invitations_today,
-                "socialAcceptancesToday": self.social_acceptances_today,
-                "activeSocialEvents": len(active_social_events),
-                "socialGatheringsCompleted": self.social_gatherings_completed,
-            },
-            "citizens": [self._citizen_summary(citizen) for citizen in self.citizens.values()],
-            "buildings": [self._building_to_dict(building) for building in self.buildings.values()],
-            "vehicles": [self._vehicle_summary(vehicle) for vehicle in self.vehicles.values()],
-            "roads": {
-                "cells": [{"x": x, "y": y} for x, y in sorted(self.road_cells, key=lambda cell: (cell[1], cell[0]))],
-                "congestion": self._congestion_cells(),
-            },
-            "transport": {
-                "busStops": [self._bus_stop_to_dict(stop) for stop in self.bus_stops.values()],
-                "busLines": [self._bus_line_to_dict(line) for line in self.bus_lines.values()],
-                "operating": self.bus_operating,
-            },
-            "social": {
-                "events": [self._social_event_to_dict(event) for event in active_social_events],
-                "households": [self._household_summary(household) for household in self.households.values()],
-            },
-            "incidents": [self._incident_summary(incident) for incident in active_incidents],
-            "events": recent_events,
+        payload = build_dynamic_snapshot(self)
+        payload["type"] = "city_snapshot"
+        payload["map"] = {"width": self.MAP_WIDTH, "height": self.MAP_HEIGHT}
+        payload["roads"] = {
+            "cells": [
+                {"x": x, "y": y}
+                for x, y in sorted(self.road_cells, key=lambda cell: (cell[1], cell[0]))
+            ],
+            **payload["roads"],
         }
+        payload["transport"] = {
+            "busStops": [self._bus_stop_to_dict(stop) for stop in self.bus_stops.values()],
+            "busLines": [self._bus_line_to_dict(line) for line in self.bus_lines.values()],
+            **payload["transport"],
+        }
+        return payload
+
+    def delta_snapshot(self) -> dict[str, Any]:
+        payload = build_dynamic_snapshot(self)
+        payload["type"] = "city_delta"
+        return payload
 
     def _congestion_cells(self) -> list[dict[str, Any]]:
         occupancy = self._moving_vehicle_occupancy()
@@ -2205,7 +2153,7 @@ class World:
 
     def export_state(self) -> dict[str, Any]:
         return {
-            "version": 6,
+            "version": 7,
             "seed": self.seed,
             "tick": self.tick,
             "day": self.day,
@@ -2217,12 +2165,14 @@ class World:
             "nextInvestigationId": self._next_investigation_id,
             "nextCaseId": self._next_case_id,
             "nextSocialEventId": self._next_social_event_id,
+            "nextJobApplicationId": self._next_job_application_id,
             "lastSocialSlot": self._last_social_slot,
             "lastSocialPlanningDay": self._last_social_planning_day,
             "lastHouseholdSlot": self._last_household_slot,
             "lastIncidentHour": self._last_incident_hour,
             "lastTrafficEventHour": self._last_traffic_event_hour,
             "lastJusticeHour": getattr(self, "_last_justice_hour", -1),
+            "lastLaborMarketDay": self._last_labor_market_day,
             "tripCountsToday": dict(self.trip_counts_today),
             "busBoardingsToday": self.bus_boardings_today,
             "trafficDelayToday": self.traffic_delay_today,
@@ -2237,6 +2187,10 @@ class World:
             "shoppingTripsToday": self.shopping_trips_today,
             "policeWarningsToday": self.police_warnings_today,
             "policeDetentionsToday": self.police_detentions_today,
+            "hiresToday": self.hires_today,
+            "layoffsToday": self.layoffs_today,
+            "resignationsToday": self.resignations_today,
+            "publicSpendingTotal": self.public_spending_total,
             "rngState": self.rng.getstate(),
             "buildings": [self._export_building(building) for building in self.buildings.values()],
             "citizens": [self._export_citizen(citizen) for citizen in self.citizens.values()],
@@ -2247,13 +2201,14 @@ class World:
             "evidence": [self._export_evidence(item) for item in self.evidence.values()],
             "investigations": [self._export_investigation(item) for item in self.investigations.values()],
             "judicialCases": [self._export_case(item) for item in self.judicial_cases.values()],
+            "jobApplications": [self._export_job_application(item) for item in self.job_applications.values()],
             "events": [self._export_event(event) for event in self.events],
         }
 
     @classmethod
     def from_state(cls, state: dict[str, Any]) -> "World":
         version = int(state.get("version", 0))
-        if version != 6:
+        if version != 7:
             raise ValueError("Version de sauvegarde non prise en charge.")
 
         world = cls.__new__(cls)
@@ -2270,12 +2225,14 @@ class World:
         world._next_investigation_id = int(state.get("nextInvestigationId", 1))
         world._next_case_id = int(state.get("nextCaseId", 1))
         world._next_social_event_id = int(state.get("nextSocialEventId", 1))
+        world._next_job_application_id = int(state.get("nextJobApplicationId", 1))
         world._last_social_slot = int(state.get("lastSocialSlot", -1))
         world._last_social_planning_day = int(state.get("lastSocialPlanningDay", 0))
         world._last_household_slot = int(state.get("lastHouseholdSlot", -1))
         world._last_incident_hour = int(state.get("lastIncidentHour", -1))
         world._last_traffic_event_hour = int(state.get("lastTrafficEventHour", -1))
         world._last_justice_hour = int(state.get("lastJusticeHour", -1))
+        world._last_labor_market_day = int(state.get("lastLaborMarketDay", 0))
         world.trip_counts_today = Counter(
             {mode.value: int(state.get("tripCountsToday", {}).get(mode.value, 0)) for mode in TransportMode}
         )
@@ -2292,6 +2249,10 @@ class World:
         world.shopping_trips_today = int(state.get("shoppingTripsToday", 0))
         world.police_warnings_today = int(state.get("policeWarningsToday", 0))
         world.police_detentions_today = int(state.get("policeDetentionsToday", 0))
+        world.hires_today = int(state.get("hiresToday", 0))
+        world.layoffs_today = int(state.get("layoffsToday", 0))
+        world.resignations_today = int(state.get("resignationsToday", 0))
+        world.public_spending_total = float(state.get("publicSpendingTotal", 0.0))
 
         world.road_cells = generate_road_cells()
         world.bus_stops, world.bus_lines = generate_bus_network(world.road_cells)
@@ -2313,6 +2274,44 @@ class World:
                 food_stock=float(row.get("foodStock", 0.0)),
                 goods_stock=float(row.get("goodsStock", 0.0)),
                 revenue_today=float(row.get("revenueToday", 0.0)),
+                cash=float(row.get("cash", 0.0)),
+                total_revenue=float(row.get("totalRevenue", 0.0)),
+                payroll_today=float(row.get("payrollToday", 0.0)),
+                fixed_costs_today=float(row.get("fixedCostsToday", 0.0)),
+                result_today=float(row.get("resultToday", 0.0)),
+                fixed_cost_daily=float(row.get("fixedCostDaily", 0.0)),
+                employee_capacity=int(row.get("employeeCapacity", row["capacity"])),
+                target_employees=int(row.get("targetEmployees", row["capacity"])),
+                open_positions=int(row.get("openPositions", 0)),
+                service_level=float(row.get("serviceLevel", 100.0)),
+                business_status=BusinessStatus(row.get("businessStatus", "healthy")),
+                deficit_days=int(row.get("deficitDays", 0)),
+                productive_minutes_today=int(row.get("productiveMinutesToday", 0)),
+                financial_history=[
+                    BusinessFinancialRecord(
+                        day=int(item["day"]),
+                        revenue=float(item["revenue"]),
+                        payroll=float(item["payroll"]),
+                        fixed_costs=float(item["fixedCosts"]),
+                        result=float(item["result"]),
+                        cash=float(item["cash"]),
+                        service_level=float(item["serviceLevel"]),
+                        status=BusinessStatus(item["status"]),
+                    )
+                    for item in row.get("financialHistory", [])
+                ],
+                employment_events=[
+                    EmploymentRecord(
+                        tick=int(item["tick"]),
+                        event_type=str(item["eventType"]),
+                        label=str(item["label"]),
+                        building_id=int(item["buildingId"]) if item.get("buildingId") is not None else None,
+                        job_title=item.get("jobTitle"),
+                        salary_daily=float(item.get("salaryDaily", 0.0)),
+                        reason=str(item.get("reason", "")),
+                    )
+                    for item in row.get("employmentEvents", [])
+                ],
             )
             world.buildings[building.id] = building
 
@@ -2418,6 +2417,31 @@ class World:
                 job_satisfaction=float(row.get("jobSatisfaction", 55.0)),
                 last_paid_day=int(row.get("lastPaidDay", 0)),
                 employed_since_tick=int(row.get("employedSinceTick", 0)),
+                job_search_active=bool(row.get("jobSearchActive", False)),
+                job_search_since_tick=(
+                    int(row["jobSearchSinceTick"]) if row.get("jobSearchSinceTick") is not None else None
+                ),
+                last_job_change_tick=int(row.get("lastJobChangeTick", 0)),
+                application_ids=[int(value) for value in row.get("applicationIds", [])],
+                employment_history=[
+                    EmploymentRecord(
+                        tick=int(item["tick"]),
+                        event_type=str(item["eventType"]),
+                        label=str(item["label"]),
+                        building_id=int(item["buildingId"]) if item.get("buildingId") is not None else None,
+                        job_title=item.get("jobTitle"),
+                        salary_daily=float(item.get("salaryDaily", 0.0)),
+                        reason=str(item.get("reason", "")),
+                    )
+                    for item in row.get("employmentHistory", [])
+                ],
+                experience_by_job={
+                    str(key): float(value) for key, value in row.get("experienceByJob", {}).items()
+                },
+                income_today=float(row.get("incomeToday", 0.0)),
+                expenses_today=float(row.get("expensesToday", 0.0)),
+                financial_stress=float(row.get("financialStress", 10.0)),
+                overdraft_limit=float(row.get("overdraftLimit", 120.0)),
                 food_units=float(row.get("foodUnits", 5.0)),
                 goods_units=float(row.get("goodsUnits", 2.0)),
                 last_shopping_tick=(int(row["lastShoppingTick"]) if row.get("lastShoppingTick") is not None else None),
@@ -2554,6 +2578,29 @@ class World:
                     cohesion=float(row["cohesion"]),
                     shared_meals=int(row["sharedMeals"]),
                     conflicts=int(row["conflicts"]),
+                    income_today=float(row.get("incomeToday", 0.0)),
+                    recurring_expenses_today=float(row.get("recurringExpensesToday", 0.0)),
+                    food_expenses_today=float(row.get("foodExpensesToday", 0.0)),
+                    goods_expenses_today=float(row.get("goodsExpensesToday", 0.0)),
+                    total_income=float(row.get("totalIncome", 0.0)),
+                    total_expenses=float(row.get("totalExpenses", 0.0)),
+                    debt=float(row.get("debt", 0.0)),
+                    overdraft_limit=float(row.get("overdraftLimit", 240.0)),
+                    financial_stress=float(row.get("financialStress", 10.0)),
+                    food_budget_daily=float(row.get("foodBudgetDaily", 28.0)),
+                    goods_budget_daily=float(row.get("goodsBudgetDaily", 12.0)),
+                    financial_history=[
+                        HouseholdFinancialRecord(
+                            day=int(item["day"]),
+                            income=float(item["income"]),
+                            recurring_expenses=float(item["recurringExpenses"]),
+                            food_expenses=float(item["foodExpenses"]),
+                            goods_expenses=float(item["goodsExpenses"]),
+                            debt=float(item["debt"]),
+                            financial_stress=float(item["financialStress"]),
+                        )
+                        for item in row.get("financialHistory", [])
+                    ],
                 )
                 for row in state.get("households", [])
             }
@@ -2737,6 +2784,25 @@ class World:
         )
         world._next_case_id = max(world._next_case_id, max(world.judicial_cases, default=0) + 1)
 
+        world.job_applications = {
+            int(row["id"]): JobApplication(
+                id=int(row["id"]),
+                citizen_id=int(row["citizenId"]),
+                building_id=int(row["buildingId"]),
+                job_title=str(row["jobTitle"]),
+                salary_daily=float(row["salaryDaily"]),
+                submitted_tick=int(row["submittedTick"]),
+                score=float(row["score"]),
+                status=JobApplicationStatus(row["status"]),
+                resolved_tick=int(row["resolvedTick"]) if row.get("resolvedTick") is not None else None,
+                reason=row.get("reason"),
+            )
+            for row in state.get("jobApplications", [])
+        }
+        world._next_job_application_id = max(
+            world._next_job_application_id, max(world.job_applications, default=0) + 1
+        )
+
         world.events = [
             DomainEvent(
                 id=int(row["id"]),
@@ -2799,6 +2865,16 @@ class World:
             "foodStock": round(building.food_stock, 1),
             "goodsStock": round(building.goods_stock, 1),
             "revenueToday": round(building.revenue_today, 2),
+            "cash": round(building.cash, 2),
+            "payrollToday": round(building.payroll_today, 2),
+            "fixedCostsToday": round(building.fixed_costs_today, 2),
+            "resultToday": round(building.result_today, 2),
+            "serviceLevel": round(building.service_level, 1),
+            "businessStatus": building.business_status.value,
+            "assignedEmployees": assigned_staff_count(self, building.id),
+            "employeeCapacity": building.employee_capacity,
+            "targetEmployees": building.target_employees,
+            "openPositions": building.open_positions,
         }
 
     @staticmethod
@@ -2864,6 +2940,10 @@ class World:
             "cohesion": round(household.cohesion, 1),
             "sharedMeals": household.shared_meals,
             "conflicts": household.conflicts,
+            "incomeToday": round(household.income_today, 2),
+            "expensesToday": round(household.recurring_expenses_today + household.food_expenses_today + household.goods_expenses_today, 2),
+            "debt": round(household.debt, 2),
+            "financialStress": round(household.financial_stress, 1),
         }
 
     def _incident_summary(self, incident: Incident) -> dict[str, Any]:
@@ -2887,6 +2967,58 @@ class World:
             "policeAction": incident.police_action,
             "policeOfficerIds": list(incident.police_officer_ids),
             "detainedIds": list(incident.detained_ids),
+        }
+
+    def _job_application_to_dict(self, application: JobApplication) -> dict[str, Any]:
+        building = self.buildings[application.building_id]
+        return {
+            "id": application.id,
+            "citizenId": application.citizen_id,
+            "building": {"id": building.id, "name": building.name},
+            "jobTitle": application.job_title,
+            "salaryDaily": application.salary_daily,
+            "submittedTick": application.submitted_tick,
+            "score": round(application.score, 1),
+            "status": application.status.value,
+            "resolvedTick": application.resolved_tick,
+            "reason": application.reason,
+        }
+
+    @staticmethod
+    def _employment_record_to_dict(record: EmploymentRecord) -> dict[str, Any]:
+        return {
+            "tick": record.tick,
+            "eventType": record.event_type,
+            "label": record.label,
+            "buildingId": record.building_id,
+            "jobTitle": record.job_title,
+            "salaryDaily": record.salary_daily,
+            "reason": record.reason,
+        }
+
+    @staticmethod
+    def _business_financial_to_dict(record: BusinessFinancialRecord) -> dict[str, Any]:
+        return {
+            "day": record.day,
+            "revenue": round(record.revenue, 2),
+            "payroll": round(record.payroll, 2),
+            "fixedCosts": round(record.fixed_costs, 2),
+            "result": round(record.result, 2),
+            "cash": round(record.cash, 2),
+            "serviceLevel": round(record.service_level, 1),
+            "status": record.status.value,
+        }
+
+    @staticmethod
+    def _household_financial_to_dict(record: HouseholdFinancialRecord) -> dict[str, Any]:
+        return {
+            "day": record.day,
+            "income": round(record.income, 2),
+            "recurringExpenses": round(record.recurring_expenses, 2),
+            "foodExpenses": round(record.food_expenses, 2),
+            "goodsExpenses": round(record.goods_expenses, 2),
+            "debt": round(record.debt, 2),
+            "financialStress": round(record.financial_stress, 1),
         }
 
     @staticmethod
@@ -2923,6 +3055,35 @@ class World:
             "foodStock": building.food_stock,
             "goodsStock": building.goods_stock,
             "revenueToday": building.revenue_today,
+            "cash": building.cash,
+            "totalRevenue": building.total_revenue,
+            "payrollToday": building.payroll_today,
+            "fixedCostsToday": building.fixed_costs_today,
+            "resultToday": building.result_today,
+            "fixedCostDaily": building.fixed_cost_daily,
+            "employeeCapacity": building.employee_capacity,
+            "targetEmployees": building.target_employees,
+            "openPositions": building.open_positions,
+            "serviceLevel": building.service_level,
+            "businessStatus": building.business_status.value,
+            "deficitDays": building.deficit_days,
+            "productiveMinutesToday": building.productive_minutes_today,
+            "financialHistory": [
+                {
+                    "day": item.day,
+                    "revenue": item.revenue,
+                    "payroll": item.payroll,
+                    "fixedCosts": item.fixed_costs,
+                    "result": item.result,
+                    "cash": item.cash,
+                    "serviceLevel": item.service_level,
+                    "status": item.status.value,
+                }
+                for item in building.financial_history
+            ],
+            "employmentEvents": [
+                World._export_employment_record(item) for item in building.employment_events
+            ],
         }
 
     @staticmethod
@@ -3024,6 +3185,18 @@ class World:
             "jobSatisfaction": citizen.job_satisfaction,
             "lastPaidDay": citizen.last_paid_day,
             "employedSinceTick": citizen.employed_since_tick,
+            "jobSearchActive": citizen.job_search_active,
+            "jobSearchSinceTick": citizen.job_search_since_tick,
+            "lastJobChangeTick": citizen.last_job_change_tick,
+            "applicationIds": list(citizen.application_ids),
+            "employmentHistory": [
+                World._export_employment_record(item) for item in citizen.employment_history
+            ],
+            "experienceByJob": dict(citizen.experience_by_job),
+            "incomeToday": citizen.income_today,
+            "expensesToday": citizen.expenses_today,
+            "financialStress": citizen.financial_stress,
+            "overdraftLimit": citizen.overdraft_limit,
             "foodUnits": citizen.food_units,
             "goodsUnits": citizen.goods_units,
             "lastShoppingTick": citizen.last_shopping_tick,
@@ -3054,6 +3227,29 @@ class World:
             "cohesion": household.cohesion,
             "sharedMeals": household.shared_meals,
             "conflicts": household.conflicts,
+            "incomeToday": household.income_today,
+            "recurringExpensesToday": household.recurring_expenses_today,
+            "foodExpensesToday": household.food_expenses_today,
+            "goodsExpensesToday": household.goods_expenses_today,
+            "totalIncome": household.total_income,
+            "totalExpenses": household.total_expenses,
+            "debt": household.debt,
+            "overdraftLimit": household.overdraft_limit,
+            "financialStress": household.financial_stress,
+            "foodBudgetDaily": household.food_budget_daily,
+            "goodsBudgetDaily": household.goods_budget_daily,
+            "financialHistory": [
+                {
+                    "day": item.day,
+                    "income": item.income,
+                    "recurringExpenses": item.recurring_expenses,
+                    "foodExpenses": item.food_expenses,
+                    "goodsExpenses": item.goods_expenses,
+                    "debt": item.debt,
+                    "financialStress": item.financial_stress,
+                }
+                for item in household.financial_history
+            ],
         }
 
     @staticmethod
@@ -3169,6 +3365,33 @@ class World:
             "decidedTick": item.decided_tick,
             "verdict": item.verdict,
             "sentence": item.sentence,
+        }
+
+    @staticmethod
+    def _export_job_application(item: JobApplication) -> dict[str, Any]:
+        return {
+            "id": item.id,
+            "citizenId": item.citizen_id,
+            "buildingId": item.building_id,
+            "jobTitle": item.job_title,
+            "salaryDaily": item.salary_daily,
+            "submittedTick": item.submitted_tick,
+            "score": item.score,
+            "status": item.status.value,
+            "resolvedTick": item.resolved_tick,
+            "reason": item.reason,
+        }
+
+    @staticmethod
+    def _export_employment_record(item: EmploymentRecord) -> dict[str, Any]:
+        return {
+            "tick": item.tick,
+            "eventType": item.event_type,
+            "label": item.label,
+            "buildingId": item.building_id,
+            "jobTitle": item.job_title,
+            "salaryDaily": item.salary_daily,
+            "reason": item.reason,
         }
 
     @staticmethod

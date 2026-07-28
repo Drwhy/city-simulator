@@ -99,6 +99,20 @@ class SocialEventStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class BusinessStatus(StrEnum):
+    HEALTHY = "healthy"
+    FRAGILE = "fragile"
+    DEFICIT = "deficit"
+    CLOSED = "closed"
+
+
+class JobApplicationStatus(StrEnum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"
+
+
 @dataclass(slots=True)
 class Needs:
     hunger: float = 10.0
@@ -150,6 +164,29 @@ class Household:
     cohesion: float = 50.0
     shared_meals: int = 0
     conflicts: int = 0
+    income_today: float = 0.0
+    recurring_expenses_today: float = 0.0
+    food_expenses_today: float = 0.0
+    goods_expenses_today: float = 0.0
+    total_income: float = 0.0
+    total_expenses: float = 0.0
+    debt: float = 0.0
+    overdraft_limit: float = 240.0
+    financial_stress: float = 10.0
+    food_budget_daily: float = 28.0
+    goods_budget_daily: float = 12.0
+    financial_history: list[HouseholdFinancialRecord] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class HouseholdFinancialRecord:
+    day: int
+    income: float
+    recurring_expenses: float
+    food_expenses: float
+    goods_expenses: float
+    debt: float
+    financial_stress: float
 
 
 @dataclass(slots=True)
@@ -191,10 +228,60 @@ class Building:
     food_stock: float = 0.0
     goods_stock: float = 0.0
     revenue_today: float = 0.0
+    cash: float = 0.0
+    total_revenue: float = 0.0
+    payroll_today: float = 0.0
+    fixed_costs_today: float = 0.0
+    result_today: float = 0.0
+    fixed_cost_daily: float = 0.0
+    employee_capacity: int = 0
+    target_employees: int = 0
+    open_positions: int = 0
+    service_level: float = 100.0
+    business_status: BusinessStatus = BusinessStatus.HEALTHY
+    deficit_days: int = 0
+    productive_minutes_today: int = 0
+    financial_history: list[BusinessFinancialRecord] = field(default_factory=list)
+    employment_events: list[EmploymentRecord] = field(default_factory=list)
 
     @property
     def entrance(self) -> tuple[int, int]:
         return self.x + self.width // 2, self.y + self.height
+@dataclass(slots=True)
+class BusinessFinancialRecord:
+    day: int
+    revenue: float
+    payroll: float
+    fixed_costs: float
+    result: float
+    cash: float
+    service_level: float
+    status: BusinessStatus
+
+
+@dataclass(slots=True)
+class EmploymentRecord:
+    tick: int
+    event_type: str
+    label: str
+    building_id: int | None
+    job_title: str | None
+    salary_daily: float
+    reason: str
+
+
+@dataclass(slots=True)
+class JobApplication:
+    id: int
+    citizen_id: int
+    building_id: int
+    job_title: str
+    salary_daily: float
+    submitted_tick: int
+    score: float
+    status: JobApplicationStatus = JobApplicationStatus.PENDING
+    resolved_tick: int | None = None
+    reason: str | None = None
 
 
 @dataclass(slots=True)
@@ -321,6 +408,17 @@ class Citizen:
     job_satisfaction: float = 55.0
     last_paid_day: int = 0
     employed_since_tick: int = 0
+    job_search_active: bool = False
+    job_search_since_tick: int | None = None
+    last_job_change_tick: int = 0
+    application_ids: list[int] = field(default_factory=list)
+    employment_history: list[EmploymentRecord] = field(default_factory=list)
+    experience_by_job: dict[str, float] = field(default_factory=dict)
+    income_today: float = 0.0
+    expenses_today: float = 0.0
+    financial_stress: float = 10.0
+    overdraft_limit: float = 120.0
+
 
     # Consommation simple du foyer.
     food_units: float = 5.0

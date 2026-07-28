@@ -21,7 +21,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="City Simulator MVP",
-    version="0.6.0",
+    version="0.7.0",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -86,6 +86,18 @@ async def building_detail(building_id: int) -> dict:
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Bâtiment introuvable") from exc
 
+
+@app.get("/api/economy")
+async def economy_overview() -> dict:
+    return await service.economy_overview()
+
+
+@app.get("/api/enterprises/{building_id}")
+async def enterprise_detail(building_id: int) -> dict:
+    try:
+        return await service.enterprise_detail(building_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Entreprise introuvable") from exc
 
 @app.get("/api/social/graph")
 async def social_graph() -> dict:
@@ -164,11 +176,13 @@ async def reset(request: ResetRequest) -> dict:
 @app.websocket("/ws/city")
 async def websocket_city(websocket: WebSocket) -> None:
     await websocket.accept()
+    initial = True
     try:
         while True:
-            snapshot = await service.snapshot()
+            payload = await service.snapshot() if initial else await service.delta()
+            initial = False
             try:
-                await websocket.send_json(snapshot)
+                await websocket.send_json(payload)
             except (WebSocketDisconnect, RuntimeError, OSError):
                 # Le navigateur peut fermer le transport entre le snapshot et l'envoi.
                 # Cette déconnexion est normale (rechargement, fermeture d'onglet, réseau).

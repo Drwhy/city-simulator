@@ -1,0 +1,510 @@
+export type Activity =
+  | "sleeping"
+  | "working"
+  | "walking"
+  | "driving"
+  | "waiting_bus"
+  | "riding_bus"
+  | "eating"
+  | "relaxing"
+  | "at_home"
+  | "detained"
+  | "shopping";
+
+export type TransportMode = "walk" | "car" | "bus";
+export type TravelStage =
+  | "idle"
+  | "walking"
+  | "to_bus_stop"
+  | "waiting_bus"
+  | "on_bus"
+  | "from_bus_stop"
+  | "driving";
+
+export type RelationshipStatus = "unknown" | "acquaintance" | "friend" | "close_friend" | "rival";
+export type SocialEventType = "coffee" | "park_meetup";
+export type SocialEventStatus = "planned" | "active" | "completed" | "cancelled";
+export type IncidentStatus = "active" | "reported" | "responding" | "on_scene" | "resolved" | "expired";
+export type VehicleType = "car" | "bus" | "police";
+export type VehicleStatus =
+  | "parked"
+  | "driving"
+  | "in_service"
+  | "stopped"
+  | "responding"
+  | "on_scene"
+  | "returning";
+
+export interface CitizenSummary {
+  id: number;
+  name: string;
+  x: number;
+  y: number;
+  activity: Activity;
+  destinationBuildingId: number | null;
+  transportMode: TransportMode;
+  travelStage: TravelStage;
+  activeVehicleId: number | null;
+  socialEventId: number | null;
+  friendCount: number;
+  jobTitle: string | null;
+  onDuty: boolean;
+}
+
+export interface BuildingSummary {
+  id: number;
+  name: string;
+  type: "home" | "office" | "factory" | "shop" | "cafe" | "park" | "public" | "police";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  capacity: number;
+  occupancy: number;
+  employeesRequired: number;
+  staffOnDuty: number;
+  operational: boolean;
+  foodStock: number;
+  goodsStock: number;
+  revenueToday: number;
+}
+
+export interface VehicleSummary {
+  id: number;
+  type: VehicleType;
+  x: number;
+  y: number;
+  status: VehicleStatus;
+  occupancy: number;
+  capacity: number;
+  ownerId: number | null;
+  lineId: number | null;
+  crewIds: number[];
+}
+
+export interface BusStopSummary {
+  id: number;
+  name: string;
+  x: number;
+  y: number;
+  lineId: number;
+  sequence: number;
+}
+
+export interface BusLineSummary {
+  id: number;
+  name: string;
+  stopIds: number[];
+  route: Array<{ x: number; y: number }>;
+  fare: number;
+}
+
+export interface SocialEventSummary {
+  id: number;
+  type: SocialEventType;
+  status: SocialEventStatus;
+  host: { id: number; name: string };
+  participants: Array<{ id: number; name: string }>;
+  building: { id: number; name: string };
+  plannedTick: number;
+  minutesUntilStart: number;
+  durationMinutes: number;
+}
+
+export interface HouseholdSummary {
+  id: number;
+  homeId: number;
+  homeName: string;
+  members: number;
+  cohesion: number;
+  sharedMeals: number;
+  conflicts: number;
+}
+
+export interface IncidentSummary {
+  id: number;
+  type: string;
+  title: string;
+  severity: "warning" | "danger";
+  status: IncidentStatus;
+  x: number;
+  y: number;
+  buildingId: number | null;
+  vehicleId: number | null;
+  citizenIds: number[];
+  reported: boolean;
+  policeVehicleId: number | null;
+  createdTick: number;
+  remainingMinutes: number;
+  conflictLevel: number;
+  investigationId: number | null;
+  policeAction: string | null;
+  policeOfficerIds: number[];
+  detainedIds: number[];
+}
+
+export interface CityEvent {
+  id: number;
+  tick: number;
+  day: number;
+  hour: number;
+  minute: number;
+  time: string;
+  eventType: string;
+  message: string;
+  citizenIds: number[];
+  buildingId: number | null;
+  vehicleId: number | null;
+  severity: "info" | "warning" | "danger";
+  incidentId: number | null;
+}
+
+export interface CitySnapshot {
+  type: "city_snapshot";
+  tick: number;
+  day: number;
+  hour: number;
+  minute: number;
+  timeLabel: string;
+  map: { width: number; height: number };
+  stats: {
+    population: number;
+    averageMoney: number;
+    reportedIncidents: number;
+    activeIncidents: number;
+    seriousIncidents: number;
+    policeUnitsAvailable: number;
+    policeOfficersOnDuty: number;
+    staffedPatrols: number;
+    policeWarningsToday: number;
+    policeDetentionsToday: number;
+    policeResponsesToday: number;
+    averagePoliceResponseMinutes: number;
+    openInvestigations: number;
+    suspectsIdentified: number;
+    arrestsToday: number;
+    casesFiledToday: number;
+    casesAwaitingHearing: number;
+    casesDecided: number;
+    employedCitizens: number;
+    workersOnDuty: number;
+    operationalWorkplaces: number;
+    averageJobPerformance: number;
+    shoppingTripsToday: number;
+    shopSalesToday: number;
+    marketFoodStock: number;
+    marketGoodsStock: number;
+    activityCounts: Record<string, number>;
+    transportModeCounts: Record<TransportMode, number>;
+    tripCountsToday: Record<TransportMode, number>;
+    carOwners: number;
+    movingVehicles: number;
+    busPassengers: number;
+    busBoardingsToday: number;
+    trafficDelayToday: number;
+    averageTripMinutes: number;
+    households: number;
+    averageHouseholdCohesion: number;
+    friendships: number;
+    rivalries: number;
+    isolatedCitizens: number;
+    averageSocialNetwork: number;
+    socialInvitationsToday: number;
+    socialAcceptancesToday: number;
+    activeSocialEvents: number;
+    socialGatheringsCompleted: number;
+  };
+  citizens: CitizenSummary[];
+  buildings: BuildingSummary[];
+  vehicles: VehicleSummary[];
+  roads: {
+    cells: Array<{ x: number; y: number }>;
+    congestion: Array<{
+      x: number;
+      y: number;
+      vehicles: number;
+      level: "moderate" | "heavy";
+    }>;
+  };
+  transport: {
+    busStops: BusStopSummary[];
+    busLines: BusLineSummary[];
+    operating: boolean;
+  };
+  social: {
+    events: SocialEventSummary[];
+    households: HouseholdSummary[];
+  };
+  incidents: IncidentSummary[];
+  events: CityEvent[];
+  simulation: {
+    paused: boolean;
+    speed: number;
+    allowedSpeeds: number[];
+    hasSave: boolean;
+  };
+}
+
+export interface CitizenDetail extends CitizenSummary {
+  kind: "citizen";
+  currentTick: number;
+  age: number;
+  home: { id: number; name: string };
+  workplace: { id: number; name: string } | null;
+  destination: { id: number; name: string } | null;
+  jobTitle: string | null;
+  salaryDaily: number;
+  money: number;
+  health: number;
+  employment: {
+    status: "employed" | "unemployed";
+    workStartHour: number;
+    workEndHour: number;
+    workDays: number[];
+    scheduledToday: boolean;
+    onDuty: boolean;
+    minutesWorkedToday: number;
+    shiftsCompleted: number;
+    missedShifts: number;
+    performance: number;
+    satisfaction: number;
+  };
+  consumption: {
+    foodUnits: number;
+    goodsUnits: number;
+    shoppingVisits: number;
+    lastShoppingTick: number | null;
+    intoxication: number;
+  };
+  criminality: {
+    offensesCommitted: number;
+    victimizations: number;
+    arrests: number;
+  };
+  needs: {
+    hunger: number;
+    fatigue: number;
+    stress: number;
+    social: number;
+  };
+  decisionReason: string;
+  relationships: Array<{
+    citizenId: number;
+    name: string;
+    familiarity: number;
+    affection: number;
+    trust: number;
+    status: RelationshipStatus;
+    positiveInteractions: number;
+    negativeInteractions: number;
+    lastInteractionTick: number;
+    consecutiveNegativeInteractions: number;
+    conflictScore: number;
+    conflictLevel: number;
+    conflictLabel: string;
+    peakConflictLevel: number;
+    lastConflictTick: number | null;
+    conflictHistory: ConflictHistoryEntry[];
+  }>;
+  personality: {
+    sociability: number;
+    agreeableness: number;
+    spontaneity: number;
+    aggression: number;
+    impulsivity: number;
+    grudgeTendency: number;
+    conflictPropensity: number;
+    temperament: string;
+  };
+  household: {
+    id: number;
+    homeId: number;
+    cohesion: number;
+    sharedMeals: number;
+    conflicts: number;
+    members: Array<{ id: number; name: string }>;
+  } | null;
+  social: {
+    interactionsToday: number;
+    invitationsSent: number;
+    invitationsAccepted: number;
+    favoritePlaces: Array<{ id: number; name: string; visits: number }>;
+    event: SocialEventSummary | null;
+  };
+  conflictHistory: ConflictHistoryEntry[];
+  justice: {
+    detained: boolean;
+    detainedUntilTick: number | null;
+    detentionType: string | null;
+    policeHistory: Array<{
+      tick: number;
+      incidentId: number;
+      measureType: string;
+      label: string;
+      durationMinutes: number;
+      reason: string;
+      officers: Array<{ id: number; name: string } | null>;
+    }>;
+    investigations: Array<{
+      id: number;
+      incidentId: number;
+      status: InvestigationStatus;
+      confidence: number;
+      openedTick: number;
+      caseId: number | null;
+    }>;
+    cases: JudicialCaseSummary[];
+  };
+  transport: {
+    mode: TransportMode;
+    lastMode: TransportMode;
+    stage: TravelStage;
+    ownedVehicle: { id: number; type: VehicleType } | null;
+    activeVehicle: { id: number; type: VehicleType } | null;
+    originStop: { id: number; name: string } | null;
+    destinationStop: { id: number; name: string } | null;
+    lastTripMinutes: number;
+    travelMinutesToday: number;
+    tripsToday: number;
+  };
+}
+
+export interface VehicleDetail extends VehicleSummary {
+  kind: "vehicle";
+  owner: { id: number; name: string } | null;
+  line: { id: number; name: string } | null;
+  target: { id: number; name: string } | null;
+  passengers: Array<{ id: number; name: string }>;
+  crew: Array<{ id: number; name: string; onDuty: boolean }>;
+  delayMinutes: number;
+  distanceToday: number;
+  routeProgress: number;
+  incident: { id: number; title: string } | null;
+}
+
+export interface IncidentDetail extends IncidentSummary {
+  kind: "incident";
+  description: string;
+  building: { id: number; name: string } | null;
+  offender: { id: number; name: string } | null;
+  victims: Array<{ id: number; name: string } | null>;
+  witnesses: Array<{ id: number; name: string } | null>;
+  involved: Array<{ id: number; name: string } | null>;
+  policeVehicle: { id: number; type: VehicleType } | null;
+  timeline: {
+    createdTick: number;
+    dispatchedTick: number | null;
+    arrivalTick: number | null;
+    resolvedTick: number | null;
+  };
+  resolution: string | null;
+  policeAction: string | null;
+  policeOfficers: Array<{ id: number; name: string } | null>;
+  detained: Array<{ id: number; name: string } | null>;
+  investigation: InvestigationDetail | null;
+}
+
+export interface BuildingDetail extends BuildingSummary {
+  kind: "building";
+  employees: Array<{
+    id: number;
+    name: string;
+    jobTitle: string | null;
+    onDuty: boolean;
+    shift: string;
+    performance: number;
+  }>;
+  occupants: Array<{ id: number; name: string }>;
+  services: {
+    operational: boolean;
+    staffOnDuty: number;
+    employeesRequired: number;
+    foodStock: number;
+    goodsStock: number;
+    revenueToday: number;
+  };
+}
+
+export type InvestigationStatus = "open" | "suspect_identified" | "arrested" | "referred" | "closed";
+export type JudicialCaseStatus = "filed" | "awaiting_hearing" | "decided" | "dismissed";
+
+export interface ConflictHistoryEntry {
+  otherId?: number;
+  otherName?: string;
+  tick: number;
+  level: number;
+  label: string;
+  title: string;
+  incidentId: number | null;
+  buildingId: number | null;
+  buildingName: string | null;
+  role: string;
+  outcome: string | null;
+}
+
+export interface EvidenceDetail {
+  id: number;
+  type: string;
+  description: string;
+  reliability: number;
+  citizen: { id: number; name: string } | null;
+  createdTick: number;
+}
+
+export interface JudicialCaseSummary {
+  id: number;
+  investigationId: number;
+  incidentId: number;
+  defendant: { id: number; name: string } | null;
+  charges: string[];
+  status: JudicialCaseStatus;
+  filedTick: number;
+  hearingTick: number;
+  evidenceScore: number;
+  decidedTick: number | null;
+  verdict: string | null;
+  sentence: string | null;
+  defendantName: string | null;
+}
+
+export interface InvestigationDetail {
+  id: number;
+  incidentId: number;
+  status: InvestigationStatus;
+  openedTick: number;
+  updatedTick: number;
+  suspects: Array<{ id: number; name: string } | null>;
+  leadSuspect: { id: number; name: string } | null;
+  confidence: number;
+  arrestTick: number | null;
+  notes: string[];
+  evidence: EvidenceDetail[];
+  case: JudicialCaseSummary | null;
+}
+
+export interface SocialGraphData {
+  tick: number;
+  nodes: Array<{
+    id: number;
+    name: string;
+    householdId: number | null;
+    workplaceId: number | null;
+    friendCount: number;
+    rivalCount: number;
+    conflictPropensity: number;
+    temperament: string;
+  }>;
+  edges: Array<{
+    source: number;
+    target: number;
+    status: RelationshipStatus;
+    affection: number;
+    trust: number;
+    familiarity: number;
+    conflictLevel: number;
+    conflictLabel: string;
+  }>;
+}
+
+export type InspectorEntity = CitizenDetail | VehicleDetail | IncidentDetail | BuildingDetail;
+export type SelectedEntity = { kind: "citizen" | "vehicle" | "incident" | "building"; id: number };

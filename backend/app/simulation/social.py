@@ -3,6 +3,8 @@ from __future__ import annotations
 from itertools import combinations
 from typing import TYPE_CHECKING
 
+from .banking import available_funds, withdraw
+from .justice import contact_forbidden
 from .models import (
     BuildingType,
     Citizen,
@@ -223,6 +225,8 @@ def _guest_candidates(world: World, host: Citizen) -> list[Citizen]:
     for other in world.citizens.values():
         if other.id == host.id or other.social_event_id is not None:
             continue
+        if contact_forbidden(world, host.id, other.id):
+            continue
         relation = host.relationships.get(other.id)
         same_work = host.workplace_id is not None and host.workplace_id == other.workplace_id
         same_household = host.household_id is not None and host.household_id == other.household_id
@@ -271,8 +275,8 @@ def _activate_or_complete_events(world: World) -> None:
             for citizen in present:
                 citizen.needs.social = max(0.0, citizen.needs.social - 18.0)
                 citizen.needs.stress = max(0.0, citizen.needs.stress - 5.0)
-                if event.event_type == SocialEventType.COFFEE and citizen.money >= 6:
-                    citizen.money = round(citizen.money - 6.0, 2)
+                if event.event_type == SocialEventType.COFFEE and available_funds(citizen) >= 6:
+                    withdraw(world, citizen, 6.0, label=f"Sortie à {building.name}", transaction_type="social", counterparty_id=building.id)
             event.status = SocialEventStatus.COMPLETED
             world.social_gatherings_completed += 1
             world._emit(
@@ -312,6 +316,8 @@ def apply_interaction(
     strength: float = 1.0,
     emit: bool = True,
 ) -> None:
+    if contact_forbidden(world, a.id, b.id):
+        return
     relation_a = a.relationships.setdefault(b.id, Relationship(other_id=b.id))
     relation_b = b.relationships.setdefault(a.id, Relationship(other_id=a.id))
     old_label = relationship_label(relation_a)

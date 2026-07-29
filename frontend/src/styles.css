@@ -45,15 +45,11 @@ h3 { font-size: 13px; margin: 21px 0 10px; color: #b7c2d3; text-transform: upper
 .time-block span { color: #7fbf93; font-size: 12px; }
 .controls { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
 
-.stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-.stat-card, .panel {
+.panel {
   border: 1px solid #293142;
   background: #141a24;
   border-radius: 10px;
 }
-.stat-card { padding: 12px 15px; }
-.stat-card span { display: block; color: #8f9bad; font-size: 12px; }
-.stat-card strong { font-size: 21px; }
 
 .workspace { display: grid; grid-template-columns: 210px minmax(600px, 1fr) 320px; min-height: 570px; gap: 12px; }
 .panel { padding: 15px; min-width: 0; }
@@ -158,7 +154,6 @@ h3 { font-size: 13px; margin: 21px 0 10px; color: #b7c2d3; text-transform: upper
 
 /* Mobilité v0.2 */
 body { min-width: 1280px; }
-.stats-grid { grid-template-columns: repeat(8, minmax(120px, 1fr)); }
 .workspace { grid-template-columns: 230px minmax(620px, 1fr) 340px; }
 .dot-driving { background: #f0a654; }
 .dot-bus { background: #52c7cf; }
@@ -228,12 +223,8 @@ body { min-width: 1280px; }
   font-size: 12px;
 }
 
-@media (max-width: 1500px) {
-  .stats-grid { grid-template-columns: repeat(4, 1fr); }
-}
 
 /* Vie sociale v0.3 */
-.stats-grid { grid-template-columns: repeat(12, minmax(108px, 1fr)); }
 .compact-metrics {
   display: grid;
   gap: 6px;
@@ -317,9 +308,6 @@ body { min-width: 1280px; }
 .favorite-places span { color: #b7c1d0; }
 .favorite-places strong { color: #e7edf6; }
 
-@media (max-width: 1900px) {
-  .stats-grid { grid-template-columns: repeat(6, 1fr); }
-}
 .event-log-heading { gap: 16px; }
 .event-log-heading > div:first-child h2 { margin-bottom: 2px; }
 .event-filters { display: flex; gap: 5px; }
@@ -871,8 +859,13 @@ body { min-width: 1280px; }
   .entity-modal-window { height: 90vh; }
 }
 
-.health-stat { border-color: rgba(225, 63, 85, 0.42); }
-.health-stat strong { color: #ff8999; }
 .dot-health { background: #f4f7fb; box-shadow: inset 0 0 0 3px #e13f55; }
 .profile-grid-health .medical-record { border-left: 3px solid #e13f55; }
 .healthcare-grid dd { color: #ff8999; }
+
+.business-status-searching, .business-status-temporary { color: #f4c86d; }
+
+.thematic-select{display:grid;gap:6px;color:#9eacbd;font-size:11px}.thematic-select select{width:100%;padding:8px;color:#eef3f8;background:#141d29;border:1px solid #344054;border-radius:7px}.neighborhood-shortcuts{display:grid;gap:5px;margin:8px 0 14px}.neighborhood-shortcuts button{display:flex;justify-content:space-between;gap:8px;padding:8px;text-align:left;background:#17212d}.neighborhood-shortcuts button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.neighborhood-shortcuts button b{flex:none;color:#8fc7a4;font-size:10px}
+
+.population-control { display: inline-flex; align-items: center; gap: 6px; color: #9da8b7; font-size: 11px; }
+.population-control select { min-width: 72px; padding: 6px 8px; border: 1px solid #354052; border-radius: 7px; background: #111823; color: #eef2f7; }

@@ -19,6 +19,8 @@ class Activity(StrEnum):
     WAITING_MEDICAL = "waiting_medical"
     IN_TREATMENT = "in_treatment"
     HOSPITALIZED = "hospitalized"
+    COMMUNITY_SERVICE = "community_service"
+    KIDNAPPED = "kidnapped"
 
 
 class BuildingType(StrEnum):
@@ -31,6 +33,10 @@ class BuildingType(StrEnum):
     PUBLIC = "public"
     POLICE = "police"
     HOSPITAL = "hospital"
+    COURT = "court"
+    DETENTION_CENTER = "detention_center"
+    BANK = "bank"
+    SHELTER = "shelter"
 
 
 class TransportMode(StrEnum):
@@ -106,9 +112,116 @@ class InvestigationStatus(StrEnum):
 
 class JudicialCaseStatus(StrEnum):
     FILED = "filed"
+    PROSECUTOR_REVIEW = "prosecutor_review"
     AWAITING_HEARING = "awaiting_hearing"
+    IN_HEARING = "in_hearing"
     DECIDED = "decided"
     DISMISSED = "dismissed"
+
+
+class ComplaintStatus(StrEnum):
+    FILED = "filed"
+    INVESTIGATING = "investigating"
+    REFERRED = "referred"
+    PROSECUTED = "prosecuted"
+    DISMISSED = "dismissed"
+    CLOSED = "closed"
+
+
+class SentenceType(StrEnum):
+    JUDICIAL_WARNING = "judicial_warning"
+    FINE = "fine"
+    COMPENSATION = "compensation"
+    PROBATION = "probation"
+    COMMUNITY_SERVICE = "community_service"
+    RESTRAINING_ORDER = "restraining_order"
+    SHORT_DETENTION = "short_detention"
+    LONG_DETENTION = "long_detention"
+
+
+class SentenceStatus(StrEnum):
+    PENDING = "pending"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    VIOLATED = "violated"
+
+
+class CrimeOperationType(StrEnum):
+    THEFT = "theft"
+    ROBBERY = "robbery"
+    EXTORTION = "extortion"
+    KIDNAPPING = "kidnapping"
+    RANSOM = "ransom"
+    DRUG_TRAFFICKING = "drug_trafficking"
+    STREET_DEALING = "street_dealing"
+    ARMS_TRAFFICKING = "arms_trafficking"
+    STOLEN_GOODS = "stolen_goods"
+    MONEY_LAUNDERING = "money_laundering"
+    TURF_WAR = "turf_war"
+    RECRUITMENT = "recruitment"
+    CORRUPTION = "corruption"
+
+
+class CrimeFactionType(StrEnum):
+    STREET_GANG = "street_gang"
+    ORGANIZED_GANG = "organized_gang"
+    MAFIA = "mafia"
+    TRIAD = "triad"
+    CARTEL = "cartel"
+    BIKER_GANG = "biker_gang"
+    CYBER_NETWORK = "cyber_network"
+
+
+class CrimeRole(StrEnum):
+    BOSS = "boss"
+    LIEUTENANT = "lieutenant"
+    ENFORCER = "enforcer"
+    DEALER = "dealer"
+    SUPPLIER = "supplier"
+    MONEY_LAUNDERER = "money_launderer"
+    LOOKOUT = "lookout"
+    RECRUITER = "recruiter"
+
+
+class IllegalCommodity(StrEnum):
+    CANNABIS = "cannabis"
+    COCAINE = "cocaine"
+    SYNTHETIC_DRUGS = "synthetic_drugs"
+    STOLEN_GOODS = "stolen_goods"
+    WEAPONS = "weapons"
+    COUNTERFEIT_GOODS = "counterfeit_goods"
+
+
+class CrimeOperationStatus(StrEnum):
+    PLANNED = "planned"
+    ACTIVE = "active"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    DISRUPTED = "disrupted"
+
+
+class CommunicationChannel(StrEnum):
+    PHONE_CALL = "phone_call"
+    SMS = "sms"
+    EMAIL = "email"
+    LETTER = "letter"
+
+
+class CommunicationStatus(StrEnum):
+    QUEUED = "queued"
+    RINGING = "ringing"
+    DELIVERED = "delivered"
+    READ = "read"
+    REPLIED = "replied"
+    FAILED = "failed"
+
+
+class CommunicationTone(StrEnum):
+    FRIENDLY = "friendly"
+    PRACTICAL = "practical"
+    APOLOGY = "apology"
+    INVITATION = "invitation"
+    CONFLICT = "conflict"
 
 
 class SocialEventType(StrEnum):
@@ -181,6 +294,19 @@ class Relationship:
 
 
 @dataclass(slots=True)
+class HousingRecord:
+    tick: int
+    event_type: str
+    label: str
+    from_home_id: int | None
+    to_home_id: int
+    reason: str
+    rent_before: float
+    rent_after: float
+    member_ids: list[int] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class Household:
     id: int
     home_id: int
@@ -200,6 +326,17 @@ class Household:
     food_budget_daily: float = 28.0
     goods_budget_daily: float = 12.0
     financial_history: list[HouseholdFinancialRecord] = field(default_factory=list)
+    housing_status: str = "stable"
+    housing_search_since_tick: int | None = None
+    housing_search_reason: str | None = None
+    rent_due_today: float = 0.0
+    rent_paid_today: float = 0.0
+    rent_arrears: float = 0.0
+    missed_rent_days: int = 0
+    moves: int = 0
+    last_move_tick: int = -10080
+    temporary_host_household_id: int | None = None
+    housing_history: list[HousingRecord] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -238,6 +375,49 @@ class SocialEvent:
 
 
 @dataclass(slots=True)
+class NeighborhoodRecord:
+    day: int
+    population: int
+    average_income: float
+    unemployment_rate: float
+    average_rent: float
+    commercial_activity: float
+    criminality: float
+    safety_perception: float
+    police_coverage: float
+    average_response_minutes: float
+    healthcare_access: float
+    commerce_access: float
+    average_transport_minutes: float
+    attractiveness: float
+    service_pressure: float
+
+
+@dataclass(slots=True)
+class Neighborhood:
+    id: int
+    name: str
+    x_min: int
+    y_min: int
+    x_max: int
+    y_max: int
+    lighting: float
+    safety_perception: float
+    attractiveness: float
+    incidents_today: int = 0
+    incident_score_today: float = 0.0
+    cumulative_incidents: int = 0
+    patrol_minutes_today: int = 0
+    police_responses_today: int = 0
+    police_response_minutes_today: int = 0
+    history: list[NeighborhoodRecord] = field(default_factory=list)
+
+    @property
+    def center(self) -> tuple[int, int]:
+        return (self.x_min + self.x_max) // 2, (self.y_min + self.y_max) // 2
+
+
+@dataclass(slots=True)
 class Building:
     id: int
     name: str
@@ -272,6 +452,15 @@ class Building:
     hospitalized_ids: set[int] = field(default_factory=set)
     patients_treated_today: int = 0
     medical_wait_minutes_today: int = 0
+    rent_monthly: float = 0.0
+    housing_condition: float = 100.0
+    comfort: float = 50.0
+    owner_type: str = "private"
+    housing_history: list[HousingRecord] = field(default_factory=list)
+    neighborhood_id: int = 0
+    bank_reserves: float = 0.0
+    outstanding_loans: float = 0.0
+    interest_income: float = 0.0
 
     @property
     def entrance(self) -> tuple[int, int]:
@@ -357,6 +546,7 @@ class Vehicle:
     service_started_tick: int | None = None
     crew_ids: set[int] = field(default_factory=set)
     health_case_id: int | None = None
+    patrol_neighborhood_id: int | None = None
 
 
 @dataclass(slots=True)
@@ -368,6 +558,16 @@ class PoliceMeasure:
     duration_minutes: int = 0
     reason: str = ""
     officer_ids: tuple[int, ...] = ()
+
+
+@dataclass(slots=True)
+class BankTransaction:
+    tick: int
+    transaction_type: str
+    amount: float
+    balance_after: float
+    label: str
+    counterparty_id: int | None = None
 
 
 @dataclass(slots=True)
@@ -471,6 +671,36 @@ class Citizen:
     # Police et consÃ©quences immÃ©diates.
     police_history: list[PoliceMeasure] = field(default_factory=list)
     current_detention_type: str | None = None
+    sentence_ids: list[int] = field(default_factory=list)
+    criminal_record_count: int = 0
+    probation_violations: int = 0
+    community_service_minutes: int = 0
+    phone_number: str = ""
+    email_address: str = ""
+    communication_ids: list[int] = field(default_factory=list)
+    unread_communication_ids: list[int] = field(default_factory=list)
+    bank_balance: float = 0.0
+    savings_balance: float = 0.0
+    bank_debt: float = 0.0
+    credit_score: float = 60.0
+    banking_history: list[BankTransaction] = field(default_factory=list)
+    is_homeless: bool = False
+    homeless_since_tick: int | None = None
+    previous_home_id: int | None = None
+    food_insecurity_days: int = 0
+    crime_organization_id: int | None = None
+    kidnapped_until_tick: int | None = None
+    kidnapped_by_organization_id: int | None = None
+    criminal_role: CrimeRole | None = None
+    criminal_income_today: float = 0.0
+    illegal_spending_today: float = 0.0
+    illegal_purchase_count: int = 0
+    last_illegal_purchase_tick: int | None = None
+    substance_use_risk: float = 5.0
+    addiction_level: float = 0.0
+    intimidation_level: float = 0.0
+    recruited_tick: int | None = None
+    criminal_contact_ids: list[int] = field(default_factory=list)
 
     @property
     def full_name(self) -> str:
@@ -507,6 +737,8 @@ class Incident:
     police_officer_ids: tuple[int, ...] = ()
     detained_ids: tuple[int, ...] = ()
     health_case_ids: tuple[int, ...] = ()
+    complaint_id: int | None = None
+    neighborhood_id: int = 0
 
 
 @dataclass(slots=True)
@@ -554,6 +786,7 @@ class Evidence:
 class Investigation:
     id: int
     incident_id: int
+    complaint_id: int | None
     status: InvestigationStatus
     opened_tick: int
     updated_tick: int
@@ -564,6 +797,44 @@ class Investigation:
     arrest_tick: int | None = None
     case_id: int | None = None
     notes: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class Complaint:
+    id: int
+    incident_id: int
+    complainant_id: int | None
+    accused_id: int | None
+    status: ComplaintStatus
+    filed_tick: int
+    updated_tick: int
+    description: str
+    dismissal_reason: str | None = None
+
+
+@dataclass(slots=True)
+class JudicialTimelineEntry:
+    tick: int
+    event_type: str
+    label: str
+    detail: str
+
+
+@dataclass(slots=True)
+class JudicialSentence:
+    id: int
+    case_id: int
+    citizen_id: int
+    sentence_type: SentenceType
+    label: str
+    status: SentenceStatus
+    start_tick: int
+    end_tick: int | None = None
+    amount: float = 0.0
+    beneficiary_id: int | None = None
+    required_minutes: int = 0
+    completed_minutes: int = 0
+    violation_count: int = 0
 
 
 @dataclass(slots=True)
@@ -580,6 +851,133 @@ class JudicialCase:
     decided_tick: int | None = None
     verdict: str | None = None
     sentence: str | None = None
+    complaint_id: int | None = None
+    prosecutor_review_tick: int | None = None
+    prosecutor_decision: str | None = None
+    priority: int = 1
+    delay_count: int = 0
+    sentence_ids: list[int] = field(default_factory=list)
+    timeline: list[JudicialTimelineEntry] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class Communication:
+    id: int
+    thread_id: int
+    sender_id: int
+    recipient_id: int
+    channel: CommunicationChannel
+    tone: CommunicationTone
+    subject: str
+    body: str
+    status: CommunicationStatus
+    created_tick: int
+    delivery_tick: int
+    read_tick: int | None = None
+    replied_tick: int | None = None
+    reply_to_id: int | None = None
+    reply_depth: int = 0
+    duration_minutes: int = 0
+    cost: float = 0.0
+    failure_reason: str | None = None
+    violates_order: bool = False
+
+
+@dataclass(slots=True)
+class CrimeOrganization:
+    id: int
+    name: str
+    leader_id: int
+    member_ids: list[int]
+    territory_id: int
+    treasury: float = 0.0
+    notoriety: float = 10.0
+    police_heat: float = 0.0
+    active: bool = True
+    operation_ids: list[int] = field(default_factory=list)
+    faction_type: CrimeFactionType = CrimeFactionType.ORGANIZED_GANG
+    territory_ids: list[int] = field(default_factory=list)
+    role_by_member: dict[int, CrimeRole] = field(default_factory=dict)
+    rival_ids: list[int] = field(default_factory=list)
+    ally_ids: list[int] = field(default_factory=list)
+    specialties: list[IllegalCommodity] = field(default_factory=list)
+    inventory: dict[str, float] = field(default_factory=dict)
+    influence_by_neighborhood: dict[int, float] = field(default_factory=dict)
+    cohesion: float = 60.0
+    violence: float = 40.0
+    sophistication: float = 40.0
+    recruitment_pressure: float = 25.0
+    laundering_capacity: float = 100.0
+    revenue_today: float = 0.0
+    expenses_today: float = 0.0
+    members_recruited: int = 0
+
+
+@dataclass(slots=True)
+class CrimeOperation:
+    id: int
+    organization_id: int
+    operation_type: CrimeOperationType
+    status: CrimeOperationStatus
+    planned_tick: int
+    perpetrator_ids: list[int]
+    victim_ids: list[int]
+    building_id: int | None
+    amount: float
+    incident_id: int | None = None
+    started_tick: int | None = None
+    resolved_tick: int | None = None
+    ransom_due_tick: int | None = None
+    outcome: str | None = None
+    commodity: IllegalCommodity | None = None
+    quantity: float = 0.0
+    neighborhood_id: int | None = None
+    detected: bool = False
+
+
+@dataclass(slots=True)
+class CriminalMarket:
+    id: int
+    organization_id: int
+    neighborhood_id: int
+    commodity: IllegalCommodity
+    supply: float
+    demand: float
+    unit_price: float
+    police_pressure: float = 0.0
+    transactions_today: int = 0
+    revenue_today: float = 0.0
+    seized_today: float = 0.0
+    active: bool = True
+
+
+@dataclass(slots=True)
+class IllegalTransaction:
+    id: int
+    tick: int
+    organization_id: int
+    market_id: int
+    seller_id: int
+    buyer_id: int
+    commodity: IllegalCommodity
+    quantity: float
+    unit_price: float
+    total: float
+    neighborhood_id: int
+    building_id: int | None
+    detected: bool = False
+    incident_id: int | None = None
+
+
+@dataclass(slots=True)
+class CrimeFactionRelation:
+    first_id: int
+    second_id: int
+    tension: float = 35.0
+    trust: float = 0.0
+    conflict_count: int = 0
+    last_conflict_tick: int | None = None
+    truce_until_tick: int | None = None
 
 
 @dataclass(slots=True)

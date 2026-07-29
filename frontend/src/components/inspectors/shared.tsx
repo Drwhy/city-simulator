@@ -1,0 +1,2 @@
+export const moneyFormatter = new Intl.NumberFormat("fr-FR", { style:"currency", currency:"EUR", minimumFractionDigits:0, maximumFractionDigits:2 });
+export function NeedBar({label,value}:{label:string;value:number}) { return <div className="need-row"><div className="need-label"><span>{label}</span><strong>{Math.round(value)} %</strong></div><div className="progress"><div className="progress-value" style={{width:`${Math.max(0,Math.min(100,value))}%`}} /></div></div>; }

@@ -1,8 +1,16 @@
 import type {
   BuildingDetail,
+  CommunicationChannel,
+  CommunicationOverview,
+  CommunicationSummary,
+  CommunicationTone,
   CitizenDetail,
   EconomyOverview,
   IncidentDetail,
+  HouseholdDetail,
+  JudicialCaseDetail,
+  JusticeOverview,
+  NeighborhoodDetail,
   SocialGraphData,
   VehicleDetail,
 } from "./types/city";
@@ -31,6 +39,9 @@ export function getVehicle(id: number): Promise<VehicleDetail> {
 export function getIncident(id: number): Promise<IncidentDetail> {
   return request<IncidentDetail>(`/api/incidents/${id}`);
 }
+export function getHousehold(id: number): Promise<HouseholdDetail> {
+  return request<HouseholdDetail>(`/api/households/${id}`);
+}
 export function getBuilding(id: number): Promise<BuildingDetail> {
   return request<BuildingDetail>(`/api/buildings/${id}`);
 }
@@ -39,6 +50,12 @@ export function getEnterprise(id: number): Promise<BuildingDetail> {
 }
 export function getEconomy(): Promise<EconomyOverview> {
   return request<EconomyOverview>("/api/economy");
+}
+export function getJustice(): Promise<JusticeOverview> {
+  return request<JusticeOverview>("/api/justice");
+}
+export function getCase(id: number): Promise<JudicialCaseDetail> {
+  return request<JudicialCaseDetail>(`/api/cases/${id}`);
 }
 export function getSocialGraph(): Promise<SocialGraphData> {
   return request<SocialGraphData>("/api/social/graph");
@@ -66,10 +83,10 @@ export function stepSimulation(minutes: number): Promise<unknown> {
   });
 }
 
-export function resetCity(seed = 12345): Promise<unknown> {
+export function resetCity(seed = 12345, citizenCount?: number): Promise<unknown> {
   return request("/api/city/reset", {
     method: "POST",
-    body: JSON.stringify({ seed }),
+    body: JSON.stringify({ seed, citizenCount }),
   });
 }
 
@@ -79,4 +96,16 @@ export function saveCity(): Promise<{ saved: boolean; path: string }> {
 
 export function loadCity(): Promise<unknown> {
   return request("/api/city/load", { method: "POST" });
+}
+
+export function getCommunications(): Promise<CommunicationOverview> {
+  return request<CommunicationOverview>("/api/communications");
+}
+
+export function sendCommunication(payload: { senderId: number; recipientId: number; channel: CommunicationChannel; tone: CommunicationTone; subject: string; body: string; attemptOrderViolation?: boolean }): Promise<CommunicationSummary> {
+  return request<CommunicationSummary>("/api/communications", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function getNeighborhood(id: number): Promise<NeighborhoodDetail> {
+  return request<NeighborhoodDetail>(`/api/neighborhoods/${id}`);
 }

@@ -1,0 +1,2519 @@
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/CHANGELOG.md city-simulator-v0.12.0/CHANGELOG.md
+--- city-simulator-v0.11.0/CHANGELOG.md	2026-07-29 15:34:24.000000000 +0200
++++ city-simulator-v0.12.0/CHANGELOG.md	2026-07-29 16:22:35.000000000 +0200
+@@ -1,5 +1,31 @@
+ # Changelog
+ 
++## 0.12.0 — Banque, précarité et crime organisé
++
++### Ajouté
++
++- Population configurable jusqu’à 1 000 citoyens et capacité urbaine proportionnelle.
++- Banque, refuge municipal, comptes, épargne, prêts, intérêts, échéances, défauts et registre de transactions.
++- Sans-abrisme déclenché par impayés persistants ou incapacité durable à se nourrir, avec accueil et relogement.
++- Mafias territoriales, vols, braquages, extorsions, enlèvements, rançons, notoriété et pression policière.
++- Tentatives probabilistes de violation des interdictions de communication et conséquences judiciaires.
++- Palette cartographique, volumes, végétation, voirie et implantation résidentielle renouvelés.
++- Cinq scénarios backend dédiés et extension des tests de monitoring frontend.
++
++### Modifié
++
++- Un emploi maximum par citoyen et retrait des candidatures concurrentes après embauche.
++- Plus de trente intitulés de métier et distinction entre capacité d’embauche et besoin cible.
++- Tous les principaux flux monétaires utilisent le module bancaire partagé.
++- Sauvegarde stricte v13 ; versions backend et frontend portées à 0.12.0.
++
++### Limites connues
++
++- Une mafia est une organisation agrégée : pas encore de hiérarchie interne, blanchiment, informateurs ou contrôle fin de chaque rue.
++- Les prêts utilisent une décision de crédit volontairement lisible, sans garanties, faillite personnelle ni banque concurrente.
++- La construction et la migration entre villes ne sont pas simulées ; les capacités des bâtiments évoluent avec la taille choisie.
++
++
+ ## 0.11.0 — Quartiers, sécurité et services publics
+ 
+ ### Ajouté
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/README.md city-simulator-v0.12.0/README.md
+--- city-simulator-v0.11.0/README.md	2026-07-29 15:34:24.000000000 +0200
++++ city-simulator-v0.12.0/README.md	2026-07-29 16:28:34.000000000 +0200
+@@ -1,6 +1,22 @@
+-# City Simulator — v0.11.0 Quartiers, sécurité et services publics
++# City Simulator — v0.12.0 Banque, précarité et crime organisé
+ 
+-Prototype web d'une ville persistante simulant 100 habitants, leurs déplacements, relations, conflits, emplois, santé, blessures, maladies, secours médicalisés, finances, incidents, interventions policières et premières procédures judiciaires.
++Prototype web d'une ville persistante simulant de 20 à 1 000 habitants, avec emplois uniques, logement, banque, communications, quartiers, services publics, criminalité organisée, police et justice.
++
++## Nouveautés v0.12.0
++
++- Population configurable de 20 à 1 000 citoyens ; capacité résidentielle et effectifs montent avec la ville sans multiplier les bâtiments à l’infini.
++- Un seul emploi courant par citoyen ; toute autre candidature pendante est retirée à l’embauche. Plus de 30 intitulés couvrent industrie, bureaux, commerce, services, banque et accueil social.
++- Banque incarnée : comptes courants, espèces, épargne, historique borné, score de crédit, prêts, intérêts, échéances, défauts et réserves bancaires. Salaires, achats, loyers, transports, communications et sanctions passent par un registre commun.
++- Précarité matérielle : insécurité alimentaire, impayés, statut sans-abri, refuge municipal, repli au parc si le refuge est plein et retour conditionnel vers un logement.
++- Organisations mafieuses persistantes avec membres, chef, territoire, trésorerie, notoriété et pression policière ; vols, braquages, extorsions, enlèvements et rançons produisent incidents, enquêtes et peines proportionnées.
++- Les citoyens visés par une interdiction peuvent tenter de la contourner selon leur personnalité. Une réussite marque la peine violée et crée un nouvel incident judiciaire.
++- Implantation résidentielle moins régulière et carte rafraîchie : volumes, ombres, végétation, marquages de voirie et couleurs dédiées à la banque et au refuge.
++- Indicateurs toujours limités à six cartes par vue, avec une catégorie Banque et des métriques de sans-abrisme/crime organisé.
++- Sauvegarde stricte v13 incluant comptes, transactions, précarité, mafias, opérations, enlèvements, rançons et générateurs pseudo-aléatoires dédiés.
++
++## Migration depuis v0.11.0
++
++Le schéma passe de 12 à 13. Les anciennes sauvegardes sont refusées explicitement car elles ne contiennent pas les comptes bancaires, états de précarité ni organisations criminelles.
+ 
+ ## Nouveautés v0.11.0
+ 
+@@ -57,7 +73,7 @@
+ 
+ ## Interface et architecture maintenables
+ 
+-- Le panneau d’indicateurs est limité à six cartes visibles et sept catégories navigables : synthèse, logement, économie, santé, mobilité, social et sécurité.
++- Le panneau d’indicateurs est limité à six cartes visibles et neuf catégories navigables : synthèse, logement, économie, banque, santé, mobilité, social, quartiers et sécurité.
+ - Le frontend sépare désormais flux WebSocket, état des couches, catalogue de métriques, panneau de contrôle et inspecteurs spécialisés.
+ - Le backend sépare routes HTTP, transport WebSocket, calcul des métriques, présentateurs de monitoring et persistance atomique.
+ - Les fonctions pures de métriques, fusion de flux, URL WebSocket et état des couches disposent de tests dédiés.
+@@ -239,7 +255,9 @@
+ │   │   │   ├── routes.py
+ │   │   │   └── websocket.py
+ │   │   └── simulation/
++│   │       ├── banking.py
+ │   │       ├── communication.py
++│   │       ├── crime.py
+ │   │       ├── economy.py
+ │   │       ├── snapshot.py
+ │   │       ├── health.py
+@@ -282,6 +300,8 @@
+ GET  /api/buildings/{id}
+ GET  /api/enterprises/{id}
+ GET  /api/economy
++GET  /api/banking
++GET  /api/crime
+ GET  /api/healthcare
+ GET  /api/housing
+ GET  /api/justice
+@@ -311,7 +331,7 @@
+ - La sécurité locale dérive des incidents récents ; la cohabitation ne fusionne pas les budgets.
+ 
+ - Le moteur backend reste la source de vérité ; le frontend ne recalcule aucune décision économique.
+-- Les montants sont des unités monétaires simulées et ne représentent ni fiscalité, ni inflation, ni crédit bancaire réel.
++- Les montants restent des unités monétaires simulées : la banque modélise comptes, prêts et défauts, mais pas fiscalité, inflation, assurance-dépôts, marchés financiers ni insolvabilité institutionnelle.
+ - Hors commerces, la demande adressée aux entreprises est agrégée à partir du temps productif : il n'existe pas encore de chaîne d'approvisionnement interentreprises.
+ - Les entreprises publiques sont financées par la ville et ne ferment pas ; la dépense publique cumulée est visible dans les métriques.
+ - Les historiques financiers et professionnels sont limités à 30 entrées pour éviter une croissance mémoire illimitée.
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/VALIDATION.md city-simulator-v0.12.0/VALIDATION.md
+--- city-simulator-v0.11.0/VALIDATION.md	2026-07-29 15:34:24.000000000 +0200
++++ city-simulator-v0.12.0/VALIDATION.md	2026-07-29 16:28:34.000000000 +0200
+@@ -1,8 +1,8 @@
+-# Validation de l’archive — v0.11.0
++# Validation — v0.12.0
+ 
+ ## Backend
+ 
+-- 78 tests automatisés sous Python 3.12, dont 8 scénarios territoriaux v0.11.0.
++- 83 tests backend réussis sous Python 3.12, dont 5 scénarios dédiés à la banque, la capacité 1 000, le sans-abrisme, les mafias et les violations d’ordonnance.
+ - Couverture fonctionnelle : divergence des quartiers, distance aux services, incidents répétés, sécurité ressentie, opportunités criminelles, patrouilles citoyennes, API, WebSocket et sauvegarde/reprise déterministe.
+ - Simulation de 30 jours : historiques bornés, zones distinctes et aucune unité bloquée sans route dans un état transitoire.
+ - Les scénarios historiques d’économie, santé, logement, justice et communications restent verts.
+@@ -11,7 +11,7 @@
+ 
+ - 16 tests Vitest dans 7 fichiers.
+ - Contrôle TypeScript strict et build Vite validés.
+-- Neuf cartes thématiques, sélection de quartier, fenêtre complète, tendances, indicateurs et filtre Quartiers compilés.
++- Neuf vues compactes d’indicateurs, carte renouvelée, nouveaux bâtiments et contrats TypeScript compilés.
+ 
+ ## Commandes de validation
+ 
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/api/routes.py city-simulator-v0.12.0/backend/app/api/routes.py
+--- city-simulator-v0.11.0/backend/app/api/routes.py	2026-07-29 15:20:30.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/api/routes.py	2026-07-29 16:01:15.000000000 +0200
+@@ -17,6 +17,7 @@
+ 
+ class ResetRequest(BaseModel):
+     seed: int | None = None
++    citizen_count: int | None = Field(default=None, alias="citizenCount", ge=20, le=1000)
+ 
+ 
+ class CommunicationRequest(BaseModel):
+@@ -26,6 +27,7 @@
+     tone: CommunicationTone = CommunicationTone.FRIENDLY
+     subject: str = Field(default="", max_length=120)
+     body: str = Field(default="", max_length=800)
++    attempt_order_violation: bool = Field(default=False, alias="attemptOrderViolation")
+ 
+ 
+ def create_api_router(service: SimulationService) -> APIRouter:
+@@ -39,6 +41,10 @@
+     async def city_snapshot() -> dict:
+         return await service.snapshot()
+ 
++    @router.get("/banking")
++    async def banking_overview() -> dict:
++        return await service.banking_overview()
++
+     @router.get("/healthcare")
+     async def healthcare_overview() -> dict:
+         return await service.health_overview()
+@@ -51,6 +57,10 @@
+     async def economy_overview() -> dict:
+         return await service.economy_overview()
+ 
++    @router.get("/crime")
++    async def crime_overview() -> dict:
++        return await service.crime_overview()
++
+     @router.get("/justice")
+     async def justice_overview() -> dict:
+         return await service.justice_overview()
+@@ -78,7 +88,7 @@
+     @router.post("/communications", status_code=201)
+     async def create_communication(request: CommunicationRequest) -> dict:
+         try:
+-            return await service.send_communication(sender_id=request.sender_id, recipient_id=request.recipient_id, channel=request.channel, tone=request.tone, subject=request.subject, body=request.body)
++            return await service.send_communication(sender_id=request.sender_id, recipient_id=request.recipient_id, channel=request.channel, tone=request.tone, subject=request.subject, body=request.body, attempt_order_violation=request.attempt_order_violation)
+         except KeyError as exc:
+             raise HTTPException(status_code=404, detail="Expéditeur ou destinataire introuvable") from exc
+         except ValueError as exc:
+@@ -159,7 +169,7 @@
+ 
+     @router.post("/city/reset")
+     async def reset(request: ResetRequest) -> dict:
+-        await service.reset(seed=request.seed)
++        await service.reset(seed=request.seed, citizen_count=request.citizen_count)
+         return await service.snapshot()
+ 
+     return router
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/banking.py city-simulator-v0.12.0/backend/app/simulation/banking.py
+--- city-simulator-v0.11.0/backend/app/simulation/banking.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.12.0/backend/app/simulation/banking.py	2026-07-29 15:53:39.000000000 +0200
+@@ -0,0 +1,215 @@
++from __future__ import annotations
++
++import random
++from typing import TYPE_CHECKING
++
++from .models import BankTransaction, BuildingType, Citizen
++
++if TYPE_CHECKING:
++    from .world import World
++
++
++MAX_BANKING_HISTORY = 60
++
++
++def bank(world: World):
++    return next(
++        (building for building in world.buildings.values() if building.building_type == BuildingType.BANK),
++        None,
++    )
++
++
++def initialize_banking(world: World) -> None:
++    world.banking_rng = random.Random(world.seed + 50_021)
++    world._last_banking_day = 0
++    world.bank_loans_issued_today = 0.0
++    world.bank_defaults_today = 0.0
++    institution = bank(world)
++    if institution is not None and institution.bank_reserves <= 0:
++        institution.bank_reserves = 120_000.0
++    for citizen in world.citizens.values():
++        if citizen.bank_balance == 0 and citizen.savings_balance == 0 and citizen.bank_debt == 0:
++            deposited = round(max(0.0, citizen.money) * 0.55, 2)
++            citizen.money = round(citizen.money - deposited, 2)
++            citizen.bank_balance = deposited
++        citizen.credit_score = max(0.0, min(100.0, citizen.credit_score))
++
++
++def available_funds(citizen: Citizen, *, allow_credit: bool = False) -> float:
++    amount = max(0.0, citizen.money) + max(0.0, citizen.bank_balance)
++    if allow_credit:
++        amount += max(0.0, citizen.overdraft_limit + min(0.0, citizen.money))
++    return round(amount, 2)
++
++
++def _record(
++    citizen: Citizen,
++    *,
++    tick: int,
++    transaction_type: str,
++    amount: float,
++    label: str,
++    counterparty_id: int | None = None,
++) -> None:
++    citizen.banking_history.append(
++        BankTransaction(
++            tick=tick,
++            transaction_type=transaction_type,
++            amount=round(amount, 2),
++            balance_after=round(citizen.bank_balance, 2),
++            label=label,
++            counterparty_id=counterparty_id,
++        )
++    )
++    citizen.banking_history[:] = citizen.banking_history[-MAX_BANKING_HISTORY:]
++
++
++def deposit(
++    world: World,
++    citizen: Citizen,
++    amount: float,
++    *,
++    label: str,
++    transaction_type: str = "deposit",
++    counterparty_id: int | None = None,
++    cash_share: float = 0.0,
++) -> float:
++    amount = round(max(0.0, amount), 2)
++    cash_amount = round(amount * max(0.0, min(1.0, cash_share)), 2)
++    account_amount = round(amount - cash_amount, 2)
++    citizen.money = round(citizen.money + cash_amount, 2)
++    citizen.bank_balance = round(citizen.bank_balance + account_amount, 2)
++    _record(
++        citizen,
++        tick=world.tick,
++        transaction_type=transaction_type,
++        amount=account_amount,
++        label=label,
++        counterparty_id=counterparty_id,
++    )
++    return amount
++
++
++def withdraw(
++    world: World,
++    citizen: Citizen,
++    amount: float,
++    *,
++    label: str,
++    transaction_type: str = "payment",
++    counterparty_id: int | None = None,
++    allow_credit: bool = False,
++) -> float:
++    requested = round(max(0.0, amount), 2)
++    remaining = requested
++    cash_paid = min(max(0.0, citizen.money), remaining)
++    citizen.money = round(citizen.money - cash_paid, 2)
++    remaining = round(remaining - cash_paid, 2)
++    account_paid = min(max(0.0, citizen.bank_balance), remaining)
++    citizen.bank_balance = round(citizen.bank_balance - account_paid, 2)
++    remaining = round(remaining - account_paid, 2)
++    credit_paid = 0.0
++    if allow_credit and remaining > 0:
++        credit_available = max(0.0, citizen.overdraft_limit + min(0.0, citizen.money))
++        credit_paid = min(credit_available, remaining)
++        citizen.money = round(citizen.money - credit_paid, 2)
++        remaining = round(remaining - credit_paid, 2)
++    paid = round(requested - remaining, 2)
++    if paid:
++        _record(
++            citizen,
++            tick=world.tick,
++            transaction_type=transaction_type,
++            amount=-paid,
++            label=label,
++            counterparty_id=counterparty_id,
++        )
++    return paid
++
++
++def request_loan(world: World, citizen: Citizen, amount: float, *, reason: str) -> float:
++    institution = bank(world)
++    requested = round(max(0.0, amount), 2)
++    if (
++        institution is None
++        or requested <= 0
++        or citizen.credit_score < 38
++        or citizen.bank_debt > max(250.0, citizen.salary_daily * 25)
++        or institution.bank_reserves < requested
++    ):
++        citizen.credit_score = max(0.0, citizen.credit_score - 1.5)
++        return 0.0
++    institution.bank_reserves = round(institution.bank_reserves - requested, 2)
++    institution.outstanding_loans = round(institution.outstanding_loans + requested, 2)
++    citizen.bank_debt = round(citizen.bank_debt + requested, 2)
++    citizen.bank_balance = round(citizen.bank_balance + requested, 2)
++    citizen.credit_score = max(0.0, citizen.credit_score - requested / 500.0)
++    world.bank_loans_issued_today = round(world.bank_loans_issued_today + requested, 2)
++    _record(
++        citizen,
++        tick=world.tick,
++        transaction_type="loan",
++        amount=requested,
++        label=f"Crédit bancaire : {reason}",
++        counterparty_id=institution.id,
++    )
++    world._emit(
++        "bank_loan_issued",
++        f"{citizen.full_name} obtient un crédit de {requested:.2f} € ({reason}).",
++        citizen_ids=(citizen.id,),
++        building_id=institution.id,
++    )
++    return requested
++
++
++def update_banking(world: World) -> None:
++    if world.hour != 0 or world.minute != 7 or world._last_banking_day == world.day:
++        return
++    world._last_banking_day = world.day
++    institution = bank(world)
++    if institution is None:
++        return
++    for citizen in world.citizens.values():
++        if citizen.bank_debt > 0:
++            interest = round(citizen.bank_debt * 0.00045, 2)
++            citizen.bank_debt = round(citizen.bank_debt + interest, 2)
++            institution.outstanding_loans = round(institution.outstanding_loans + interest, 2)
++            institution.interest_income = round(institution.interest_income + interest, 2)
++            due = round(min(citizen.bank_debt, max(2.0, citizen.salary_daily * 0.035)), 2)
++            paid = withdraw(world, citizen, due, label="Échéance de crédit", transaction_type="loan_payment")
++            citizen.bank_debt = round(citizen.bank_debt - paid, 2)
++            institution.outstanding_loans = round(max(0.0, institution.outstanding_loans - paid), 2)
++            institution.bank_reserves = round(institution.bank_reserves + paid, 2)
++            if paid + 0.01 < due:
++                citizen.credit_score = max(0.0, citizen.credit_score - 2.0)
++                world.bank_defaults_today = round(world.bank_defaults_today + due - paid, 2)
++            else:
++                citizen.credit_score = min(100.0, citizen.credit_score + 0.15)
++        if citizen.bank_balance > max(600.0, citizen.salary_daily * 8) and world.banking_rng.random() < 0.08:
++            saved = round(citizen.bank_balance * 0.05, 2)
++            citizen.bank_balance = round(citizen.bank_balance - saved, 2)
++            citizen.savings_balance = round(citizen.savings_balance + saved, 2)
++            _record(citizen, tick=world.tick, transaction_type="savings", amount=-saved, label="Versement épargne")
++
++
++def banking_overview(world: World) -> dict[str, object]:
++    institution = bank(world)
++    citizens = list(world.citizens.values())
++    return {
++        "tick": world.tick,
++        "bank": {
++            "id": institution.id if institution else None,
++            "name": institution.name if institution else None,
++            "reserves": round(institution.bank_reserves, 2) if institution else 0.0,
++            "outstandingLoans": round(institution.outstanding_loans, 2) if institution else 0.0,
++            "interestIncome": round(institution.interest_income, 2) if institution else 0.0,
++        },
++        "metrics": {
++            "deposits": round(sum(row.bank_balance for row in citizens), 2),
++            "savings": round(sum(row.savings_balance for row in citizens), 2),
++            "citizenDebt": round(sum(row.bank_debt for row in citizens), 2),
++            "borrowers": sum(row.bank_debt > 0 for row in citizens),
++            "loansIssuedToday": round(world.bank_loans_issued_today, 2),
++            "defaultsToday": round(world.bank_defaults_today, 2),
++        },
++    }
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/communication.py city-simulator-v0.12.0/backend/app/simulation/communication.py
+--- city-simulator-v0.11.0/backend/app/simulation/communication.py	2026-07-29 15:06:04.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/communication.py	2026-07-29 16:00:46.000000000 +0200
+@@ -4,7 +4,8 @@
+ import random
+ from typing import TYPE_CHECKING, Any
+ 
+-from .justice import contact_forbidden
++from .banking import available_funds, withdraw
++from .justice import attempt_contact_violation, contact_forbidden
+ from .models import (
+     Activity,
+     CareStatus,
+@@ -86,20 +87,24 @@
+     body: str,
+     reply_to_id: int | None = None,
+     reply_depth: int = 0,
++    attempt_order_violation: bool = False,
+ ) -> Communication:
+     if sender_id == recipient_id:
+         raise ValueError("Un habitant ne peut pas s’envoyer un message à lui-même.")
+     sender = world.citizens[sender_id]
+     recipient = world.citizens[recipient_id]
++    violates_order = False
+     if contact_forbidden(world, sender_id, recipient_id):
+-        raise ValueError("Une interdiction de contact empêche cette communication.")
++        if not attempt_order_violation or not attempt_contact_violation(world, sender_id, recipient_id):
++            raise ValueError("Une interdiction de contact empêche cette communication.")
++        violates_order = True
+     _validate_channel(sender, recipient, channel)
+     subject = subject.strip()[:120] or _default_subject(tone)
+     body = body.strip()[:800] or _default_body(tone, sender, recipient)
+     cost = CHANNEL_COSTS[channel]
+-    if sender.money + sender.overdraft_limit < cost:
++    if available_funds(sender, allow_credit=True) < cost:
+         raise ValueError("Fonds insuffisants pour utiliser ce canal.")
+-    sender.money = round(sender.money - cost, 2)
++    withdraw(world, sender, cost, label=f"Communication {channel.value}", transaction_type="communication", allow_credit=True)
+     low, high = CHANNEL_DELAYS[channel]
+     delivery_tick = world.tick + (world.communication_rng.randint(low, high) if high else 0)
+     communication = Communication(
+@@ -117,6 +122,7 @@
+         reply_to_id=reply_to_id,
+         reply_depth=reply_depth,
+         cost=cost,
++        violates_order=violates_order,
+     )
+     world._next_communication_id += 1
+     world.communications[communication.id] = communication
+@@ -155,7 +161,7 @@
+ def _deliver(world: World, communication: Communication) -> None:
+     sender = world.citizens[communication.sender_id]
+     recipient = world.citizens[communication.recipient_id]
+-    if contact_forbidden(world, sender.id, recipient.id):
++    if contact_forbidden(world, sender.id, recipient.id) and not communication.violates_order:
+         communication.status = CommunicationStatus.FAILED
+         communication.failure_reason = "Interdiction de contact active au moment de la livraison."
+         return
+@@ -234,7 +240,7 @@
+         if created >= max(2, len(world.citizens) // 20):
+             break
+         relationships = sorted(sender.relationships.values(), key=lambda relation: (relation.familiarity, relation.affection), reverse=True)
+-        recipients = [world.citizens[relation.other_id] for relation in relationships if relation.other_id in world.citizens and not contact_forbidden(world, sender.id, relation.other_id)]
++        recipients = [world.citizens[relation.other_id] for relation in relationships if relation.other_id in world.citizens]
+         if not recipients:
+             continue
+         recipient = recipients[world.communication_rng.randrange(min(4, len(recipients)))]
+@@ -246,7 +252,7 @@
+             k=1,
+         )[0]
+         try:
+-            send_communication(world, sender_id=sender.id, recipient_id=recipient.id, channel=channel, tone=tone, subject=_default_subject(tone), body=_default_body(tone, sender, recipient))
++            send_communication(world, sender_id=sender.id, recipient_id=recipient.id, channel=channel, tone=tone, subject=_default_subject(tone), body=_default_body(tone, sender, recipient), attempt_order_violation=True)
+         except ValueError:
+             continue
+         created += 1
+@@ -272,6 +278,7 @@
+         "durationMinutes": communication.duration_minutes,
+         "cost": communication.cost,
+         "failureReason": communication.failure_reason,
++        "violatesOrder": communication.violates_order,
+     }
+ 
+ 
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/crime.py city-simulator-v0.12.0/backend/app/simulation/crime.py
+--- city-simulator-v0.11.0/backend/app/simulation/crime.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.12.0/backend/app/simulation/crime.py	2026-07-29 16:23:44.000000000 +0200
+@@ -0,0 +1,330 @@
++from __future__ import annotations
++
++import random
++from typing import TYPE_CHECKING
++
++from .banking import available_funds, withdraw
++from .models import (
++    Activity,
++    BuildingType,
++    CrimeOperation,
++    CrimeOperationStatus,
++    CrimeOperationType,
++    CrimeOrganization,
++)
++
++if TYPE_CHECKING:
++    from .world import World
++
++
++ORGANIZATION_NAMES = (
++    "Le Cercle des Docks",
++    "La Fratrie du Canal",
++    "Le Réseau des Arcades",
++    "Les Loups du Faubourg",
++)
++
++
++def initialize_crime(world: World) -> None:
++    world.crime_rng = random.Random(world.seed + 73_019)
++    world.crime_organizations: dict[int, CrimeOrganization] = {}
++    world.crime_operations: dict[int, CrimeOperation] = {}
++    world._next_crime_operation_id = 1
++    world._last_crime_hour = -1
++    world.organized_crimes_today = 0
++    world.ransom_paid_today = 0.0
++    candidates = sorted(
++        (
++            citizen
++            for citizen in world.citizens.values()
++            if citizen.age >= 18
++            and (citizen.workplace_id is None or world.buildings[citizen.workplace_id].building_type not in {BuildingType.POLICE, BuildingType.COURT})
++        ),
++        key=lambda citizen: (
++            citizen.aggression + citizen.impulsivity + citizen.financial_stress,
++            citizen.id,
++        ),
++        reverse=True,
++    )
++    organization_count = min(4, max(1, len(world.citizens) // 250))
++    member_count = max(3, min(7, len(world.citizens) // max(20, organization_count * 30)))
++    for organization_id in range(1, organization_count + 1):
++        members = candidates[(organization_id - 1) * member_count : organization_id * member_count]
++        if len(members) < 2:
++            break
++        organization = CrimeOrganization(
++            id=organization_id,
++            name=ORGANIZATION_NAMES[(organization_id - 1) % len(ORGANIZATION_NAMES)],
++            leader_id=members[0].id,
++            member_ids=[citizen.id for citizen in members],
++            territory_id=((organization_id - 1) % max(1, len(world.neighborhoods))) + 1,
++            treasury=world.crime_rng.uniform(800.0, 2_500.0),
++        )
++        world.crime_organizations[organization.id] = organization
++        for citizen in members:
++            citizen.crime_organization_id = organization.id
++
++
++def reset_crime_day(world: World) -> None:
++    world.organized_crimes_today = 0
++    world.ransom_paid_today = 0.0
++
++
++def update_crime(world: World) -> None:
++    hour_key = world.day * 24 + world.hour
++    if world.minute != 35 or world._last_crime_hour == hour_key:
++        return
++    world._last_crime_hour = hour_key
++    _resolve_kidnappings(world)
++    for organization in world.crime_organizations.values():
++        organization.police_heat = max(0.0, organization.police_heat - 0.08)
++        if not organization.active:
++            continue
++        nighttime = world.hour >= 19 or world.hour <= 4
++        risk = 0.014 + organization.notoriety / 9_000.0 + (0.012 if nighttime else 0.0)
++        if world.crime_rng.random() < risk:
++            _execute_operation(world, organization)
++
++
++def _execute_operation(world: World, organization: CrimeOrganization) -> None:
++    available_members = [
++        world.citizens[citizen_id]
++        for citizen_id in organization.member_ids
++        if citizen_id in world.citizens
++        and world.citizens[citizen_id].detained_until_tick is None
++        and world.citizens[citizen_id].kidnapped_until_tick is None
++    ]
++    if not available_members:
++        return
++    weights = [
++        CrimeOperationType.THEFT,
++        CrimeOperationType.THEFT,
++        CrimeOperationType.ROBBERY,
++        CrimeOperationType.EXTORTION,
++        CrimeOperationType.KIDNAPPING,
++    ]
++    operation_type = world.crime_rng.choice(weights)
++    perpetrators = available_members[: world.crime_rng.randint(1, min(3, len(available_members)))]
++    outsiders = [
++        citizen
++        for citizen in world.citizens.values()
++        if citizen.crime_organization_id != organization.id
++        and citizen.detained_until_tick is None
++        and citizen.kidnapped_until_tick is None
++    ]
++    if not outsiders:
++        return
++    victim = world.crime_rng.choice(outsiders)
++    building = _target_building(world, operation_type, victim.home_id)
++    amount = round(
++        world.crime_rng.uniform(
++            25.0 if operation_type == CrimeOperationType.THEFT else 120.0,
++            160.0 if operation_type == CrimeOperationType.THEFT else 1_200.0,
++        ),
++        2,
++    )
++    operation = CrimeOperation(
++        id=world._next_crime_operation_id,
++        organization_id=organization.id,
++        operation_type=operation_type,
++        status=CrimeOperationStatus.ACTIVE,
++        planned_tick=world.tick,
++        perpetrator_ids=[citizen.id for citizen in perpetrators],
++        victim_ids=[victim.id],
++        building_id=building.id if building else victim.home_id,
++        amount=amount,
++        started_tick=world.tick,
++    )
++    world._next_crime_operation_id += 1
++    world.crime_operations[operation.id] = operation
++    organization.operation_ids.append(operation.id)
++    if operation_type == CrimeOperationType.KIDNAPPING:
++        _kidnap(world, organization, operation, victim)
++        return
++    success_chance = 0.62 - organization.police_heat / 180.0
++    succeeded = world.crime_rng.random() < max(0.18, success_chance)
++    stolen = 0.0
++    if succeeded:
++        if operation_type in {CrimeOperationType.ROBBERY, CrimeOperationType.EXTORTION} and building:
++            stolen = min(amount, max(0.0, building.cash))
++            building.cash = round(building.cash - stolen, 2)
++            if building.building_type == BuildingType.BANK:
++                reserve_loss = min(amount - stolen, building.bank_reserves)
++                building.bank_reserves = round(building.bank_reserves - reserve_loss, 2)
++                stolen += reserve_loss
++        else:
++            stolen = withdraw(
++                world,
++                victim,
++                min(amount, available_funds(victim)),
++                label=f"Préjudice criminel — {organization.name}",
++                transaction_type="crime_loss",
++            )
++        organization.treasury = round(organization.treasury + stolen, 2)
++        operation.status = CrimeOperationStatus.SUCCEEDED
++        operation.outcome = f"{stolen:.2f} € dérobés"
++    else:
++        operation.status = CrimeOperationStatus.FAILED
++        operation.outcome = "échec de l'opération"
++    operation.resolved_tick = world.tick
++    _report_operation(world, organization, operation, victim, building, succeeded)
++
++
++def _kidnap(world: World, organization: CrimeOrganization, operation: CrimeOperation, victim) -> None:
++    duration = world.crime_rng.randint(6 * 60, 30 * 60)
++    victim.kidnapped_until_tick = world.tick + duration
++    victim.kidnapped_by_organization_id = organization.id
++    victim.activity = Activity.KIDNAPPED
++    victim.planned_activity = Activity.KIDNAPPED
++    victim.needs.stress = min(100.0, victim.needs.stress + 35.0)
++    operation.ransom_due_tick = world.tick + duration
++    operation.outcome = "victime retenue, rançon exigée"
++    _report_operation(world, organization, operation, victim, world.buildings.get(operation.building_id), True)
++
++
++def _resolve_kidnappings(world: World) -> None:
++    for operation in list(world.crime_operations.values()):
++        if (
++            operation.operation_type != CrimeOperationType.KIDNAPPING
++            or operation.status != CrimeOperationStatus.ACTIVE
++            or operation.ransom_due_tick is None
++            or world.tick < operation.ransom_due_tick
++        ):
++            continue
++        victim = world.citizens[operation.victim_ids[0]]
++        household = world.households.get(victim.household_id)
++        payers = [world.citizens[cid] for cid in household.member_ids if cid != victim.id] if household else []
++        remaining = operation.amount
++        paid = 0.0
++        for payer in sorted(payers, key=available_funds, reverse=True):
++            contribution = withdraw(
++                world,
++                payer,
++                remaining,
++                label=f"Rançon pour {victim.full_name}",
++                transaction_type="ransom",
++            )
++            paid += contribution
++            remaining -= contribution
++            if remaining <= 0.01:
++                break
++        organization = world.crime_organizations[operation.organization_id]
++        ransom_operation = CrimeOperation(id=world._next_crime_operation_id, organization_id=organization.id, operation_type=CrimeOperationType.RANSOM, status=CrimeOperationStatus.SUCCEEDED if paid >= operation.amount * 0.5 else CrimeOperationStatus.FAILED, planned_tick=operation.ransom_due_tick, perpetrator_ids=list(operation.perpetrator_ids), victim_ids=list(operation.victim_ids), building_id=operation.building_id, amount=operation.amount, incident_id=operation.incident_id, started_tick=operation.ransom_due_tick, resolved_tick=world.tick, outcome=f"{paid:.2f} € versés")
++        world._next_crime_operation_id += 1
++        world.crime_operations[ransom_operation.id] = ransom_operation
++        organization.operation_ids.append(ransom_operation.id)
++        organization.treasury = round(organization.treasury + paid, 2)
++        world.ransom_paid_today = round(world.ransom_paid_today + paid, 2)
++        victim.kidnapped_until_tick = None
++        victim.kidnapped_by_organization_id = None
++        victim.activity = Activity.AT_HOME
++        victim.planned_activity = Activity.AT_HOME
++        operation.status = CrimeOperationStatus.SUCCEEDED if paid >= operation.amount * 0.5 else CrimeOperationStatus.FAILED
++        operation.resolved_tick = world.tick
++        operation.outcome = f"victime libérée, rançon versée : {paid:.2f} €"
++        world._emit(
++            "kidnapping_resolved",
++            f"{victim.full_name} est libéré après le versement de {paid:.2f} €.",
++            citizen_ids=tuple(operation.perpetrator_ids + operation.victim_ids),
++            building_id=operation.building_id,
++            severity="danger",
++            incident_id=operation.incident_id,
++        )
++
++
++def _target_building(world: World, operation_type: CrimeOperationType, fallback_id: int):
++    if operation_type == CrimeOperationType.ROBBERY:
++        candidates = [
++            building
++            for building in world.buildings.values()
++            if building.building_type in {BuildingType.BANK, BuildingType.SHOP}
++        ]
++    elif operation_type == CrimeOperationType.EXTORTION:
++        candidates = [
++            building
++            for building in world.buildings.values()
++            if building.building_type
++            in {BuildingType.CAFE, BuildingType.SHOP, BuildingType.OFFICE, BuildingType.FACTORY}
++        ]
++    else:
++        candidates = []
++    return world.crime_rng.choice(candidates) if candidates else world.buildings.get(fallback_id)
++
++
++def _report_operation(world: World, organization, operation, victim, building, succeeded: bool) -> None:
++    labels = {
++        CrimeOperationType.THEFT: ("Vol organisé", "theft"),
++        CrimeOperationType.ROBBERY: ("Braquage", "robbery"),
++        CrimeOperationType.EXTORTION: ("Extorsion mafieuse", "extortion"),
++        CrimeOperationType.KIDNAPPING: ("Enlèvement et demande de rançon", "kidnapping"),
++    }
++    title, incident_type = labels[operation.operation_type]
++    reported = operation.operation_type in {CrimeOperationType.ROBBERY, CrimeOperationType.KIDNAPPING} or world.crime_rng.random() < 0.68
++    incident = world.create_incident(
++        incident_type=incident_type,
++        title=title,
++        description=f"{organization.name} mène une opération de {title.lower()} : {operation.outcome}.",
++        severity="danger",
++        citizen_ids=tuple(operation.perpetrator_ids + operation.victim_ids),
++        offender_id=operation.perpetrator_ids[0],
++        victim_ids=tuple(operation.victim_ids),
++        building_id=building.id if building else operation.building_id,
++        reported=reported,
++        lifetime_minutes=12 * 60,
++        conflict_level=4 if operation.operation_type == CrimeOperationType.KIDNAPPING else 3,
++    )
++    operation.incident_id = incident.id
++    victim.victimizations += 1
++    for perpetrator_id in operation.perpetrator_ids:
++        world.citizens[perpetrator_id].offenses_committed += 1
++    organization.notoriety = min(100.0, organization.notoriety + (4.0 if succeeded else 1.0))
++    organization.police_heat = min(100.0, organization.police_heat + (9.0 if reported else 3.0))
++    world.organized_crimes_today += 1
++
++
++def crime_overview(world: World) -> dict[str, object]:
++    active_kidnappings = sum(
++        operation.operation_type == CrimeOperationType.KIDNAPPING
++        and operation.status == CrimeOperationStatus.ACTIVE
++        for operation in world.crime_operations.values()
++    )
++    return {
++        "tick": world.tick,
++        "metrics": {
++            "organizations": sum(organization.active for organization in world.crime_organizations.values()),
++            "operations": len(world.crime_operations),
++            "organizedCrimesToday": world.organized_crimes_today,
++            "activeKidnappings": active_kidnappings,
++            "ransomPaidToday": round(world.ransom_paid_today, 2),
++        },
++        "organizations": [
++            {
++                "id": organization.id,
++                "name": organization.name,
++                "leaderId": organization.leader_id,
++                "memberCount": len(organization.member_ids),
++                "territoryId": organization.territory_id,
++                "treasury": round(organization.treasury, 2),
++                "notoriety": round(organization.notoriety, 1),
++                "policeHeat": round(organization.police_heat, 1),
++                "active": organization.active,
++            }
++            for organization in world.crime_organizations.values()
++        ],
++        "operations": [
++            {
++                "id": operation.id,
++                "organizationId": operation.organization_id,
++                "type": operation.operation_type.value,
++                "status": operation.status.value,
++                "victimIds": operation.victim_ids,
++                "buildingId": operation.building_id,
++                "amount": operation.amount,
++                "incidentId": operation.incident_id,
++                "startedTick": operation.started_tick,
++                "resolvedTick": operation.resolved_tick,
++                "outcome": operation.outcome,
++            }
++            for operation in sorted(world.crime_operations.values(), key=lambda item: item.id, reverse=True)[:80]
++        ],
++    }
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/economy.py city-simulator-v0.12.0/backend/app/simulation/economy.py
+--- city-simulator-v0.11.0/backend/app/simulation/economy.py	2026-07-29 14:37:17.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/economy.py	2026-07-29 15:52:45.000000000 +0200
+@@ -31,8 +31,10 @@
+     BuildingType.HOSPITAL,
+     BuildingType.COURT,
+     BuildingType.DETENTION_CENTER,
++    BuildingType.BANK,
++    BuildingType.SHELTER,
+ }
+-PUBLIC_EMPLOYER_TYPES = {BuildingType.PUBLIC, BuildingType.POLICE, BuildingType.HOSPITAL, BuildingType.COURT, BuildingType.DETENTION_CENTER}
++PUBLIC_EMPLOYER_TYPES = {BuildingType.PUBLIC, BuildingType.POLICE, BuildingType.HOSPITAL, BuildingType.COURT, BuildingType.DETENTION_CENTER, BuildingType.SHELTER}
+ MIN_JOB_CHANGE_MINUTES = 7 * 24 * 60
+ MAX_APPLICATION_HISTORY = 40
+ MAX_FINANCIAL_HISTORY = 30
+@@ -48,6 +50,8 @@
+     BuildingType.HOSPITAL: ("Infirmier", 118.0),
+     BuildingType.COURT: ("Greffier", 112.0),
+     BuildingType.DETENTION_CENTER: ("Surveillant", 106.0),
++    BuildingType.BANK: ("Conseiller bancaire", 116.0),
++    BuildingType.SHELTER: ("Travailleur social", 98.0),
+ }
+ 
+ 
+@@ -65,6 +69,18 @@
+ 
+ def job_offer(building: Building, employee_index: int = 0) -> tuple[str, float, int, int, tuple[int, ...]]:
+     title, salary = JOB_PROFILES[building.building_type]
++    variants = {
++        BuildingType.OFFICE: ["Analyste", "Comptable", "Développeur", "Assistant administratif", "Architecte"],
++        BuildingType.FACTORY: ["Ouvrier", "Technicien", "Mécanicien", "Logisticien", "Contrôleur qualité"],
++        BuildingType.SHOP: ["Vendeur", "Caissier", "Responsable de rayon", "Préparateur de commandes"],
++        BuildingType.CAFE: ["Serveur", "Cuisinier", "Barista", "Responsable de salle"],
++        BuildingType.PUBLIC: ["Agent municipal", "Urbaniste", "Bibliothécaire", "Jardinier municipal"],
++        BuildingType.BANK: ["Conseiller bancaire", "Analyste crédit", "Caissier bancaire", "Responsable conformité"],
++        BuildingType.SHELTER: ["Travailleur social", "Éducateur", "Agent d’accueil"],
++    }.get(building.building_type)
++    if variants:
++        title = variants[employee_index % len(variants)]
++        salary += (employee_index % len(variants)) * 3.0
+     if building.building_type in {BuildingType.POLICE, BuildingType.HOSPITAL, BuildingType.DETENTION_CENTER}:
+         start_hour, end_hour = ((6, 14) if employee_index % 2 == 0 else (14, 22))
+         work_days = (1, 2, 3, 4, 5, 6, 7)
+@@ -288,16 +304,15 @@
+ 
+ 
+ def _charge_recurring_household_expenses(world: World) -> None:
++    from .banking import available_funds, withdraw
+     from .housing import charge_daily_rent
+     for household in world.households.values():
+         members = [world.citizens[citizen_id] for citizen_id in household.member_ids]
+         rent_paid = charge_daily_rent(world, household)
+         charge = round(8.0 + len(members) * 5.5, 2)
+         remaining = charge
+-        for citizen in sorted(members, key=lambda item: item.money, reverse=True):
+-            available = max(0.0, citizen.money + citizen.overdraft_limit)
+-            paid = min(remaining, available)
+-            citizen.money = round(citizen.money - paid, 2)
++        for citizen in sorted(members, key=lambda item: available_funds(item, allow_credit=True), reverse=True):
++            paid = withdraw(world, citizen, remaining, label="Charges courantes du foyer", transaction_type="household_charge", allow_credit=True)
+             citizen.expenses_today = round(citizen.expenses_today + paid, 2)
+             remaining = round(remaining - paid, 2)
+             if remaining <= 0:
+@@ -498,6 +513,12 @@
+         application.status = JobApplicationStatus.ACCEPTED
+         application.resolved_tick = world.tick
+         application.reason = "Candidature retenue."
++    for other_id in citizen.application_ids:
++        other = world.job_applications.get(other_id)
++        if other is not None and other.id != (application.id if application else -1) and other.status == JobApplicationStatus.PENDING:
++            other.status = JobApplicationStatus.WITHDRAWN
++            other.resolved_tick = world.tick
++            other.reason = "Retirée automatiquement : le citoyen possède déjà un emploi."
+     world.hires_today += 1
+     world._emit(
+         "employee_hired",
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/generator.py city-simulator-v0.12.0/backend/app/simulation/generator.py
+--- city-simulator-v0.11.0/backend/app/simulation/generator.py	2026-07-29 15:33:34.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/generator.py	2026-07-29 16:24:00.000000000 +0200
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ import random
++import math
+ 
+ from .models import (
+     Building,
+@@ -35,18 +36,16 @@
+     }
+ 
+ 
+-def generate_buildings() -> dict[int, Building]:
++def generate_buildings(citizen_count: int = 100) -> dict[int, Building]:
+     buildings: dict[int, Building] = {}
+     next_id = 1
+ 
++    # Îlots résidentiels irréguliers, accrochés aux axes et espacés des pôles de service.
+     home_positions = [
+-        (2, 2), (6, 2), (10, 2), (14, 2), (18, 2),
+-        (2, 7), (6, 7), (10, 7), (14, 7), (18, 7),
+-        (2, 17), (6, 17), (10, 17), (14, 17), (18, 17),
+-        (24, 2), (28, 2), (32, 2), (36, 2),
+-        (24, 17), (28, 17), (32, 17), (36, 17),
+-        (20, 2), (38, 2), (20, 17), (38, 17),
+-        (2, 12), (6, 12), (30, 7), (32, 7),
++        (1, 1), (5, 2), (9, 1), (13, 2), (17, 1), (21, 2), (27, 1), (31, 2), (35, 1),
++        (1, 6), (5, 7), (9, 6), (13, 7), (17, 6), (21, 6), (27, 6), (31, 6),
++        (1, 15), (9, 15), (13, 15), (17, 15), (21, 15), (39, 15),
++        (1, 20), (5, 20), (9, 20), (13, 20), (17, 20), (21, 20), (29, 20), (38, 20),
+     ]
+     for index, (x, y) in enumerate(home_positions, start=1):
+         buildings[next_id] = Building(
+@@ -55,7 +54,7 @@
+             building_type=BuildingType.HOME,
+             x=x,
+             y=y,
+-            capacity=4 + (index % 4),
++            capacity=max(6, math.ceil(citizen_count / max(1, len(home_positions) - 5))) + (index % 3),
+             rent_monthly=round(330.0 + (index % 7) * 58.0 + (20 - min(20, abs(x - 20))) * 4.0, 2),
+             housing_condition=round(55.0 + (index * 17 % 40), 1),
+             comfort=round(45.0 + (index * 13 % 43), 1),
+@@ -74,6 +73,8 @@
+         ("Centre médical Saint-Roch", BuildingType.HOSPITAL, 36, 7, 16),
+         ("Tribunal municipal", BuildingType.COURT, 26, 19, 12),
+         ("Centre de détention", BuildingType.DETENTION_CENTER, 34, 19, 14),
++        ("Banque des Quatre Quartiers", BuildingType.BANK, 6, 11, 18),
++        ("Accueil municipal de nuit", BuildingType.SHELTER, 6, 15, 24),
+     ]
+     for name, building_type, x, y, capacity in workplaces:
+         building = Building(
+@@ -95,10 +96,12 @@
+                 BuildingType.HOSPITAL: 3,
+                 BuildingType.COURT: 2,
+                 BuildingType.DETENTION_CENTER: 2,
++                BuildingType.BANK: 3,
++                BuildingType.SHELTER: 2,
+                 BuildingType.PARK: 0,
+             }.get(building_type, 1),
+-            employee_capacity=(8 if building_type == BuildingType.HOSPITAL else 4 if building_type in {BuildingType.COURT, BuildingType.DETENTION_CENTER} else capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity),
+-            target_employees=(8 if building_type == BuildingType.HOSPITAL else 4 if building_type in {BuildingType.COURT, BuildingType.DETENTION_CENTER} else capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity),
++            employee_capacity=max(4, (capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity) * max(1, math.ceil(citizen_count / 100))) if building_type not in {BuildingType.PARK, BuildingType.SHELTER} else (max(4, math.ceil(citizen_count / 120)) if building_type == BuildingType.SHELTER else 0),
++            target_employees=max(4, (capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity) * max(1, math.ceil(citizen_count / 100))) if building_type not in {BuildingType.PARK, BuildingType.SHELTER} else (max(4, math.ceil(citizen_count / 120)) if building_type == BuildingType.SHELTER else 0),
+             cash={
+                 BuildingType.OFFICE: 14_000.0,
+                 BuildingType.FACTORY: 12_000.0,
+@@ -109,6 +112,8 @@
+                 BuildingType.HOSPITAL: 24_000.0,
+                 BuildingType.COURT: 18_000.0,
+                 BuildingType.DETENTION_CENTER: 20_000.0,
++                BuildingType.BANK: 45_000.0,
++                BuildingType.SHELTER: 16_000.0,
+                 BuildingType.PARK: 0.0,
+             }.get(building_type, 6_000.0),
+             fixed_cost_daily={
+@@ -121,12 +126,17 @@
+                 BuildingType.HOSPITAL: 420.0,
+                 BuildingType.COURT: 300.0,
+                 BuildingType.DETENTION_CENTER: 360.0,
++                BuildingType.BANK: 320.0,
++                BuildingType.SHELTER: 280.0,
+                 BuildingType.PARK: 0.0,
+             }.get(building_type, 160.0),
+             food_stock=420.0 if building_type == BuildingType.SHOP else 0.0,
+             goods_stock=220.0 if building_type == BuildingType.SHOP else 0.0,
+             medical_beds=8 if building_type == BuildingType.HOSPITAL else 0,
++            bank_reserves=120_000.0 if building_type == BuildingType.BANK else 0.0,
+         )
++        if building_type != BuildingType.PARK:
++            building.target_employees = max(building.employees_required, round(building.employee_capacity * 0.55))
+         buildings[next_id] = building
+         next_id += 1
+ 
+@@ -155,6 +165,8 @@
+             BuildingType.SHOP,
+             BuildingType.CAFE,
+             BuildingType.PUBLIC,
++            BuildingType.BANK,
++            BuildingType.SHELTER,
+         }
+     ]
+ 
+@@ -168,6 +180,8 @@
+         BuildingType.HOSPITAL: ("Infirmier", 118.0),
+         BuildingType.COURT: ("Greffier", 112.0),
+         BuildingType.DETENTION_CENTER: ("Surveillant", 106.0),
++        BuildingType.BANK: ("Conseiller bancaire", 116.0),
++        BuildingType.SHELTER: ("Travailleur social", 98.0),
+     }
+ 
+     citizens: dict[int, Citizen] = {}
+@@ -200,6 +214,18 @@
+         if workplace:
+             work_load[workplace.id] += 1
+             job_title, salary = job_by_type[workplace.building_type]
++            variants = {
++                BuildingType.OFFICE: ["Analyste", "Comptable", "Développeur", "Assistant administratif", "Architecte"],
++                BuildingType.FACTORY: ["Ouvrier", "Technicien", "Mécanicien", "Logisticien", "Contrôleur qualité"],
++                BuildingType.SHOP: ["Vendeur", "Caissier", "Responsable de rayon", "Préparateur de commandes"],
++                BuildingType.CAFE: ["Serveur", "Cuisinier", "Barista", "Responsable de salle"],
++                BuildingType.PUBLIC: ["Agent municipal", "Urbaniste", "Bibliothécaire", "Jardinier municipal"],
++                BuildingType.BANK: ["Conseiller bancaire", "Analyste crédit", "Caissier bancaire", "Responsable conformité"],
++                BuildingType.SHELTER: ["Travailleur social", "Éducateur", "Agent d’accueil"],
++            }.get(workplace.building_type)
++            if variants:
++                job_title = variants[(work_load[workplace.id] - 1) % len(variants)]
++                salary += ((work_load[workplace.id] - 1) % len(variants)) * 3.0
+             if workplace.building_type == BuildingType.HOSPITAL and work_load[workplace.id] % 3 == 1:
+                 job_title, salary = "Médecin", 145.0
+             elif workplace.building_type == BuildingType.COURT and work_load[workplace.id] == 1:
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/housing.py city-simulator-v0.12.0/backend/app/simulation/housing.py
+--- city-simulator-v0.11.0/backend/app/simulation/housing.py	2026-07-29 12:37:52.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/housing.py	2026-07-29 15:55:52.000000000 +0200
+@@ -34,7 +34,7 @@
+ 
+ 
+ def common_budget(world: World, household: Household) -> float:
+-    return round(sum(world.citizens[cid].money for cid in household.member_ids), 2)
++    return round(sum(world.citizens[cid].money + world.citizens[cid].bank_balance + world.citizens[cid].savings_balance - world.citizens[cid].bank_debt for cid in household.member_ids), 2)
+ 
+ 
+ def commute_distance(world: World, household: Household, home_id: int | None = None) -> float:
+@@ -54,6 +54,8 @@
+ 
+ 
+ def housing_reason(world: World, household: Household) -> str | None:
++    if household.housing_status == "homeless":
++        return "sans logement"
+     home = world.buildings[household.home_id]
+     count = len(household.member_ids)
+     income = household_income_monthly(world, household)
+@@ -75,6 +77,23 @@
+     for household in sorted(list(world.households.values()), key=lambda h: h.id):
+         if household.id not in world.households:
+             continue
++        members = [world.citizens[cid] for cid in household.member_ids]
++        for citizen in members:
++            if citizen.food_units < 0.25 and citizen.money + citizen.bank_balance <= 0:
++                citizen.food_insecurity_days += 1
++            else:
++                citizen.food_insecurity_days = max(0, citizen.food_insecurity_days - 1)
++        if household.housing_status == "homeless":
++            destination = best_home(world, household, "sans logement")
++            if destination is not None and common_budget(world, household) >= destination.rent_monthly * 0.5:
++                move_household(world, household, destination.id, "retour vers un logement stable")
++                for citizen in members:
++                    citizen.is_homeless = False
++                    citizen.homeless_since_tick = None
++            continue
++        if any(citizen.food_insecurity_days >= 3 for citizen in members):
++            become_homeless(world, household, "absence durable de ressources pour se nourrir")
++            continue
+         if household.cohesion < 12 and household.conflicts >= 5 and len(household.member_ids) >= 2 and world.tick - household.last_move_tick >= SEARCH_COOLDOWN:
+             split_household(world, household)
+         reason = housing_reason(world, household)
+@@ -96,6 +115,8 @@
+             move_household(world, household, destination.id, reason)
+         elif household.missed_rent_days >= 4:
+             place_temporary(world, household)
++        if household.missed_rent_days >= 7 or any(citizen.food_insecurity_days >= 3 for citizen in members):
++            become_homeless(world, household, "impayés de loyer" if household.missed_rent_days >= 7 else "absence durable de ressources pour se nourrir")
+ 
+ 
+ def best_home(world: World, household: Household, reason: str) -> Building | None:
+@@ -197,17 +218,48 @@
+     if municipal is not None:
+         household.temporary_host_household_id = None
+         move_household(world, household, municipal.id, "relogement municipal temporaire", event_type="temporary")
++        return
++    become_homeless(world, household, "aucune solution d'hébergement disponible")
++
++
++def become_homeless(world: World, household: Household, reason: str) -> None:
++    if household.housing_status == "homeless":
++        return
++    origin = world.buildings[household.home_id]
++    shelter = next((building for building in world.buildings.values() if building.building_type == BuildingType.SHELTER and len(residents(world, building.id)) + len(household.member_ids) <= building.capacity), None)
++    destination = shelter or next(building for building in world.buildings.values() if building.building_type == BuildingType.PARK)
++    household.home_id = destination.id
++    household.housing_status = "homeless"
++    household.housing_search_since_tick = world.tick
++    household.housing_search_reason = reason
++    household.temporary_host_household_id = None
++    household.last_move_tick = world.tick
++    for citizen_id in household.member_ids:
++        citizen = world.citizens[citizen_id]
++        citizen.previous_home_id = origin.id
++        citizen.home_id = destination.id
++        citizen.is_homeless = True
++        citizen.homeless_since_tick = world.tick
++        if citizen.travel_stage == TravelStage.IDLE:
++            origin.occupants.discard(citizen_id)
++            destination.occupants.add(citizen_id)
++            citizen.x, citizen.y = destination.entrance
++        citizen.needs.stress = min(100.0, citizen.needs.stress + 18.0)
++    world._emit("household_became_homeless", f"Le foyer #{household.id} devient sans abri : {reason}.", citizen_ids=tuple(household.member_ids), building_id=destination.id, severity="critical")
+ 
+ 
+ def charge_daily_rent(world: World, household: Household) -> float:
++    from .banking import available_funds, withdraw
++    if household.housing_status == "homeless":
++        household.rent_due_today = 0.0
++        household.rent_paid_today = 0.0
++        return 0.0
+     due = round(world.buildings[household.home_id].rent_monthly / 30.0, 2)
+     household.rent_due_today = due
+     remaining = due
+     members = [world.citizens[cid] for cid in household.member_ids]
+-    for citizen in sorted(members, key=lambda item: item.money, reverse=True):
+-        available = max(0.0, citizen.money + citizen.overdraft_limit)
+-        paid = min(remaining, available)
+-        citizen.money = round(citizen.money-paid, 2)
++    for citizen in sorted(members, key=lambda item: available_funds(item, allow_credit=True), reverse=True):
++        paid = withdraw(world, citizen, remaining, label=f"Loyer — {world.buildings[household.home_id].name}", transaction_type="rent", counterparty_id=household.home_id, allow_credit=True)
+         citizen.expenses_today = round(citizen.expenses_today+paid, 2)
+         remaining = round(remaining-paid, 2)
+         if remaining <= 0:
+@@ -228,7 +280,7 @@
+     homes = [h for h in world.buildings.values() if h.building_type == BuildingType.HOME]
+     occupied = {h.home_id for h in world.households.values()}
+     commute = [commute_distance(world,h) for h in world.households.values()]
+-    return {"medianRent": round(median([h.rent_monthly for h in homes]),2) if homes else 0.0, "vacancyRate": round((len(homes)-len(occupied))/max(1,len(homes))*100,1), "overcrowdedHouseholds": sum(len(h.member_ids)>world.buildings[h.home_id].capacity for h in world.households.values()), "distressedHouseholds": sum(h.rent_arrears>0 or h.housing_status in {"searching","temporary"} for h in world.households.values()), "movesToday": world.moves_today, "averageHomeWorkDistance": round(sum(commute)/max(1,len(commute)),1), "searchingHouseholds": sum(h.housing_status=="searching" for h in world.households.values()), "temporaryHouseholds": sum(h.housing_status=="temporary" for h in world.households.values())}
++    return {"medianRent": round(median([h.rent_monthly for h in homes]),2) if homes else 0.0, "vacancyRate": round((len(homes)-len(occupied))/max(1,len(homes))*100,1), "overcrowdedHouseholds": sum(len(h.member_ids)>world.buildings[h.home_id].capacity for h in world.households.values()), "distressedHouseholds": sum(h.rent_arrears>0 or h.housing_status in {"searching","temporary"} for h in world.households.values()), "movesToday": world.moves_today, "averageHomeWorkDistance": round(sum(commute)/max(1,len(commute)),1), "searchingHouseholds": sum(h.housing_status=="searching" for h in world.households.values()), "temporaryHouseholds": sum(h.housing_status=="temporary" for h in world.households.values()), "homelessCitizens": sum(c.is_homeless for c in world.citizens.values()), "homelessHouseholds": sum(h.housing_status=="homeless" for h in world.households.values())}
+ 
+ 
+ def housing_overview(world: World) -> dict[str, object]:
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/justice.py city-simulator-v0.12.0/backend/app/simulation/justice.py
+--- city-simulator-v0.11.0/backend/app/simulation/justice.py	2026-07-29 14:37:17.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/justice.py	2026-07-29 16:19:14.000000000 +0200
+@@ -2,6 +2,7 @@
+ 
+ from typing import TYPE_CHECKING, Any
+ 
++from .banking import deposit, withdraw
+ from .economy import terminate_employment
+ from .models import (
+     Activity,
+@@ -81,7 +82,7 @@
+ 
+ 
+ def build_case(world: World, investigation: Investigation, incident: Incident, defendant: Citizen) -> JudicialCase:
+-    priority = 3 if incident.incident_type == "serious_assault" else 2 if incident.severity == "danger" else 1
++    priority = 3 if incident.incident_type in {"serious_assault", "robbery", "kidnapping"} else 2 if incident.severity == "danger" else 1
+     case = JudicialCase(
+         id=world._next_case_id,
+         investigation_id=investigation.id,
+@@ -253,6 +254,21 @@
+         rows.append(_new_sentence(world, case, defendant, SentenceType.FINE, "Amende", amount=world.rng.uniform(90, 260)))
+         rows.append(_new_sentence(world, case, defendant, SentenceType.COMPENSATION, "Indemnisation de la victime", amount=world.rng.uniform(40, 140), beneficiary_id=victim_id))
+         rows.append(_new_sentence(world, case, defendant, SentenceType.PROBATION, "Probation de 14 jours", duration=14 * 24 * 60))
++    elif incident.incident_type == "extortion":
++        rows.append(_new_sentence(world, case, defendant, SentenceType.SHORT_DETENTION, "Détention de 2 jours", duration=2 * 24 * 60))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.FINE, "Amende pour extorsion", amount=world.rng.uniform(500, 1400)))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.PROBATION, "Probation de 30 jours", duration=30 * 24 * 60))
++    elif incident.incident_type == "robbery":
++        rows.append(_new_sentence(world, case, defendant, SentenceType.LONG_DETENTION, "Détention de 6 jours", duration=6 * 24 * 60))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.COMPENSATION, "Réparation du préjudice", amount=world.rng.uniform(600, 1800), beneficiary_id=victim_id))
++    elif incident.incident_type == "kidnapping":
++        rows.append(_new_sentence(world, case, defendant, SentenceType.LONG_DETENTION, "Détention de 10 jours", duration=10 * 24 * 60))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.COMPENSATION, "Indemnisation de la victime", amount=world.rng.uniform(1000, 3000), beneficiary_id=victim_id))
++        if victim_id is not None:
++            rows.append(_new_sentence(world, case, defendant, SentenceType.RESTRAINING_ORDER, "Interdiction de contact de 60 jours", duration=60 * 24 * 60, beneficiary_id=victim_id))
++    elif incident.incident_type == "restraining_order_violation":
++        rows.append(_new_sentence(world, case, defendant, SentenceType.SHORT_DETENTION, "Détention pour violation d’ordonnance", duration=24 * 60))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.PROBATION, "Probation renforcée de 30 jours", duration=30 * 24 * 60))
+     elif incident.incident_type == "serious_assault":
+         rows.append(_new_sentence(world, case, defendant, SentenceType.LONG_DETENTION, "Détention de 4 jours", duration=4 * 24 * 60))
+         if victim_id is not None:
+@@ -282,12 +298,11 @@
+ def _activate_sentence(world: World, sentence: JudicialSentence, citizen: Citizen) -> None:
+     sentence.status = SentenceStatus.ACTIVE
+     if sentence.sentence_type in {SentenceType.FINE, SentenceType.COMPENSATION}:
+-        paid = min(max(0.0, citizen.money + citizen.overdraft_limit), sentence.amount)
+-        citizen.money = round(citizen.money - paid, 2)
++        paid = withdraw(world, citizen, sentence.amount, label=sentence.label, transaction_type="judicial_payment", counterparty_id=sentence.beneficiary_id, allow_credit=True)
+         citizen.financial_stress = min(100.0, citizen.financial_stress + 8.0)
+         if sentence.beneficiary_id in world.citizens:
+             beneficiary = world.citizens[sentence.beneficiary_id]
+-            beneficiary.money = round(beneficiary.money + paid, 2)
++            deposit(world, beneficiary, paid, label="Indemnisation judiciaire", transaction_type="compensation", counterparty_id=citizen.id)
+         sentence.status = SentenceStatus.COMPLETED
+     elif sentence.sentence_type in {SentenceType.SHORT_DETENTION, SentenceType.LONG_DETENTION}:
+         citizen.detained_until_tick = max(citizen.detained_until_tick or 0, sentence.end_tick or world.tick)
+@@ -339,6 +354,24 @@
+     return any(sentence.sentence_type == SentenceType.RESTRAINING_ORDER and sentence.status in {SentenceStatus.ACTIVE, SentenceStatus.VIOLATED} and {sentence.citizen_id, sentence.beneficiary_id} == {first_id, second_id} for sentence in world.sentences.values())
+ 
+ 
++
++def attempt_contact_violation(world: World, offender_id: int, recipient_id: int) -> bool:
++    sentence = next((item for item in world.sentences.values() if item.sentence_type == SentenceType.RESTRAINING_ORDER and item.status in {SentenceStatus.ACTIVE, SentenceStatus.VIOLATED} and item.citizen_id == offender_id and item.beneficiary_id == recipient_id), None)
++    if sentence is None:
++        return False
++    offender = world.citizens[offender_id]
++    chance = min(0.82, 0.05 + offender.impulsivity / 180.0 + offender.aggression / 260.0)
++    if world.rng.random() >= chance:
++        world._emit("restraining_order_respected", f"{offender.full_name} renonce à contourner l’interdiction de communication.", citizen_ids=(offender_id, recipient_id), severity="warning")
++        return False
++    sentence.status = SentenceStatus.VIOLATED
++    sentence.violation_count += 1
++    offender.probation_violations += 1
++    world.probation_violations_today += 1
++    incident = world.create_incident(incident_type="restraining_order_violation", title="Violation d’une interdiction de communication", description=f"{offender.full_name} tente de contacter une personne protégée par décision de justice.", severity="danger", citizen_ids=(offender_id, recipient_id), offender_id=offender_id, victim_ids=(recipient_id,), reported=world.rng.random() < 0.7, lifetime_minutes=360, conflict_level=3)
++    world._emit("restraining_order_violated", f"{offender.full_name} enfreint une interdiction de communication.", citizen_ids=(offender_id, recipient_id), severity="danger", incident_id=incident.id)
++    return True
++
+ def _check_probation_violation(world: World, citizen_id: int | None, incident_id: int) -> None:
+     if citizen_id is None:
+         return
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/metrics.py city-simulator-v0.12.0/backend/app/simulation/metrics.py
+--- city-simulator-v0.11.0/backend/app/simulation/metrics.py	2026-07-29 15:33:34.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/metrics.py	2026-07-29 16:03:34.000000000 +0200
+@@ -3,7 +3,9 @@
+ from collections.abc import Iterable
+ from typing import TYPE_CHECKING
+ 
++from .banking import banking_overview
+ from .communication import communication_metrics
++from .crime import crime_overview
+ from .economy import economy_metrics
+ from .health import health_metrics
+ from .housing import housing_metrics
+@@ -197,6 +199,8 @@
+         social_metrics(world),
+         communication_metrics(world),
+         neighborhood_city_metrics(world),
++        banking_overview(world)["metrics"],
++        crime_overview(world)["metrics"],
+     )
+     return {key: value for section in sections for key, value in section.items()}
+ 
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/models.py city-simulator-v0.12.0/backend/app/simulation/models.py
+--- city-simulator-v0.11.0/backend/app/simulation/models.py	2026-07-29 15:21:39.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/models.py	2026-07-29 16:00:15.000000000 +0200
+@@ -20,6 +20,7 @@
+     IN_TREATMENT = "in_treatment"
+     HOSPITALIZED = "hospitalized"
+     COMMUNITY_SERVICE = "community_service"
++    KIDNAPPED = "kidnapped"
+ 
+ 
+ class BuildingType(StrEnum):
+@@ -34,6 +35,8 @@
+     HOSPITAL = "hospital"
+     COURT = "court"
+     DETENTION_CENTER = "detention_center"
++    BANK = "bank"
++    SHELTER = "shelter"
+ 
+ 
+ class TransportMode(StrEnum):
+@@ -143,6 +146,22 @@
+     VIOLATED = "violated"
+ 
+ 
++class CrimeOperationType(StrEnum):
++    THEFT = "theft"
++    ROBBERY = "robbery"
++    EXTORTION = "extortion"
++    KIDNAPPING = "kidnapping"
++    RANSOM = "ransom"
++
++
++class CrimeOperationStatus(StrEnum):
++    PLANNED = "planned"
++    ACTIVE = "active"
++    SUCCEEDED = "succeeded"
++    FAILED = "failed"
++    DISRUPTED = "disrupted"
++
++
+ class CommunicationChannel(StrEnum):
+     PHONE_CALL = "phone_call"
+     SMS = "sms"
+@@ -401,6 +420,9 @@
+     owner_type: str = "private"
+     housing_history: list[HousingRecord] = field(default_factory=list)
+     neighborhood_id: int = 0
++    bank_reserves: float = 0.0
++    outstanding_loans: float = 0.0
++    interest_income: float = 0.0
+ 
+     @property
+     def entrance(self) -> tuple[int, int]:
+@@ -501,6 +523,16 @@
+ 
+ 
+ @dataclass(slots=True)
++class BankTransaction:
++    tick: int
++    transaction_type: str
++    amount: float
++    balance_after: float
++    label: str
++    counterparty_id: int | None = None
++
++
++@dataclass(slots=True)
+ class Citizen:
+     id: int
+     first_name: str
+@@ -609,6 +641,18 @@
+     email_address: str = ""
+     communication_ids: list[int] = field(default_factory=list)
+     unread_communication_ids: list[int] = field(default_factory=list)
++    bank_balance: float = 0.0
++    savings_balance: float = 0.0
++    bank_debt: float = 0.0
++    credit_score: float = 60.0
++    banking_history: list[BankTransaction] = field(default_factory=list)
++    is_homeless: bool = False
++    homeless_since_tick: int | None = None
++    previous_home_id: int | None = None
++    food_insecurity_days: int = 0
++    crime_organization_id: int | None = None
++    kidnapped_until_tick: int | None = None
++    kidnapped_by_organization_id: int | None = None
+ 
+     @property
+     def full_name(self) -> str:
+@@ -788,6 +832,39 @@
+     duration_minutes: int = 0
+     cost: float = 0.0
+     failure_reason: str | None = None
++    violates_order: bool = False
++
++
++@dataclass(slots=True)
++class CrimeOrganization:
++    id: int
++    name: str
++    leader_id: int
++    member_ids: list[int]
++    territory_id: int
++    treasury: float = 0.0
++    notoriety: float = 10.0
++    police_heat: float = 0.0
++    active: bool = True
++    operation_ids: list[int] = field(default_factory=list)
++
++
++@dataclass(slots=True)
++class CrimeOperation:
++    id: int
++    organization_id: int
++    operation_type: CrimeOperationType
++    status: CrimeOperationStatus
++    planned_tick: int
++    perpetrator_ids: list[int]
++    victim_ids: list[int]
++    building_id: int | None
++    amount: float
++    incident_id: int | None = None
++    started_tick: int | None = None
++    resolved_tick: int | None = None
++    ransom_due_tick: int | None = None
++    outcome: str | None = None
+ 
+ 
+ @dataclass(slots=True)
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/persistence.py city-simulator-v0.12.0/backend/app/simulation/persistence.py
+--- city-simulator-v0.11.0/backend/app/simulation/persistence.py	2026-07-29 15:19:47.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/persistence.py	2026-07-29 15:52:45.000000000 +0200
+@@ -2,7 +2,7 @@
+ import json
+ from pathlib import Path
+ from typing import Any
+-SAVE_VERSION = 12
++SAVE_VERSION = 13
+ 
+ def validate_save_version(state: dict[str, Any]) -> None:
+     if int(state.get("version",0)) != SAVE_VERSION: raise ValueError("Version de sauvegarde non prise en charge.")
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/service.py city-simulator-v0.12.0/backend/app/simulation/service.py
+--- city-simulator-v0.11.0/backend/app/simulation/service.py	2026-07-29 15:20:30.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/service.py	2026-07-29 16:08:12.000000000 +0200
+@@ -19,8 +19,13 @@
+ 
+ class SimulationService:
+     ALLOWED_SPEEDS = {1, 5, 20, 60}
++    MIN_CITIZENS = 20
++    MAX_CITIZENS = 1000
+ 
+-    def __init__(self, *, seed: int = 12345, citizen_count: int = 100) -> None:
++    def __init__(self, *, seed: int = 12345, citizen_count: int | None = None) -> None:
++        citizen_count = citizen_count or int(os.getenv("CITYSIM_CITIZEN_COUNT", "100"))
++        if not self.MIN_CITIZENS <= citizen_count <= self.MAX_CITIZENS:
++            raise ValueError(f"La population doit être comprise entre {self.MIN_CITIZENS} et {self.MAX_CITIZENS}.")
+         self.seed = seed
+         self.citizen_count = citizen_count
+         self.world = World(seed=seed, citizen_count=citizen_count)
+@@ -59,6 +64,8 @@
+                 "speed": self.status.speed,
+                 "allowedSpeeds": sorted(self.ALLOWED_SPEEDS),
+                 "hasSave": self.save_path.exists(),
++                "citizenCount": self.citizen_count,
++                "maxCitizenCount": self.MAX_CITIZENS,
+             }
+             return data
+ 
+@@ -70,6 +77,8 @@
+                 "speed": self.status.speed,
+                 "allowedSpeeds": sorted(self.ALLOWED_SPEEDS),
+                 "hasSave": self.save_path.exists(),
++                "citizenCount": self.citizen_count,
++                "maxCitizenCount": self.MAX_CITIZENS,
+             }
+             return data
+ 
+@@ -97,6 +106,10 @@
+         async with self._lock:
+             return self.world.get_economy_overview()
+ 
++    async def banking_overview(self) -> dict:
++        async with self._lock:
++            return self.world.get_banking_overview()
++
+     async def health_overview(self) -> dict:
+         async with self._lock:
+             return self.world.get_health_overview()
+@@ -109,6 +122,10 @@
+         async with self._lock:
+             return self.world.get_household_detail(household_id)
+ 
++    async def crime_overview(self) -> dict:
++        async with self._lock:
++            return self.world.get_crime_overview()
++
+     async def justice_overview(self) -> dict:
+         async with self._lock:
+             return self.world.get_justice_overview()
+@@ -133,9 +150,9 @@
+         async with self._lock:
+             return self.world.get_citizen_communications(citizen_id)
+ 
+-    async def send_communication(self, *, sender_id: int, recipient_id: int, channel: CommunicationChannel, tone: CommunicationTone, subject: str, body: str) -> dict:
++    async def send_communication(self, *, sender_id: int, recipient_id: int, channel: CommunicationChannel, tone: CommunicationTone, subject: str, body: str, attempt_order_violation: bool = False) -> dict:
+         async with self._lock:
+-            item = send_communication(self.world, sender_id=sender_id, recipient_id=recipient_id, channel=channel, tone=tone, subject=subject, body=body)
++            item = send_communication(self.world, sender_id=sender_id, recipient_id=recipient_id, channel=channel, tone=tone, subject=subject, body=body, attempt_order_violation=attempt_order_violation)
+             return communication_summary(self.world, item)
+ 
+     async def investigation_detail(self, investigation_id: int) -> dict:
+@@ -160,10 +177,14 @@
+         async with self._lock:
+             self.world.run_minutes(minutes)
+ 
+-    async def reset(self, *, seed: int | None = None) -> None:
++    async def reset(self, *, seed: int | None = None, citizen_count: int | None = None) -> None:
+         async with self._lock:
+             if seed is not None:
+                 self.seed = seed
++            if citizen_count is not None:
++                if not self.MIN_CITIZENS <= citizen_count <= self.MAX_CITIZENS:
++                    raise ValueError(f"La population doit être comprise entre {self.MIN_CITIZENS} et {self.MAX_CITIZENS}.")
++                self.citizen_count = citizen_count
+             self.world = World(seed=self.seed, citizen_count=self.citizen_count)
+ 
+     async def save(self) -> Path:
+@@ -174,3 +195,4 @@
+         async with self._lock:
+             self.world = World.from_state(read_snapshot(self.save_path))
+             self.seed = self.world.seed
++            self.citizen_count = len(self.world.citizens)
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/snapshot.py city-simulator-v0.12.0/backend/app/simulation/snapshot.py
+--- city-simulator-v0.11.0/backend/app/simulation/snapshot.py	2026-07-29 15:20:30.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/snapshot.py	2026-07-29 16:03:34.000000000 +0200
+@@ -1,6 +1,8 @@
+ from __future__ import annotations
+ from typing import TYPE_CHECKING, Any
++from .banking import banking_overview
+ from .communication import communication_overview
++from .crime import crime_overview
+ from .economy import economy_overview
+ from .health import health_overview
+ from .housing import housing_overview
+@@ -24,7 +26,7 @@
+         "roads":{"congestion":world._congestion_cells()},
+         "transport":{"operating":world.bus_operating},
+         "social":{"events":[world._social_event_to_dict(event) for event in active_social_events],"households":[world._household_summary(household) for household in world.households.values()]},
+-        "economy":economy_overview(world),"health":health_overview(world),"housing":housing_overview(world),"justice":justice_overview(world),"communications":communication_overview(world),"neighborhoods":neighborhood_overview(world),
++        "economy":economy_overview(world),"banking":banking_overview(world),"crime":crime_overview(world),"health":health_overview(world),"housing":housing_overview(world),"justice":justice_overview(world),"communications":communication_overview(world),"neighborhoods":neighborhood_overview(world),
+         "incidents":[world._incident_summary(incident) for incident in active_incidents],
+         "events":[world._event_to_dict(event) for event in world.events[-80:]],
+     }
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/social.py city-simulator-v0.12.0/backend/app/simulation/social.py
+--- city-simulator-v0.11.0/backend/app/simulation/social.py	2026-07-29 14:15:25.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/social.py	2026-07-29 16:20:49.000000000 +0200
+@@ -3,6 +3,7 @@
+ from itertools import combinations
+ from typing import TYPE_CHECKING
+ 
++from .banking import available_funds, withdraw
+ from .justice import contact_forbidden
+ from .models import (
+     BuildingType,
+@@ -274,8 +275,8 @@
+             for citizen in present:
+                 citizen.needs.social = max(0.0, citizen.needs.social - 18.0)
+                 citizen.needs.stress = max(0.0, citizen.needs.stress - 5.0)
+-                if event.event_type == SocialEventType.COFFEE and citizen.money >= 6:
+-                    citizen.money = round(citizen.money - 6.0, 2)
++                if event.event_type == SocialEventType.COFFEE and available_funds(citizen) >= 6:
++                    withdraw(world, citizen, 6.0, label=f"Sortie à {building.name}", transaction_type="social", counterparty_id=building.id)
+             event.status = SocialEventStatus.COMPLETED
+             world.social_gatherings_completed += 1
+             world._emit(
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/work.py city-simulator-v0.12.0/backend/app/simulation/work.py
+--- city-simulator-v0.11.0/backend/app/simulation/work.py	2026-07-28 20:36:20.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/work.py	2026-07-29 15:52:45.000000000 +0200
+@@ -2,6 +2,7 @@
+ 
+ from typing import TYPE_CHECKING
+ 
++from .banking import available_funds, deposit, withdraw
+ from .economy import record_purchase, record_salary_payment, record_work_minute
+ from .models import Activity, BuildingType, BusinessStatus, CareStatus, Citizen, PoliceMeasure, TravelStage, VehicleStatus, VehicleType
+ 
+@@ -151,7 +152,7 @@
+             if citizen.financial_stress >= 55.0 or citizen.workplace_id is None:
+                 goods_budget *= 0.35
+                 goods_wanted *= 0.5
+-            available_credit = max(0.0, citizen.money + citizen.overdraft_limit)
++            available_credit = available_funds(citizen, allow_credit=True)
+             food_bought = min(food_wanted, market.food_stock, available_credit / 3.2, food_budget / 3.2)
+             food_cost = round(food_bought * 3.2, 2)
+             remaining_credit = max(0.0, available_credit - food_cost)
+@@ -161,7 +162,9 @@
+             if cost <= 0:
+                 citizen.needs.stress = min(100.0, citizen.needs.stress + 2.0)
+                 continue
+-            citizen.money = round(citizen.money - cost, 2)
++            paid = withdraw(world, citizen, cost, label=f"Achats à {market.name}", transaction_type="purchase", counterparty_id=market.id, allow_credit=True)
++            if paid + 0.01 < cost:
++                continue
+             record_purchase(world, citizen, food_cost=food_cost, goods_cost=goods_cost)
+             citizen.food_units += food_bought
+             citizen.goods_units += goods_bought
+@@ -190,7 +193,7 @@
+         ratio = min(1.0, citizen.minutes_worked_today / scheduled_minutes)
+         if ratio >= 0.45:
+             pay = round(citizen.salary_daily * ratio, 2)
+-            citizen.money = round(citizen.money + pay, 2)
++            deposit(world, citizen, pay, label=f"Salaire — {world.buildings[citizen.workplace_id].name}", transaction_type="salary", counterparty_id=citizen.workplace_id, cash_share=0.15)
+             record_salary_payment(world, citizen, pay)
+             if ratio >= 0.82:
+                 citizen.shifts_completed += 1
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/app/simulation/world.py city-simulator-v0.12.0/backend/app/simulation/world.py
+--- city-simulator-v0.11.0/backend/app/simulation/world.py	2026-07-29 15:21:39.000000000 +0200
++++ city-simulator-v0.12.0/backend/app/simulation/world.py	2026-07-29 16:20:49.000000000 +0200
+@@ -5,6 +5,7 @@
+ from collections import Counter
+ from typing import Any
+ 
++from .banking import available_funds, banking_overview, initialize_banking, update_banking, withdraw
+ from .communication import (
+     citizen_communications,
+     communication_overview,
+@@ -12,6 +13,7 @@
+     reset_communication_day,
+     update_communications,
+ )
++from .crime import crime_overview, initialize_crime, reset_crime_day, update_crime
+ from .economy import (
+     assigned_staff_count,
+     close_economic_day,
+@@ -37,6 +39,7 @@
+ )
+ from .models import (
+     Activity,
++    BankTransaction,
+     Building,
+     BusinessFinancialRecord,
+     BusinessStatus,
+@@ -54,6 +57,10 @@
+     CommunicationChannel,
+     CommunicationStatus,
+     CommunicationTone,
++    CrimeOperation,
++    CrimeOperationStatus,
++    CrimeOperationType,
++    CrimeOrganization,
+     Complaint,
+     ComplaintStatus,
+     ConflictRecord,
+@@ -159,7 +166,7 @@
+         self.bus_stops, self.bus_lines = generate_bus_network(self.road_cells)
+         self._stops_by_position = {stop.position: stop for stop in self.bus_stops.values()}
+ 
+-        self.buildings: dict[int, Building] = generate_buildings()
++        self.buildings: dict[int, Building] = generate_buildings(citizen_count)
+         self.citizens: dict[int, Citizen] = generate_citizens(
+             self.buildings,
+             count=citizen_count,
+@@ -219,9 +226,11 @@
+         initialize_health(self)
+         initialize_housing(self)
+         initialize_economy(self)
++        initialize_banking(self)
+         initialize_justice(self)
+         initialize_communications(self)
+         initialize_neighborhoods(self)
++        initialize_crime(self)
+         self._emit("simulation_started", "La ville commence une nouvelle journée.")
+ 
+     @property
+@@ -250,6 +259,7 @@
+ 
+         self._update_needs()
+         update_economy(self)
++        update_banking(self)
+         update_housing(self)
+         update_social_calendar(self)
+         self._plan_activities()
+@@ -257,6 +267,7 @@
+         self._move_buses()
+         self._move_police_units()
+         update_neighborhoods(self)
++        update_crime(self)
+         self._move_cars()
+         self._resolve_activities()
+         update_work_and_consumption(self)
+@@ -295,8 +306,11 @@
+         self.shopping_trips_today = 0
+         self.police_warnings_today = 0
+         self.police_detentions_today = 0
++        self.bank_loans_issued_today = 0.0
++        self.bank_defaults_today = 0.0
+         reset_justice_day(self)
+         reset_communication_day(self)
++        reset_crime_day(self)
+         self.medical_cases_today = 0
+         self.ambulance_dispatches_today = 0
+         self.medical_wait_minutes_today = 0
+@@ -746,10 +760,10 @@
+             if len(bus.passenger_ids) >= bus.capacity:
+                 break
+             citizen = self.citizens[citizen_id]
+-            if citizen.money < line.fare:
++            if available_funds(citizen) < line.fare:
+                 self._fallback_to_walking(citizen)
+                 continue
+-            citizen.money = round(citizen.money - line.fare, 2)
++            withdraw(self, citizen, line.fare, label=f"Ticket {line.name}", transaction_type="transport")
+             citizen.active_vehicle_id = bus.id
+             citizen.travel_stage = TravelStage.ON_BUS
+             citizen.activity = Activity.RIDING_BUS
+@@ -1107,6 +1121,9 @@
+     def _charges_for_incident(self, incident: Incident) -> list[str]:
+         mapping = {
+             "theft": ["vol"],
++            "robbery": ["vol à main armée", "association de malfaiteurs"],
++            "extortion": ["extorsion en bande organisée"],
++            "kidnapping": ["enlèvement", "séquestration", "demande de rançon"],
+             "fight": ["violences réciproques"],
+             "assault": ["violences volontaires"],
+             "serious_assault": ["violences volontaires aggravées"],
+@@ -1232,7 +1249,7 @@
+                     vehicle.target_building_id = None
+                     vehicle.current_building_id = destination.id
+                     fuel_cost = round(citizen.trip_distance * 0.05, 2)
+-                    citizen.money = round(max(0.0, citizen.money - fuel_cost), 2)
++                    withdraw(self, citizen, fuel_cost, label="Carburant du trajet", transaction_type="transport")
+ 
+         citizen.active_vehicle_id = None
+         citizen.last_transport_mode = citizen.transport_mode
+@@ -1270,8 +1287,8 @@
+             citizen.activity = citizen.planned_activity
+             if citizen.activity == Activity.EATING:
+                 citizen.needs.hunger = max(0.0, citizen.needs.hunger - 0.8)
+-                if self.minute == 0 and citizen.money >= 8:
+-                    citizen.money = round(citizen.money - 8.0, 2)
++                if self.minute == 0 and available_funds(citizen) >= 8:
++                    withdraw(self, citizen, 8.0, label=f"Repas à {destination.name}", transaction_type="meal", counterparty_id=destination.id)
+             elif citizen.activity == Activity.WORKING:
+                 # La présence, la performance et la paie sont gérées par le système de travail.
+                 citizen.needs.stress = min(100.0, citizen.needs.stress + 0.004)
+@@ -1496,7 +1513,7 @@
+             return
+         possible_offenders = [
+             self.citizens[citizen_id]
+-            for citizen_id in building.occupants
++            for citizen_id in sorted(building.occupants)
+             if self.citizens[citizen_id].money < 250.0
+         ]
+         if not possible_offenders:
+@@ -1910,7 +1927,14 @@
+             "emailAddress": citizen.email_address,
+             "communicationIds": list(citizen.communication_ids),
+             "unreadCommunicationIds": list(citizen.unread_communication_ids),
++            "bankBalance": citizen.bank_balance, "savingsBalance": citizen.savings_balance, "bankDebt": citizen.bank_debt, "creditScore": citizen.credit_score,
++            "bankingHistory": [{"tick": item.tick, "transactionType": item.transaction_type, "amount": item.amount, "balanceAfter": item.balance_after, "label": item.label, "counterpartyId": item.counterparty_id} for item in citizen.banking_history],
++            "isHomeless": citizen.is_homeless, "homelessSinceTick": citizen.homeless_since_tick, "previousHomeId": citizen.previous_home_id, "foodInsecurityDays": citizen.food_insecurity_days,
++            "crimeOrganizationId": citizen.crime_organization_id, "kidnappedUntilTick": citizen.kidnapped_until_tick, "kidnappedByOrganizationId": citizen.kidnapped_by_organization_id,
+             },
++            "banking": {"cash": citizen.money, "balance": citizen.bank_balance, "savings": citizen.savings_balance, "debt": citizen.bank_debt, "creditScore": round(citizen.credit_score, 1), "history": [{"tick": item.tick, "transactionType": item.transaction_type, "amount": item.amount, "balanceAfter": item.balance_after, "label": item.label, "counterpartyId": item.counterparty_id} for item in reversed(citizen.banking_history[-30:])]},
++            "housingSituation": {"isHomeless": citizen.is_homeless, "homelessSinceTick": citizen.homeless_since_tick, "previousHomeId": citizen.previous_home_id, "foodInsecurityDays": citizen.food_insecurity_days},
++            "organizedCrime": {"organizationId": citizen.crime_organization_id, "kidnappedUntilTick": citizen.kidnapped_until_tick, "kidnappedByOrganizationId": citizen.kidnapped_by_organization_id},
+             "transport": {
+                 "mode": citizen.transport_mode.value,
+                 "lastMode": citizen.last_transport_mode.value,
+@@ -2006,6 +2030,9 @@
+     def get_economy_overview(self) -> dict[str, object]:
+         return economy_overview(self)
+ 
++    def get_banking_overview(self) -> dict[str, object]:
++        return banking_overview(self)
++
+     def get_health_overview(self) -> dict[str, object]:
+         return health_overview(self)
+ 
+@@ -2106,6 +2133,9 @@
+     def get_justice_overview(self) -> dict[str, Any]:
+         return justice_overview(self)
+ 
++    def get_crime_overview(self) -> dict[str, Any]:
++        return crime_overview(self)
++
+     def get_social_graph(self) -> dict[str, Any]:
+         return social_graph(self)
+ 
+@@ -2183,6 +2213,7 @@
+             "lastNeighborhoodHour": self._last_neighborhood_hour,
+             "lastLaborMarketDay": self._last_labor_market_day,
+             "lastHousingDay": self._last_housing_day,
++            "lastBankingDay": self._last_banking_day,
+             "movesToday": self.moves_today,
+             "tripCountsToday": dict(self.trip_counts_today),
+             "busBoardingsToday": self.bus_boardings_today,
+@@ -2210,6 +2241,8 @@
+             "layoffsToday": self.layoffs_today,
+             "resignationsToday": self.resignations_today,
+             "publicSpendingTotal": self.public_spending_total,
++            "bankLoansIssuedToday": self.bank_loans_issued_today,
++            "bankDefaultsToday": self.bank_defaults_today,
+             "lastHealthHour": self._last_health_hour,
+             "medicalCasesToday": self.medical_cases_today,
+             "ambulanceDispatchesToday": self.ambulance_dispatches_today,
+@@ -2218,6 +2251,12 @@
+             "healthRngState": self.health_rng.getstate(),
+             "communicationRngState": self.communication_rng.getstate(),
+             "neighborhoodRngState": self.neighborhood_rng.getstate(),
++            "bankingRngState": self.banking_rng.getstate(),
++            "crimeRngState": self.crime_rng.getstate(),
++            "nextCrimeOperationId": self._next_crime_operation_id,
++            "lastCrimeHour": self._last_crime_hour,
++            "organizedCrimesToday": self.organized_crimes_today,
++            "ransomPaidToday": self.ransom_paid_today,
+             "neighborhoods": [self._export_neighborhood(item) for item in self.neighborhoods.values()],
+             "buildings": [self._export_building(building) for building in self.buildings.values()],
+             "citizens": [self._export_citizen(citizen) for citizen in self.citizens.values()],
+@@ -2234,6 +2273,8 @@
+             "communications": [self._export_communication(item) for item in self.communications.values()],
+             "communicationQueue": [list(item) for item in self.communication_queue],
+             "jobApplications": [self._export_job_application(item) for item in self.job_applications.values()],
++            "crimeOrganizations": [{"id": item.id, "name": item.name, "leaderId": item.leader_id, "memberIds": item.member_ids, "territoryId": item.territory_id, "treasury": item.treasury, "notoriety": item.notoriety, "policeHeat": item.police_heat, "active": item.active, "operationIds": item.operation_ids} for item in self.crime_organizations.values()],
++            "crimeOperations": [{"id": item.id, "organizationId": item.organization_id, "operationType": item.operation_type.value, "status": item.status.value, "plannedTick": item.planned_tick, "perpetratorIds": item.perpetrator_ids, "victimIds": item.victim_ids, "buildingId": item.building_id, "amount": item.amount, "incidentId": item.incident_id, "startedTick": item.started_tick, "resolvedTick": item.resolved_tick, "ransomDueTick": item.ransom_due_tick, "outcome": item.outcome} for item in self.crime_operations.values()],
+             "events": [self._export_event(event) for event in self.events],
+         }
+ 
+@@ -2252,6 +2293,10 @@
+         world.communication_rng.setstate(cls._nested_tuple(state["communicationRngState"]))
+         world.neighborhood_rng = random.Random()
+         world.neighborhood_rng.setstate(cls._nested_tuple(state["neighborhoodRngState"]))
++        world.banking_rng = random.Random()
++        world.banking_rng.setstate(cls._nested_tuple(state["bankingRngState"]))
++        world.crime_rng = random.Random()
++        world.crime_rng.setstate(cls._nested_tuple(state["crimeRngState"]))
+         world.tick = int(state["tick"])
+         world.day = int(state["day"])
+         world.hour = int(state["hour"])
+@@ -2277,6 +2322,7 @@
+         world._last_neighborhood_hour = int(state.get("lastNeighborhoodHour", -1))
+         world._last_labor_market_day = int(state.get("lastLaborMarketDay", 0))
+         world._last_housing_day = int(state.get("lastHousingDay", 0))
++        world._last_banking_day = int(state.get("lastBankingDay", 0))
+         world.moves_today = int(state.get("movesToday", 0))
+         world.trip_counts_today = Counter(
+             {mode.value: int(state.get("tripCountsToday", {}).get(mode.value, 0)) for mode in TransportMode}
+@@ -2306,6 +2352,12 @@
+         world.layoffs_today = int(state.get("layoffsToday", 0))
+         world.resignations_today = int(state.get("resignationsToday", 0))
+         world.public_spending_total = float(state.get("publicSpendingTotal", 0.0))
++        world.bank_loans_issued_today = float(state.get("bankLoansIssuedToday", 0.0))
++        world.bank_defaults_today = float(state.get("bankDefaultsToday", 0.0))
++        world._next_crime_operation_id = int(state.get("nextCrimeOperationId", 1))
++        world._last_crime_hour = int(state.get("lastCrimeHour", -1))
++        world.organized_crimes_today = int(state.get("organizedCrimesToday", 0))
++        world.ransom_paid_today = float(state.get("ransomPaidToday", 0.0))
+         world._last_health_hour = int(state.get("lastHealthHour", -1))
+         world.medical_cases_today = int(state.get("medicalCasesToday", 0))
+         world.ambulance_dispatches_today = int(state.get("ambulanceDispatchesToday", 0))
+@@ -2354,6 +2406,9 @@
+                 comfort=float(row.get("comfort", 50.0)),
+                 owner_type=str(row.get("ownerType", "private")),
+                 neighborhood_id=int(row.get("neighborhoodId", 0)),
++                bank_reserves=float(row.get("bankReserves", 0.0)),
++                outstanding_loans=float(row.get("outstandingLoans", 0.0)),
++                interest_income=float(row.get("interestIncome", 0.0)),
+                 housing_history=[HousingRecord(tick=int(item["tick"]), event_type=str(item["eventType"]), label=str(item["label"]), from_home_id=int(item["fromHomeId"]) if item.get("fromHomeId") is not None else None, to_home_id=int(item["toHomeId"]), reason=str(item["reason"]), rent_before=float(item["rentBefore"]), rent_after=float(item["rentAfter"]), member_ids=[int(value) for value in item.get("memberIds", [])]) for item in row.get("housingHistory", [])],
+                 financial_history=[
+                     BusinessFinancialRecord(
+@@ -2556,6 +2611,10 @@
+                 email_address=str(row.get("emailAddress", "")),
+                 communication_ids=[int(value) for value in row.get("communicationIds", [])],
+                 unread_communication_ids=[int(value) for value in row.get("unreadCommunicationIds", [])],
++                bank_balance=float(row.get("bankBalance", 0.0)), savings_balance=float(row.get("savingsBalance", 0.0)), bank_debt=float(row.get("bankDebt", 0.0)), credit_score=float(row.get("creditScore", 60.0)),
++                banking_history=[BankTransaction(tick=int(item["tick"]), transaction_type=str(item["transactionType"]), amount=float(item["amount"]), balance_after=float(item["balanceAfter"]), label=str(item["label"]), counterparty_id=int(item["counterpartyId"]) if item.get("counterpartyId") is not None else None) for item in row.get("bankingHistory", [])],
++                is_homeless=bool(row.get("isHomeless", False)), homeless_since_tick=int(row["homelessSinceTick"]) if row.get("homelessSinceTick") is not None else None, previous_home_id=int(row["previousHomeId"]) if row.get("previousHomeId") is not None else None, food_insecurity_days=int(row.get("foodInsecurityDays", 0)),
++                crime_organization_id=int(row["crimeOrganizationId"]) if row.get("crimeOrganizationId") is not None else None, kidnapped_until_tick=int(row["kidnappedUntilTick"]) if row.get("kidnappedUntilTick") is not None else None, kidnapped_by_organization_id=int(row["kidnappedByOrganizationId"]) if row.get("kidnappedByOrganizationId") is not None else None,
+             )
+             citizen.relationships = {
+                 int(relationship_row["otherId"]): Relationship(
+@@ -2954,7 +3013,7 @@
+                 replied_tick=int(row["repliedTick"]) if row.get("repliedTick") is not None else None,
+                 reply_to_id=int(row["replyToId"]) if row.get("replyToId") is not None else None,
+                 reply_depth=int(row.get("replyDepth", 0)), duration_minutes=int(row.get("durationMinutes", 0)),
+-                cost=float(row.get("cost", 0.0)), failure_reason=row.get("failureReason"),
++                cost=float(row.get("cost", 0.0)), failure_reason=row.get("failureReason"), violates_order=bool(row.get("violatesOrder", False)),
+             ) for row in state.get("communications", [])
+         }
+         world.communication_queue = [
+@@ -2983,6 +3042,10 @@
+             world._next_job_application_id, max(world.job_applications, default=0) + 1
+         )
+ 
++        world.crime_organizations = {int(row["id"]): CrimeOrganization(id=int(row["id"]), name=str(row["name"]), leader_id=int(row["leaderId"]), member_ids=[int(value) for value in row.get("memberIds", [])], territory_id=int(row.get("territoryId", 1)), treasury=float(row.get("treasury", 0.0)), notoriety=float(row.get("notoriety", 10.0)), police_heat=float(row.get("policeHeat", 0.0)), active=bool(row.get("active", True)), operation_ids=[int(value) for value in row.get("operationIds", [])]) for row in state.get("crimeOrganizations", [])}
++        world.crime_operations = {int(row["id"]): CrimeOperation(id=int(row["id"]), organization_id=int(row["organizationId"]), operation_type=CrimeOperationType(row["operationType"]), status=CrimeOperationStatus(row["status"]), planned_tick=int(row["plannedTick"]), perpetrator_ids=[int(value) for value in row.get("perpetratorIds", [])], victim_ids=[int(value) for value in row.get("victimIds", [])], building_id=int(row["buildingId"]) if row.get("buildingId") is not None else None, amount=float(row.get("amount", 0.0)), incident_id=int(row["incidentId"]) if row.get("incidentId") is not None else None, started_tick=int(row["startedTick"]) if row.get("startedTick") is not None else None, resolved_tick=int(row["resolvedTick"]) if row.get("resolvedTick") is not None else None, ransom_due_tick=int(row["ransomDueTick"]) if row.get("ransomDueTick") is not None else None, outcome=row.get("outcome")) for row in state.get("crimeOperations", [])}
++        world._next_crime_operation_id = max(world._next_crime_operation_id, max(world.crime_operations, default=0) + 1)
++
+         world.events = [
+             DomainEvent(
+                 id=int(row["id"]),
+@@ -3066,6 +3129,7 @@
+             "patientsTreatedToday": building.patients_treated_today,
+             "housing": home_summary(self, building) if building.building_type == BuildingType.HOME else None,
+             "neighborhoodId": building.neighborhood_id,
++            "bankReserves": building.bank_reserves, "outstandingLoans": building.outstanding_loans, "interestIncome": building.interest_income,
+         }
+ 
+     @staticmethod
+@@ -3300,6 +3364,7 @@
+             "ownerType": building.owner_type,
+             "housingHistory": [World._export_housing_record(item) for item in building.housing_history],
+             "neighborhoodId": building.neighborhood_id,
++            "bankReserves": building.bank_reserves, "outstandingLoans": building.outstanding_loans, "interestIncome": building.interest_income,
+         }
+ 
+     @staticmethod
+@@ -3446,6 +3511,10 @@
+             "emailAddress": citizen.email_address,
+             "communicationIds": list(citizen.communication_ids),
+             "unreadCommunicationIds": list(citizen.unread_communication_ids),
++            "bankBalance": citizen.bank_balance, "savingsBalance": citizen.savings_balance, "bankDebt": citizen.bank_debt, "creditScore": citizen.credit_score,
++            "bankingHistory": [{"tick": item.tick, "transactionType": item.transaction_type, "amount": item.amount, "balanceAfter": item.balance_after, "label": item.label, "counterpartyId": item.counterparty_id} for item in citizen.banking_history],
++            "isHomeless": citizen.is_homeless, "homelessSinceTick": citizen.homeless_since_tick, "previousHomeId": citizen.previous_home_id, "foodInsecurityDays": citizen.food_insecurity_days,
++            "crimeOrganizationId": citizen.crime_organization_id, "kidnappedUntilTick": citizen.kidnapped_until_tick, "kidnappedByOrganizationId": citizen.kidnapped_by_organization_id,
+         }
+ 
+     @staticmethod
+@@ -3668,6 +3737,7 @@
+             "replyToId": item.reply_to_id, "replyDepth": item.reply_depth,
+             "durationMinutes": item.duration_minutes, "cost": item.cost,
+             "failureReason": item.failure_reason,
++            "violatesOrder": item.violates_order,
+         }
+ 
+     @staticmethod
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/pyproject.toml city-simulator-v0.12.0/backend/pyproject.toml
+--- city-simulator-v0.11.0/backend/pyproject.toml	2026-07-29 15:34:24.000000000 +0200
++++ city-simulator-v0.12.0/backend/pyproject.toml	2026-07-29 16:22:35.000000000 +0200
+@@ -4,7 +4,7 @@
+ 
+ [project]
+ name = "city-simulator-mvp"
+-version = "0.11.0"
++version = "0.12.0"
+ description = "Serveur de simulation urbaine observable en temps réel"
+ requires-python = ">=3.11"
+ dependencies = [
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/tests/test_api.py city-simulator-v0.12.0/backend/tests/test_api.py
+--- city-simulator-v0.11.0/backend/tests/test_api.py	2026-07-29 14:32:03.000000000 +0200
++++ city-simulator-v0.12.0/backend/tests/test_api.py	2026-07-29 16:24:46.000000000 +0200
+@@ -40,6 +40,15 @@
+         assert economy.json()["businesses"]
+         assert "unemploymentRate" in economy.json()["metrics"]
+ 
++        banking = client.get("/api/banking")
++        assert banking.status_code == 200
++        assert banking.json()["bank"]["reserves"] > 0
++        assert banking.json()["metrics"]["deposits"] > 0
++
++        crime = client.get("/api/crime")
++        assert crime.status_code == 200
++        assert crime.json()["metrics"]["organizations"] >= 1
++
+         housing = client.get("/api/housing")
+         assert housing.status_code == 200
+         assert housing.json()["metrics"]["vacancyRate"] > 0
+@@ -68,6 +77,9 @@
+         assert "openPositions" in payload["stats"]
+         assert "medianSalary" in payload["stats"]
+         assert "economy" in payload
++        assert "banking" in payload
++        assert "crime" in payload
++        assert payload["simulation"]["maxCitizenCount"] == 1000
+ 
+         assert client.post("/api/simulation/pause").status_code == 200
+         assert client.post("/api/simulation/speed", json={"speed": 20}).status_code == 200
+@@ -104,6 +116,8 @@
+             delta = websocket.receive_json()
+             assert delta["type"] == "city_delta"
+             assert "economy" in delta
++            assert "banking" in delta
++            assert "crime" in delta
+             assert "health" in delta
+             assert "housing" in delta
+             assert "justice" in delta
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/tests/test_banking_crime_hardship.py city-simulator-v0.12.0/backend/tests/test_banking_crime_hardship.py
+--- city-simulator-v0.11.0/backend/tests/test_banking_crime_hardship.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.12.0/backend/tests/test_banking_crime_hardship.py	2026-07-29 16:24:12.000000000 +0200
+@@ -0,0 +1,88 @@
++from app.simulation.banking import deposit, request_loan, withdraw
++from app.simulation.crime import _execute_operation
++from app.simulation.housing import become_homeless
++from app.simulation.justice import attempt_contact_violation
++from app.simulation.models import (
++    BuildingType,
++    CrimeOperationType,
++    JudicialSentence,
++    SentenceStatus,
++    SentenceType,
++)
++from app.simulation.world import World
++
++
++def test_city_supports_one_thousand_citizens_with_housing_and_job_variety() -> None:
++    world = World(seed=12001, citizen_count=1000)
++    homes = [building for building in world.buildings.values() if building.building_type == BuildingType.HOME]
++    titles = {citizen.job_title for citizen in world.citizens.values() if citizen.job_title}
++    assert len(world.citizens) == 1000
++    assert sum(home.capacity for home in homes) >= 1000
++    assert len(titles) >= 25
++    assert all(citizen.workplace_id is None or citizen.workplace_id in world.buildings for citizen in world.citizens.values())
++    buildings = list(world.buildings.values())
++    assert not [(first.id, second.id) for index, first in enumerate(buildings) for second in buildings[index + 1:] if first.x < second.x + second.width and second.x < first.x + first.width and first.y < second.y + second.height and second.y < first.y + first.height]
++
++
++def test_bank_ledger_covers_income_payments_credit_and_round_trip() -> None:
++    world = World(seed=12002, citizen_count=30)
++    citizen = world.citizens[1]
++    starting = citizen.money + citizen.bank_balance
++    deposit(world, citizen, 100, label="Test de salaire", transaction_type="salary")
++    assert withdraw(world, citizen, 45, label="Test de paiement") == 45
++    citizen.credit_score = 90
++    loan = request_loan(world, citizen, 200, reason="dépense indispensable")
++    assert loan == 200
++    assert citizen.bank_debt == 200
++    assert round(citizen.money + citizen.bank_balance, 2) == round(starting + 255, 2)
++    restored = World.from_state(world.export_state())
++    assert restored.citizens[1].bank_balance == citizen.bank_balance
++    assert restored.citizens[1].bank_debt == citizen.bank_debt
++    assert restored.citizens[1].banking_history == citizen.banking_history
++
++
++def test_household_without_resources_becomes_homeless_at_the_shelter() -> None:
++    world = World(seed=12003, citizen_count=30)
++    household = next(iter(world.households.values()))
++    previous_home = household.home_id
++    become_homeless(world, household, "test de précarité")
++    assert household.housing_status == "homeless"
++    assert world.buildings[household.home_id].building_type in {BuildingType.SHELTER, BuildingType.PARK}
++    assert all(world.citizens[citizen_id].is_homeless for citizen_id in household.member_ids)
++    assert all(world.citizens[citizen_id].previous_home_id == previous_home for citizen_id in household.member_ids)
++
++
++def test_mafia_can_generate_all_major_operation_families() -> None:
++    world = World(seed=12004, citizen_count=250)
++    organization = next(iter(world.crime_organizations.values()))
++    for _ in range(80):
++        _execute_operation(world, organization)
++    operation_types = {operation.operation_type for operation in world.crime_operations.values()}
++    assert operation_types >= {
++        CrimeOperationType.THEFT,
++        CrimeOperationType.ROBBERY,
++        CrimeOperationType.EXTORTION,
++        CrimeOperationType.KIDNAPPING,
++    }
++    assert any(operation.incident_id is not None for operation in world.crime_operations.values())
++
++
++def test_restrained_citizen_can_attempt_and_trigger_a_violation() -> None:
++    world = World(seed=12005, citizen_count=20)
++    offender, victim = world.citizens[1], world.citizens[2]
++    offender.impulsivity = offender.aggression = 100
++    sentence = JudicialSentence(
++        id=1,
++        case_id=1,
++        citizen_id=offender.id,
++        sentence_type=SentenceType.RESTRAINING_ORDER,
++        label="Interdiction de communication",
++        status=SentenceStatus.ACTIVE,
++        start_tick=world.tick,
++        beneficiary_id=victim.id,
++    )
++    world.sentences[sentence.id] = sentence
++    assert any(attempt_contact_violation(world, offender.id, victim.id) for _ in range(20))
++    assert sentence.status == SentenceStatus.VIOLATED
++    assert sentence.violation_count >= 1
++    assert any(incident.incident_type == "restraining_order_violation" for incident in world.incidents.values())
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/tests/test_health.py city-simulator-v0.12.0/backend/tests/test_health.py
+--- city-simulator-v0.11.0/backend/tests/test_health.py	2026-07-29 15:21:39.000000000 +0200
++++ city-simulator-v0.12.0/backend/tests/test_health.py	2026-07-29 16:19:54.000000000 +0200
+@@ -14,6 +14,7 @@
+     VehicleStatus,
+     VehicleType,
+ )
++from app.simulation.persistence import SAVE_VERSION
+ from app.simulation.world import World
+ 
+ 
+@@ -116,7 +117,7 @@
+     case = apply_injury(world, world.citizens[30], 72, source="agression")
+     restored = World.from_state(world.export_state())
+ 
+-    assert restored.export_state()["version"] == 12
++    assert restored.export_state()["version"] == SAVE_VERSION
+     assert restored.health_cases[case.id].severity == case.severity
+     assert restored.citizens[30].care_status == CareStatus.WAITING_AMBULANCE
+     assert restored.citizens[30].health_history[0].source == "agression"
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/tests/test_housing.py city-simulator-v0.12.0/backend/tests/test_housing.py
+--- city-simulator-v0.11.0/backend/tests/test_housing.py	2026-07-29 15:21:39.000000000 +0200
++++ city-simulator-v0.12.0/backend/tests/test_housing.py	2026-07-29 16:17:46.000000000 +0200
+@@ -1,5 +1,6 @@
+ from app.simulation.housing import best_home, housing_metrics, move_household, place_temporary, split_household
+ from app.simulation.models import BuildingType
++from app.simulation.persistence import SAVE_VERSION
+ from app.simulation.world import World
+ 
+ 
+@@ -70,7 +71,7 @@
+     restored_household = restored.households[household.id]
+     assert restored_household.home_id == destination.id
+     assert restored_household.housing_history[-1].reason == "test justifié"
+-    assert restored.export_state()["version"] == 12
++    assert restored.export_state()["version"] == SAVE_VERSION
+ 
+ 
+ def test_housing_metrics_and_thirty_day_run_remain_coherent():
+@@ -81,4 +82,4 @@
+     assert metrics["overcrowdedHouseholds"] >= 0
+     assert all(row.home_id in world.buildings for row in world.households.values())
+     assert all(citizen.household_id in world.households for citizen in world.citizens.values())
+-    assert all(row.housing_status in {"stable", "searching", "temporary"} for row in world.households.values())
++    assert all(row.housing_status in {"stable", "searching", "temporary", "homeless"} for row in world.households.values())
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/tests/test_justice.py city-simulator-v0.12.0/backend/tests/test_justice.py
+--- city-simulator-v0.11.0/backend/tests/test_justice.py	2026-07-29 15:21:39.000000000 +0200
++++ city-simulator-v0.12.0/backend/tests/test_justice.py	2026-07-29 16:19:54.000000000 +0200
+@@ -16,6 +16,7 @@
+     SentenceType,
+     TravelStage,
+ )
++from app.simulation.persistence import SAVE_VERSION
+ from app.simulation.world import World
+ 
+ 
+@@ -192,7 +193,7 @@
+     _hold_hearing(world, case)
+ 
+     restored = World.from_state(world.export_state())
+-    assert restored.export_state()["version"] == 12
++    assert restored.export_state()["version"] == SAVE_VERSION
+     assert restored.complaints.keys() == world.complaints.keys()
+     assert restored.sentences.keys() == world.sentences.keys()
+     assert restored.export_state() == world.export_state()
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/backend/tests/test_neighborhood.py city-simulator-v0.12.0/backend/tests/test_neighborhood.py
+--- city-simulator-v0.11.0/backend/tests/test_neighborhood.py	2026-07-29 15:23:54.000000000 +0200
++++ city-simulator-v0.12.0/backend/tests/test_neighborhood.py	2026-07-29 16:19:54.000000000 +0200
+@@ -3,6 +3,7 @@
+ from app.main import app, service
+ from app.simulation.models import BuildingType, VehicleStatus, VehicleType
+ from app.simulation.neighborhood import crime_opportunity, neighborhood_at
++from app.simulation.persistence import SAVE_VERSION
+ from app.simulation.world import World
+ 
+ 
+@@ -70,7 +71,7 @@
+     world.run_minutes(26 * 60)
+     state = world.export_state()
+     restored = World.from_state(state)
+-    assert state["version"] == 12
++    assert state["version"] == SAVE_VERSION
+     assert restored.export_state() == state
+     world.run_minutes(6 * 60)
+     restored.run_minutes(6 * 60)
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/docker-compose.yml city-simulator-v0.12.0/docker-compose.yml
+--- city-simulator-v0.11.0/docker-compose.yml	2026-07-28 11:50:46.000000000 +0200
++++ city-simulator-v0.12.0/docker-compose.yml	2026-07-29 16:30:27.000000000 +0200
+@@ -1,6 +1,8 @@
+ services:
+   backend:
+     build: ./backend
++    environment:
++      CITYSIM_CITIZEN_COUNT: "${CITYSIM_CITIZEN_COUNT:-100}"
+     ports:
+       - "8000:8000"
+     volumes:
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/package-lock.json city-simulator-v0.12.0/frontend/package-lock.json
+--- city-simulator-v0.11.0/frontend/package-lock.json	2026-07-29 15:34:24.000000000 +0200
++++ city-simulator-v0.12.0/frontend/package-lock.json	2026-07-29 16:22:35.000000000 +0200
+@@ -1,12 +1,12 @@
+ {
+   "name": "city-simulator-frontend",
+-  "version": "0.11.0",
++  "version": "0.12.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "city-simulator-frontend",
+-      "version": "0.11.0",
++      "version": "0.12.0",
+       "dependencies": {
+         "pixi.js": "^7.4.2",
+         "react": "^18.3.1",
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/package.json city-simulator-v0.12.0/frontend/package.json
+--- city-simulator-v0.11.0/frontend/package.json	2026-07-29 15:34:24.000000000 +0200
++++ city-simulator-v0.12.0/frontend/package.json	2026-07-29 16:22:35.000000000 +0200
+@@ -1,7 +1,7 @@
+ {
+   "name": "city-simulator-frontend",
+   "private": true,
+-  "version": "0.11.0",
++  "version": "0.12.0",
+   "type": "module",
+   "scripts": {
+     "dev": "vite",
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/src/App.tsx city-simulator-v0.12.0/frontend/src/App.tsx
+--- city-simulator-v0.11.0/frontend/src/App.tsx	2026-07-29 15:34:24.000000000 +0200
++++ city-simulator-v0.12.0/frontend/src/App.tsx	2026-07-29 16:05:08.000000000 +0200
+@@ -43,6 +43,7 @@
+   const [neighborhoodModalId, setNeighborhoodModalId] = useState<number | null>(null);
+   const [thematicLayer, setThematicLayer] = useState<ThematicLayer>("none");
+   const [caseModalId, setCaseModalId] = useState<number | null>(null);
++  const [citizenCount, setCitizenCount] = useState(250);
+   const pausedRef = useRef(false);
+   const selectedEntityRef = useRef<SelectedEntity | null>(null);
+   const requestInFlightRef = useRef(false);
+@@ -176,7 +177,7 @@
+     <main className="app-shell">
+       <header className="topbar">
+         <div>
+-          <div className="eyebrow">Monitoring urbain · v0.11</div>
++          <div className="eyebrow">Monitoring urbain · v0.12</div>
+           <h1>City Simulator</h1>
+         </div>
+         <div className="time-block">
+@@ -197,7 +198,12 @@
+           <button onClick={() => stepSimulation(60)}>+1 h</button>
+           <button onClick={() => saveCity()}>Sauvegarder</button>
+           <button disabled={!snapshot?.simulation.hasSave} onClick={() => loadCity()}>Charger</button>
+-          <button className="danger-button" onClick={() => resetCity()}>Réinitialiser</button>
++          <label className="population-control">Population
++            <select value={citizenCount} onChange={(event) => setCitizenCount(Number(event.target.value))}>
++              {[100, 250, 500, 1000].map((count) => <option key={count} value={count}>{count}</option>)}
++            </select>
++          </label>
++          <button className="danger-button" onClick={() => resetCity(12345, citizenCount)}>Réinitialiser</button>
+         </div>
+       </header>
+ 
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/src/api.ts city-simulator-v0.12.0/frontend/src/api.ts
+--- city-simulator-v0.11.0/frontend/src/api.ts	2026-07-29 15:25:17.000000000 +0200
++++ city-simulator-v0.12.0/frontend/src/api.ts	2026-07-29 16:05:08.000000000 +0200
+@@ -83,10 +83,10 @@
+   });
+ }
+ 
+-export function resetCity(seed = 12345): Promise<unknown> {
++export function resetCity(seed = 12345, citizenCount?: number): Promise<unknown> {
+   return request("/api/city/reset", {
+     method: "POST",
+-    body: JSON.stringify({ seed }),
++    body: JSON.stringify({ seed, citizenCount }),
+   });
+ }
+ 
+@@ -102,7 +102,7 @@
+   return request<CommunicationOverview>("/api/communications");
+ }
+ 
+-export function sendCommunication(payload: { senderId: number; recipientId: number; channel: CommunicationChannel; tone: CommunicationTone; subject: string; body: string }): Promise<CommunicationSummary> {
++export function sendCommunication(payload: { senderId: number; recipientId: number; channel: CommunicationChannel; tone: CommunicationTone; subject: string; body: string; attemptOrderViolation?: boolean }): Promise<CommunicationSummary> {
+   return request<CommunicationSummary>("/api/communications", { method: "POST", body: JSON.stringify(payload) });
+ }
+ 
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/src/components/CitizenModal.tsx city-simulator-v0.12.0/frontend/src/components/CitizenModal.tsx
+--- city-simulator-v0.11.0/frontend/src/components/CitizenModal.tsx	2026-07-29 14:56:39.000000000 +0200
++++ city-simulator-v0.12.0/frontend/src/components/CitizenModal.tsx	2026-07-29 16:05:08.000000000 +0200
+@@ -235,7 +235,12 @@
+                   <div><dt>Emploi</dt><dd>{citizen.jobTitle ?? "Sans emploi"}</dd></div>
+                   <div><dt>Lieu de travail</dt><dd>{citizen.workplace?.name ?? "—"}</dd></div>
+                   <div><dt>Destination</dt><dd>{citizen.destination?.name ?? "—"}</dd></div>
+-                  <div><dt>Argent</dt><dd>{moneyFormatter.format(citizen.money)}</dd></div>
++                  <div><dt>Logement</dt><dd>{citizen.housingSituation.isHomeless ? "Sans abri" : "Logé"}</dd></div>
++                  <div><dt>Liquide</dt><dd>{moneyFormatter.format(citizen.banking.cash)}</dd></div>
++                  <div><dt>Compte bancaire</dt><dd>{moneyFormatter.format(citizen.banking.balance)}</dd></div>
++                  <div><dt>Épargne</dt><dd>{moneyFormatter.format(citizen.banking.savings)}</dd></div>
++                  <div><dt>Dette bancaire</dt><dd>{moneyFormatter.format(citizen.banking.debt)}</dd></div>
++                  <div><dt>Score de crédit</dt><dd>{Math.round(citizen.banking.creditScore)} / 100</dd></div>
+                   <div><dt>Santé</dt><dd>{Math.round(citizen.health)} %</dd></div>
+                 </dl>
+                 <h3>Décision actuelle</h3>
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/src/components/MetricsPanel.css city-simulator-v0.12.0/frontend/src/components/MetricsPanel.css
+--- city-simulator-v0.11.0/frontend/src/components/MetricsPanel.css	2026-07-29 13:25:42.000000000 +0200
++++ city-simulator-v0.12.0/frontend/src/components/MetricsPanel.css	2026-07-29 16:05:08.000000000 +0200
+@@ -21,3 +21,6 @@
+ .metric-security { border-color: rgba(79, 143, 216, .38); }
+ .metric-security strong { color: #85b9ef; }
+ @media (max-width: 1200px) { .metrics-toolbar { align-items: flex-start; flex-direction: column; } .metrics-grid { grid-template-columns: repeat(3, 1fr); } }
++
++.metric-banking { border-color: rgba(197, 155, 61, .42); }
++.metric-banking strong { color: #e0bd68; }
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/src/map/CityMap.tsx city-simulator-v0.12.0/frontend/src/map/CityMap.tsx
+--- city-simulator-v0.11.0/frontend/src/map/CityMap.tsx	2026-07-29 15:27:51.000000000 +0200
++++ city-simulator-v0.12.0/frontend/src/map/CityMap.tsx	2026-07-29 16:02:29.000000000 +0200
+@@ -83,6 +83,7 @@
+   at_home: 0xb5bac7,
+   detained: 0xe05f6b,
+   shopping: 0xf0c45c,
++  kidnapped: 0xd93060,
+ };
+ 
+ const BUILDING_COLORS: Record<string, number> = {
+@@ -95,6 +96,10 @@
+   public: 0x8067a6,
+   police: 0x315d87,
+   hospital: 0xb4435d,
++  court: 0x7b6b54,
++  detention_center: 0x4f5360,
++  bank: 0xc59b3d,
++  shelter: 0x4a8b8d,
+ };
+ 
+ function destroyChildren(container: Container): void {
+@@ -104,8 +109,15 @@
+ 
+ function drawBuilding(layer: Container, building: BuildingSummary, onSelect: (id: number) => void): void {
+   const graphics = new Graphics();
+-  graphics.beginFill(BUILDING_COLORS[building.type] ?? 0x555b66, 0.95);
+-  graphics.lineStyle(1, 0xd7dbe3, 0.3);
++  const px = building.x * CELL_SIZE;
++  const py = building.y * CELL_SIZE;
++  const width = building.width * CELL_SIZE;
++  const height = building.height * CELL_SIZE;
++  graphics.beginFill(0x070a0f, 0.35);
++  graphics.drawRoundedRect(px + 4, py + 6, width, height, 6);
++  graphics.endFill();
++  graphics.beginFill(BUILDING_COLORS[building.type] ?? 0x555b66, 0.98);
++  graphics.lineStyle(1, 0xe5e9ef, 0.34);
+   graphics.drawRoundedRect(
+     building.x * CELL_SIZE,
+     building.y * CELL_SIZE,
+@@ -114,6 +126,16 @@
+     4,
+   );
+   graphics.endFill();
++  graphics.beginFill(0xffffff, 0.12);
++  graphics.drawRoundedRect(px + 4, py + 4, Math.max(8, width - 8), 5, 2);
++  graphics.endFill();
++  if (building.type === "park") {
++    [[0.25, 0.35], [0.55, 0.62], [0.78, 0.3]].forEach(([rx, ry]) => {
++      graphics.beginFill(0x79b66a, 0.9);
++      graphics.drawCircle(px + width * rx, py + height * ry, 5);
++      graphics.endFill();
++    });
++  }
+   graphics.eventMode = "static";
+   graphics.cursor = "pointer";
+   graphics.on("pointertap", () => onSelect(building.id));
+@@ -248,9 +270,14 @@
+   const worldHeight = height * CELL_SIZE;
+ 
+   scene.background.clear();
+-  scene.background.beginFill(0x171c25);
++  scene.background.beginFill(0x202b29);
+   scene.background.drawRect(0, 0, worldWidth, worldHeight);
+   scene.background.endFill();
++  scene.background.beginFill(0x324039, 0.28);
++  for (let y = 0; y < height; y += 4) {
++    for (let x = (y / 4) % 2; x < width; x += 5) scene.background.drawCircle(x * CELL_SIZE + 8, y * CELL_SIZE + 9, 2);
++  }
++  scene.background.endFill();
+ 
+   scene.grid.clear();
+   scene.grid.lineStyle(1, 0x2b3340, 0.22);
+@@ -317,15 +344,22 @@
+   if (signature === scene.roadSignature) return;
+   destroyChildren(scene.roadsLayer);
+   const roads = new Graphics();
+-  roads.beginFill(0x303845, 0.9);
++  roads.beginFill(0x343b42, 0.96);
+   snapshot.roads.cells.forEach((cell) => {
+     roads.drawRect(cell.x * CELL_SIZE, cell.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+   });
+   roads.endFill();
+-  roads.lineStyle(1, 0x4a5566, 0.25);
++  roads.lineStyle(1, 0x66717b, 0.22);
+   snapshot.roads.cells.forEach((cell) => {
+     roads.drawRect(cell.x * CELL_SIZE, cell.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+   });
++  roads.lineStyle(1, 0xd9c875, 0.34);
++  snapshot.roads.cells.forEach((cell) => {
++    if ((cell.x + cell.y) % 3 === 0) {
++      roads.moveTo(cell.x * CELL_SIZE + 8, cell.y * CELL_SIZE + CELL_SIZE / 2);
++      roads.lineTo(cell.x * CELL_SIZE + 14, cell.y * CELL_SIZE + CELL_SIZE / 2);
++    }
++  });
+   scene.roadsLayer.addChild(roads);
+   scene.roadSignature = signature;
+ }
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/src/monitoring/metrics.test.ts city-simulator-v0.12.0/frontend/src/monitoring/metrics.test.ts
+--- city-simulator-v0.11.0/frontend/src/monitoring/metrics.test.ts	2026-07-29 15:28:20.000000000 +0200
++++ city-simulator-v0.12.0/frontend/src/monitoring/metrics.test.ts	2026-07-29 16:16:27.000000000 +0200
+@@ -5,7 +5,7 @@
+ describe("buildMetricGroups", () => {
+   it("keeps every monitoring view compact and uniquely addressable", () => {
+     const groups = buildMetricGroups(stats);
+-    expect(groups.map((group) => group.id)).toEqual(["summary", "housing", "economy", "health", "mobility", "social", "neighborhoods", "security"]);
++    expect(groups.map((group) => group.id)).toEqual(["summary", "housing", "economy", "banking", "health", "mobility", "social", "neighborhoods", "security"]);
+     expect(groups.every((group) => group.metrics.length === 6)).toBe(true);
+     expect(groups.every((group) => new Set(group.metrics.map((metric) => metric.id)).size === group.metrics.length)).toBe(true);
+   });
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/src/monitoring/metrics.ts city-simulator-v0.12.0/frontend/src/monitoring/metrics.ts
+--- city-simulator-v0.11.0/frontend/src/monitoring/metrics.ts	2026-07-29 15:27:26.000000000 +0200
++++ city-simulator-v0.12.0/frontend/src/monitoring/metrics.ts	2026-07-29 16:16:40.000000000 +0200
+@@ -8,6 +8,7 @@
+   | "mobility"
+   | "social"
+   | "security"
++  | "banking"
+   | "neighborhoods";
+ export type MetricGroupId =
+   | "summary"
+@@ -17,6 +18,7 @@
+   | "mobility"
+   | "social"
+   | "security"
++  | "banking"
+   | "neighborhoods";
+ export type CityStats = CitySnapshot["stats"];
+ 
+@@ -76,8 +78,8 @@
+         card("vacancy", "Vacance résidentielle", `${number.format(stats.vacancyRate)} %`, "housing"),
+         card("overcrowded", "Foyers surpeuplés", number.format(stats.overcrowdedHouseholds), "housing"),
+         card("distressed", "Foyers en difficulté", number.format(stats.distressedHouseholds), "housing"),
++        card("homeless", "Personnes sans abri", number.format(stats.homelessCitizens), "housing"),
+         card("moves", "Déménagements du jour", number.format(stats.movesToday), "housing"),
+-        card("commute", "Distance domicile-travail", `${number.format(stats.averageHomeWorkDistance)} cases`, "housing"),
+       ],
+     },
+     {
+@@ -93,6 +95,18 @@
+       ],
+     },
+     {
++      id: "banking",
++      label: "Banque",
++      metrics: [
++        card("deposits", "Dépôts", euro.format(stats.deposits), "banking"),
++        card("savings", "Épargne", euro.format(stats.savings), "banking"),
++        card("debt", "Crédits citoyens", euro.format(stats.citizenDebt), "banking"),
++        card("borrowers", "Emprunteurs", number.format(stats.borrowers), "banking"),
++        card("loans", "Crédits du jour", euro.format(stats.loansIssuedToday), "banking"),
++        card("defaults", "Impayés du jour", euro.format(stats.defaultsToday), "banking"),
++      ],
++    },
++    {
+       id: "health",
+       label: "Santé",
+       metrics: [
+@@ -145,11 +159,11 @@
+       label: "Sécurité",
+       metrics: [
+         card("incidents", "Incidents actifs", number.format(stats.activeIncidents), "security"),
+-        card("sentences", "Peines actives", number.format(stats.activeSentences), "security"),
+-        card("police", "Police disponible", number.format(stats.policeUnitsAvailable), "security"),
++        card("mafias", "Organisations criminelles", number.format(stats.organizations), "security"),
++        card("organized", "Opérations organisées", number.format(stats.operations), "security"),
++        card("kidnappings", "Enlèvements actifs", number.format(stats.activeKidnappings), "security"),
+         card("response", "Réponse police", `${number.format(stats.averagePoliceResponseMinutes)} min`, "security"),
+         card("investigations", "Enquêtes ouvertes", number.format(stats.openInvestigations), "security"),
+-        card("hearings", "Audiences en attente", number.format(stats.casesAwaitingHearing), "security"),
+       ],
+     },
+   ];
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/src/styles.css city-simulator-v0.12.0/frontend/src/styles.css
+--- city-simulator-v0.11.0/frontend/src/styles.css	2026-07-29 15:27:26.000000000 +0200
++++ city-simulator-v0.12.0/frontend/src/styles.css	2026-07-29 16:24:12.000000000 +0200
+@@ -866,3 +866,6 @@
+ .business-status-searching, .business-status-temporary { color: #f4c86d; }
+ 
+ .thematic-select{display:grid;gap:6px;color:#9eacbd;font-size:11px}.thematic-select select{width:100%;padding:8px;color:#eef3f8;background:#141d29;border:1px solid #344054;border-radius:7px}.neighborhood-shortcuts{display:grid;gap:5px;margin:8px 0 14px}.neighborhood-shortcuts button{display:flex;justify-content:space-between;gap:8px;padding:8px;text-align:left;background:#17212d}.neighborhood-shortcuts button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.neighborhood-shortcuts button b{flex:none;color:#8fc7a4;font-size:10px}
++
++.population-control { display: inline-flex; align-items: center; gap: 6px; color: #9da8b7; font-size: 11px; }
++.population-control select { min-width: 72px; padding: 6px 8px; border: 1px solid #354052; border-radius: 7px; background: #111823; color: #eef2f7; }
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.11.0/frontend/src/types/city.ts city-simulator-v0.12.0/frontend/src/types/city.ts
+--- city-simulator-v0.11.0/frontend/src/types/city.ts	2026-07-29 15:27:51.000000000 +0200
++++ city-simulator-v0.12.0/frontend/src/types/city.ts	2026-07-29 16:05:08.000000000 +0200
+@@ -13,7 +13,8 @@
+   | "waiting_medical"
+   | "in_treatment"
+   | "hospitalized"
+-  | "community_service";
++  | "community_service"
++  | "kidnapped";
+ 
+ export type TransportMode = "walk" | "car" | "bus";
+ export type TravelStage =
+@@ -111,7 +112,7 @@
+ export interface BuildingSummary {
+   id: number;
+   name: string;
+-  type: "home" | "office" | "factory" | "shop" | "cafe" | "park" | "public" | "police" | "hospital" | "court" | "detention_center";
++  type: "home" | "office" | "factory" | "shop" | "cafe" | "park" | "public" | "police" | "hospital" | "court" | "detention_center" | "bank" | "shelter";
+   x: number;
+   y: number;
+   width: number;
+@@ -198,7 +199,7 @@
+   expensesToday: number;
+   debt: number;
+   financialStress: number;
+-  status: "stable" | "searching" | "temporary";
++  status: "stable" | "searching" | "temporary" | "homeless";
+   rentMonthly: number;
+   rentArrears: number;
+   incomeMonthly: number;
+@@ -211,7 +212,7 @@
+ 
+ export interface HousingRecord { tick: number; eventType: string; label: string; fromHomeId: number | null; toHomeId: number; reason: string; rentBefore: number; rentAfter: number; memberIds: number[]; }
+ export interface HomeSummary { id: number; name: string; capacity: number; residentCount: number; availablePlaces: number; rentMonthly: number; condition: number; comfort: number; ownerType: string; serviceDistance: number; safety: number; available: boolean; }
+-export interface HousingMetrics { medianRent: number; vacancyRate: number; overcrowdedHouseholds: number; distressedHouseholds: number; movesToday: number; averageHomeWorkDistance: number; searchingHouseholds: number; temporaryHouseholds: number; }
++export interface HousingMetrics { medianRent: number; vacancyRate: number; overcrowdedHouseholds: number; distressedHouseholds: number; movesToday: number; averageHomeWorkDistance: number; searchingHouseholds: number; temporaryHouseholds: number; homelessCitizens: number; homelessHouseholds: number; }
+ export interface HousingOverview { tick: number; metrics: HousingMetrics; homes: HomeSummary[]; households: HouseholdSummary[]; }
+ export interface HouseholdDetail extends HouseholdSummary { kind: "household"; membersList: Array<{id:number;name:string}|null>; expenses: { recurringToday:number; foodToday:number; goodsToday:number; rentDueToday:number; rentPaidToday:number }; reserves:number; home:HomeSummary; financialHistory:HouseholdFinancialRecord[]; housingHistory:HousingRecord[]; temporaryHostHouseholdId:number|null; }
+ 
+@@ -308,7 +309,7 @@
+   id: number; threadId: number; sender: { id: number; name: string }; recipient: { id: number; name: string };
+   channel: CommunicationChannel; tone: CommunicationTone; subject: string; body: string; status: CommunicationStatus;
+   createdTick: number; deliveryTick: number; readTick: number | null; repliedTick: number | null; replyToId: number | null; replyDepth: number;
+-  durationMinutes: number; cost: number; failureReason: string | null;
++  durationMinutes: number; cost: number; failureReason: string | null; violatesOrder: boolean;
+ }
+ export interface CommunicationMetrics { sentToday: number; deliveredToday: number; phoneCallsToday: number; smsToday: number; emailsToday: number; lettersToday: number; unreadCommunications: number; communicationRepliesToday: number; }
+ export interface CommunicationOverview { metrics: CommunicationMetrics; recent: CommunicationSummary[]; }
+@@ -375,7 +376,9 @@
+     marketFoodStock: number;
+     marketGoodsStock: number;
+     activeMedicalCases: number; medicalEmergencies: number; patientsWaiting: number; hospitalizedPatients: number; hospitalBeds: number; medicalStaffOnDuty: number; ambulancesAvailable: number; ambulanceDispatchesToday: number; averageMedicalWaitMinutes: number;
+-    medianRent: number; vacancyRate: number; overcrowdedHouseholds: number; distressedHouseholds: number; movesToday: number; averageHomeWorkDistance: number; searchingHouseholds: number; temporaryHouseholds: number;
++    medianRent: number; vacancyRate: number; overcrowdedHouseholds: number; distressedHouseholds: number; movesToday: number; averageHomeWorkDistance: number; searchingHouseholds: number; temporaryHouseholds: number; homelessCitizens: number; homelessHouseholds: number;
++    deposits: number; savings: number; citizenDebt: number; borrowers: number; loansIssuedToday: number; defaultsToday: number;
++    organizations: number; operations: number; organizedCrimesToday: number; activeKidnappings: number; ransomPaidToday: number;
+     activityCounts: Record<string, number>;
+     transportModeCounts: Record<TransportMode, number>;
+     tripCountsToday: Record<TransportMode, number>;
+@@ -420,6 +423,8 @@
+     households: HouseholdSummary[];
+   };
+   economy: EconomyOverview;
++  banking: { tick: number; bank: { id: number | null; name: string | null; reserves: number; outstandingLoans: number; interestIncome: number }; metrics: { deposits: number; savings: number; citizenDebt: number; borrowers: number; loansIssuedToday: number; defaultsToday: number } };
++  crime: { tick: number; metrics: { organizations: number; operations: number; organizedCrimesToday: number; activeKidnappings: number; ransomPaidToday: number }; organizations: Array<{ id:number; name:string; leaderId:number; memberCount:number; territoryId:number; treasury:number; notoriety:number; policeHeat:number; active:boolean }>; operations: Array<{ id:number; organizationId:number; type:string; status:string; victimIds:number[]; buildingId:number|null; amount:number; incidentId:number|null; startedTick:number|null; resolvedTick:number|null; outcome:string|null }> };
+   health: HealthOverview;
+   housing: HousingOverview;
+   justice: JusticeOverview;
+@@ -432,6 +437,8 @@
+     speed: number;
+     allowedSpeeds: number[];
+     hasSave: boolean;
++    citizenCount: number;
++    maxCitizenCount: number;
+   };
+ }
+ 
+@@ -448,6 +455,8 @@
+   | "vehicles"
+   | "social"
+   | "economy"
++  | "banking"
++  | "crime"
+   | "health"
+   | "housing"
+   | "justice"
+@@ -474,6 +483,9 @@
+   jobTitle: string | null;
+   salaryDaily: number;
+   money: number;
++  banking: { cash:number; balance:number; savings:number; debt:number; creditScore:number; history:Array<{tick:number;transactionType:string;amount:number;balanceAfter:number;label:string;counterpartyId:number|null}> };
++  housingSituation: { isHomeless:boolean; homelessSinceTick:number|null; previousHomeId:number|null; foodInsecurityDays:number };
++  organizedCrime: { organizationId:number|null; kidnappedUntilTick:number|null; kidnappedByOrganizationId:number|null };
+   health: number;
+   medical: { condition: CitizenSummary["healthCondition"]; careStatus: string; pain: number; injurySeverity: number; illnessSeverity: number; activeCaseId: number | null; medicalLeaveUntilTick: number | null; incapacityUntilTick: number | null; hospitalizedUntilTick: number | null; history: Array<{ tick: number; eventType: string; label: string; severity: number; source: string; incidentId: number | null; hospitalId: number | null; incapacityMinutes: number }> };
+   employment: {

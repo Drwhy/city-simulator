@@ -14,6 +14,7 @@ from app.simulation.models import (
     VehicleStatus,
     VehicleType,
 )
+from app.simulation.persistence import SAVE_VERSION
 from app.simulation.world import World
 
 
@@ -116,7 +117,7 @@ def test_health_state_round_trip_preserves_active_patient() -> None:
     case = apply_injury(world, world.citizens[30], 72, source="agression")
     restored = World.from_state(world.export_state())
 
-    assert restored.export_state()["version"] == 8
+    assert restored.export_state()["version"] == SAVE_VERSION
     assert restored.health_cases[case.id].severity == case.severity
     assert restored.citizens[30].care_status == CareStatus.WAITING_AMBULANCE
     assert restored.citizens[30].health_history[0].source == "agression"

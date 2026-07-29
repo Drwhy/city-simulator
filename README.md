@@ -1,6 +1,98 @@
-# City Simulator — v0.8.0 Santé, blessures et secours
+# City Simulator — v0.13.0 Criminalité systémique et renseignement
 
-Prototype web d'une ville persistante simulant 100 habitants, leurs déplacements, relations, conflits, emplois, santé, blessures, maladies, secours médicalisés, finances, incidents, interventions policières et premières procédures judiciaires.
+Simulateur urbain persistant de 20 à 5 000 habitants : économie, emplois uniques, logement, banque, communications, quartiers, services publics, factions criminelles, police et justice.
+
+## Nouveautés v0.13.0
+
+- Jusqu’à 5 000 citoyens configurables (`CITYSIM_CITIZEN_COUNT` ou sélecteur UI), avec 16 factions au plafond et cadence WebSocket adaptée au volume.
+- Sept familles de factions : gangs de rue ou organisés, mafias, triades, cartels, gangs de motards et réseaux cybercriminels. Chaque groupe possède chef, rôles, territoires, rivaux, alliés, cohésion, violence, sophistication, influence et pression de recrutement.
+- Six marchés illicites : cannabis, cocaïne, drogues de synthèse, armes, biens volés et contrefaçons. Offre, demande, prix, stocks, pression policière et saisies évoluent quotidiennement.
+- Transactions réelles dealer–citoyen : argent retiré des comptes/espèces, commission du vendeur, trésorerie de faction, contacts criminels, exposition, dépendance, santé et performance professionnelle.
+- Recrutement des habitants vulnérables, conflits territoriaux, trafic de gros, blanchiment, corruption, raids et réponse judiciaire différenciée.
+- Monitoring criminel plein écran avec factions, marchés, transactions, opérations et influence territoriale. Les données non détectées sont explicitement présentées comme omniscience de simulation, distincte du savoir policier.
+- Endpoint détaillé `GET /api/crime/factions/{id}`, domaine `crime` enrichi dans le snapshot et le WebSocket, fiche citoyen enrichie.
+- Historiques bornés : 5 000 transactions, 2 000 opérations et 120 jours de tendances criminelles.
+- Sauvegarde stricte v14 comprenant factions, rôles, relations, marchés, transactions, dépendances, compteurs et générateur pseudo-aléatoire criminel.
+
+## Migration depuis v0.12.0
+
+Le schéma passe de 13 à 14. Les sauvegardes antérieures sont refusées : elles ne contiennent pas les factions typées, marchés, transactions, rôles, relations territoriales ni états individuels d’exposition.
+
+## Nouveautés v0.12.0
+
+- Population configurable de 20 à 1 000 citoyens ; capacité résidentielle et effectifs montent avec la ville sans multiplier les bâtiments à l’infini.
+- Un seul emploi courant par citoyen ; toute autre candidature pendante est retirée à l’embauche. Plus de 30 intitulés couvrent industrie, bureaux, commerce, services, banque et accueil social.
+- Banque incarnée : comptes courants, espèces, épargne, historique borné, score de crédit, prêts, intérêts, échéances, défauts et réserves bancaires. Salaires, achats, loyers, transports, communications et sanctions passent par un registre commun.
+- Précarité matérielle : insécurité alimentaire, impayés, statut sans-abri, refuge municipal, repli au parc si le refuge est plein et retour conditionnel vers un logement.
+- Organisations mafieuses persistantes avec membres, chef, territoire, trésorerie, notoriété et pression policière ; vols, braquages, extorsions, enlèvements et rançons produisent incidents, enquêtes et peines proportionnées.
+- Les citoyens visés par une interdiction peuvent tenter de la contourner selon leur personnalité. Une réussite marque la peine violée et crée un nouvel incident judiciaire.
+- Implantation résidentielle moins régulière et carte rafraîchie : volumes, ombres, végétation, marquages de voirie et couleurs dédiées à la banque et au refuge.
+- Indicateurs toujours limités à six cartes par vue, avec une catégorie Banque et des métriques de sans-abrisme/crime organisé.
+- Sauvegarde stricte v13 incluant comptes, transactions, précarité, mafias, opérations, enlèvements, rançons et générateurs pseudo-aléatoires dédiés.
+
+## Migration depuis v0.11.0
+
+Le schéma passe de 12 à 13. Les anciennes sauvegardes sont refusées explicitement car elles ne contiennent pas les comptes bancaires, états de précarité ni organisations criminelles.
+
+## Nouveautés v0.11.0
+
+- Quatre quartiers persistants avec population, revenus, chômage, loyers, activité commerciale, criminalité, sécurité ressentie, couverture policière, accès aux soins et commerces, transport, pression des services et attractivité.
+- Historique journalier borné à 90 jours et évolution différenciée de la sécurité et de l’attractivité.
+- Patrouilles territoriales réellement conduites par des policiers citoyens ; l’unité disponible la plus proche est choisie lors d’un signalement.
+- Les incidents répétés dégradent la sécurité locale. Éclairage, fréquentation, témoins et patrouilles modulent les opportunités criminelles sans jamais les supprimer.
+- Les distances au commissariat, au centre médical et aux commerces influencent réellement réponse et accessibilité.
+- Neuf cartes thématiques : revenus, chômage, criminalité, sécurité ressentie, réponse policière, accessibilité, loyers, santé et fréquentation commerciale.
+- Fenêtre quartier avec tendances, incidents, population, entreprises, services, patrouilles et attractivité.
+- Endpoints `GET /api/neighborhoods` et `GET /api/neighborhoods/{id}`, domaine WebSocket `neighborhoods` et filtre Quartiers.
+- Sauvegarde stricte v12 incluant quartiers, historiques, affectations et générateur aléatoire territorial.
+
+## Migration depuis v0.10.1
+
+Le format de sauvegarde passe de 11 à 12. Les sauvegardes v11 et antérieures sont refusées explicitement, car elles ne contiennent ni découpage spatial, ni historiques locaux, ni file d’affectation des patrouilles.
+
+## Nouveautés v0.10.1
+
+- Quatre canaux persistants : appel téléphonique, SMS, e-mail et lettre, avec coûts, délais de livraison et délais de lecture distincts.
+- Appels synchrones dépendant de la disponibilité réelle du destinataire et appels manqués explicitement enregistrés.
+- Conversations, réponses automatiques bornées, tons amical, pratique, excuses, invitation ou conflictuel, avec conséquences sur les relations.
+- Communications autonomes planifiées à quelques créneaux quotidiens par une file événementielle, sans balayage permanent de toute la population.
+- Générateur aléatoire dédié et sauvegardé pour préserver le déterminisme sans perturber l’économie, la santé ou la justice.
+- Commandes `GET /api/communications`, `GET /api/citizens/{id}/communications` et `POST /api/communications`, domaine WebSocket `communications`.
+- Fenêtre de monitoring globale, onglet de composition/historique dans chaque fiche citoyen, indicateurs compacts et filtre du journal.
+- Sauvegarde stricte v11 et historique global plafonné à 2 000 communications.
+
+## Migration depuis v0.10.0
+
+Le schéma de sauvegarde passe de 10 à 11 pour conserver les coordonnées, communications, fils, statuts, compteurs, file de livraison/lecture et état du générateur aléatoire dédié. Les sauvegardes v10 et antérieures sont refusées explicitement. La version applicative est v0.10.1 ; v0.11.0 reste réservée au prochain lot du manifeste.
+
+## Nouveautés v0.10.0
+
+- Dépôt de plainte persistant, enquête, revue du parquet, classement sans suite, poursuites, audience, verdict et peines structurées.
+- Tribunal municipal avec juge et greffiers citoyens, capacité quotidienne, priorités et reports lorsque le service est sous-staffé.
+- Centre de détention avec surveillants citoyens et suivi de capacité.
+- Rappel judiciaire, amende, indemnisation, probation, travail d’intérêt général, interdiction de contact et détention courte ou longue.
+- Conséquences réelles : paiement et indemnisation, stress, perte d’emploi en détention longue, déplacement alternatif, interactions bloquées et violation de probation.
+- Fenêtre tribunal, fenêtre dossier avec chronologie complète, monitoring des institutions, fiche citoyen enrichie et filtre Justice.
+- Endpoint `/api/justice`, domaine `justice` dans les snapshots/deltas et sauvegarde stricte v10.
+
+## Migration depuis v0.9.0
+
+Le format de sauvegarde passe de 9 à 10. Les sauvegardes v9 et antérieures sont refusées explicitement ; aucune migration approximative n’est appliquée. Sauvegardez ou archivez une ville v9 avant de démarrer cette version si vous souhaitez la conserver.
+
+## Nouveautés v0.9.0
+
+- Chaque résidence possède capacité, loyer, état, confort, propriétaire, disponibilité, proximité des services et sécurité locale.
+- Cinq logements restent vacants à l'initialisation ; le choix compare revenu, taille, travail, relations, sécurité, trajet et confort.
+- Budget commun, paiement du loyer, impayés, recherche, déménagement groupé, séparation explicite, nouveau foyer, cohabitation et relogement municipal temporaire.
+- Tableau de bord résidentiel, fenêtre logement, fenêtre foyer, filtre Logement, endpoints `/api/housing` et `/api/households/{id}`, domaine WebSocket `housing`.
+- Un délai de sept jours prévient les boucles et une alternative explicite précède toute éviction simplifiée.
+
+## Interface et architecture maintenables
+
+- Le panneau d’indicateurs est limité à six cartes visibles et neuf catégories navigables : synthèse, logement, économie, banque, santé, mobilité, social, quartiers et sécurité.
+- Le frontend sépare désormais flux WebSocket, état des couches, catalogue de métriques, panneau de contrôle et inspecteurs spécialisés.
+- Le backend sépare routes HTTP, transport WebSocket, calcul des métriques, présentateurs de monitoring et persistance atomique.
+- Les fonctions pures de métriques, fusion de flux, URL WebSocket et état des couches disposent de tests dédiés.
 
 ## Nouveautés v0.8.0
 
@@ -122,7 +214,7 @@ La mesure, sa durée, son motif, les agents et l'incident associé sont enregist
 
 ## Rupture de compatibilité des sauvegardes
 
-Le format de sauvegarde passe à la version 8 et conserve dossiers médicaux, files, hospitalisations, ambulances, équipages, historiques, générateur santé, ainsi que tout l’état v0.7. La v0.8.0 accepte uniquement les sauvegardes créées par la v0.8.0 ; les formats 1 à 7 reçoivent une erreur explicite. Pour migrer une ancienne ville, il faut repartir d'une nouvelle génération.
+Le format passe à la version 9 et conserve tout l'état résidentiel et v0.8. La v0.9.0 accepte uniquement les sauvegardes v9 ; les formats 1 à 8 sont rejetés explicitement. Pour migrer une ancienne ville, il faut repartir d'une nouvelle génération.
 
 Pour repartir proprement :
 
@@ -175,12 +267,27 @@ city-simulator-mvp/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py
+│   │   ├── api/
+│   │   │   ├── routes.py
+│   │   │   └── websocket.py
 │   │   └── simulation/
+│   │       ├── banking.py
+│   │       ├── communication.py
+│   │       ├── crime.py
+│   │       ├── criminal_factions.py
+│   │       ├── criminal_markets.py
+│   │       ├── crime_monitoring.py
 │   │       ├── economy.py
 │   │       ├── snapshot.py
 │   │       ├── health.py
+│   │       ├── housing.py
+│   │       ├── justice.py
 │   │       ├── generator.py
 │   │       ├── models.py
+│   │       ├── metrics.py
+│   │       ├── monitoring.py
+│   │       ├── neighborhood.py
+│   │       ├── persistence.py
 │   │       ├── service.py
 │   │       ├── social.py
 │   │       ├── transport.py
@@ -191,7 +298,10 @@ city-simulator-mvp/
 ├── frontend/
 │   └── src/
 │       ├── components/
+│       │   └── inspectors/
+│       ├── hooks/
 │       ├── map/
+│       ├── monitoring/
 │       ├── api.ts
 │       ├── App.tsx
 │       ├── stream.ts
@@ -209,7 +319,13 @@ GET  /api/citizens/{id}
 GET  /api/buildings/{id}
 GET  /api/enterprises/{id}
 GET  /api/economy
+GET  /api/banking
+GET  /api/crime
+GET  /api/crime/factions/{id}
 GET  /api/healthcare
+GET  /api/housing
+GET  /api/justice
+GET  /api/households/{id}
 GET  /api/vehicles/{id}
 GET  /api/incidents/{id}
 GET  /api/social/graph
@@ -228,8 +344,14 @@ POST /api/city/reset
 
 ## Modèle et limites assumées
 
+- La justice reste institutionnelle mais simplifiée : pas d’appel, avocat, régime procédural détaillé ni droit pénal exhaustif.
+- La capacité quotidienne du tribunal est agrégée et le parquet est représenté comme une étape, pas comme un agent autonome.
+- Le parc ne modélise ni achat immobilier, prêt, fiscalité foncière, bail détaillé, travaux pilotés ni construction.
+- Le loyer utilise un mois de 30 jours et le revenu mensuel est estimé depuis salaire et planning.
+- La sécurité locale dérive des incidents récents ; la cohabitation ne fusionne pas les budgets.
+
 - Le moteur backend reste la source de vérité ; le frontend ne recalcule aucune décision économique.
-- Les montants sont des unités monétaires simulées et ne représentent ni fiscalité, ni inflation, ni crédit bancaire réel.
+- Les montants restent des unités monétaires simulées : la banque modélise comptes, prêts et défauts, mais pas fiscalité, inflation, assurance-dépôts, marchés financiers ni insolvabilité institutionnelle.
 - Hors commerces, la demande adressée aux entreprises est agrégée à partir du temps productif : il n'existe pas encore de chaîne d'approvisionnement interentreprises.
 - Les entreprises publiques sont financées par la ville et ne ferment pas ; la dépense publique cumulée est visible dans les métriques.
 - Les historiques financiers et professionnels sont limités à 30 entrées pour éviter une croissance mémoire illimitée.

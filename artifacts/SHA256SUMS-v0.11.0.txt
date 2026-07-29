@@ -1,0 +1,2 @@
+6abb49f060fbb32dcdb3f8e7f9c2ecec8c2d8a400c9b485b30a9e61628893af8  city-simulator-v0.11.0.tar.gz
+8587712559cf6e3f2ec52b4b8c4d069a9ac678d813aee4caaf5116e84270c5a1  city-simulator-v0.10.1-to-v0.11.0.patch

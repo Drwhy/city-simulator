@@ -1,0 +1,26 @@
+.metrics-panel { padding: 10px 12px; display: grid; gap: 10px; }
+.metrics-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.metrics-toolbar > div { display: flex; align-items: baseline; gap: 9px; min-width: 130px; }
+.metrics-toolbar > div strong { font-size: 14px; }
+.metrics-toolbar nav { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: thin; }
+.metrics-toolbar button { padding: 5px 9px; white-space: nowrap; font-size: 11px; }
+.metrics-grid { display: grid; grid-template-columns: repeat(6, minmax(115px, 1fr)); gap: 7px; }
+.metric-card { min-width: 0; padding: 8px 10px; border: 1px solid #293142; border-radius: 8px; background: #111823; }
+.metric-card span { display: block; overflow: hidden; color: #8f9bad; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.metric-card strong { display: block; margin-top: 2px; font-size: 17px; }
+.metric-housing { border-color: rgba(236, 176, 76, .38); }
+.metric-housing strong { color: #f4c86d; }
+.metric-economy { border-color: rgba(74, 171, 121, .36); }
+.metric-economy strong { color: #7bd4a4; }
+.metric-health { border-color: rgba(225, 63, 85, .38); }
+.metric-health strong { color: #ff8999; }
+.metric-mobility { border-color: rgba(82, 199, 207, .35); }
+.metric-mobility strong { color: #77d9df; }
+.metric-social { border-color: rgba(166, 111, 214, .35); }
+.metric-social strong { color: #cf9ff1; }
+.metric-security { border-color: rgba(79, 143, 216, .38); }
+.metric-security strong { color: #85b9ef; }
+@media (max-width: 1200px) { .metrics-toolbar { align-items: flex-start; flex-direction: column; } .metrics-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.metric-banking { border-color: rgba(197, 155, 61, .42); }
+.metric-banking strong { color: #e0bd68; }

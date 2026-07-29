@@ -1,0 +1,2517 @@
+diff -ruN city-simulator-v0.9.0/CHANGELOG.md city-simulator-v0.10.0/CHANGELOG.md
+--- city-simulator-v0.9.0/CHANGELOG.md	2026-07-29 13:48:48.349528789 +0200
++++ city-simulator-v0.10.0/CHANGELOG.md	2026-07-29 14:37:47.022580283 +0200
+@@ -1,5 +1,30 @@
+ # Changelog
+ 
++## 0.10.0 — Justice, probation et détention
++
++### Ajouté
++
++- Plaintes persistantes reliées aux incidents, plaignants, mis en cause et motifs de classement.
++- Revue du parquet, poursuites, classement sans suite, audiences prioritaires et reports liés à la capacité réelle.
++- Tribunal et centre de détention avec juge, greffiers et surveillants incarnés par des citoyens.
++- Peines structurées : rappel judiciaire, amende, indemnisation, probation, TIG, interdiction de contact et détention.
++- Suivi horaire des peines, violation de probation, progression du TIG et libération bornée.
++- Conséquences sur l’emploi, les finances, le stress, les relations et les déplacements.
++- Endpoint `/api/justice`, données justice dans les snapshots et deltas WebSocket.
++- Fenêtres tribunal et dossier, monitoring institutionnel, chronologie citoyen et filtre Justice.
++- Neuf scénarios backend et trois tests frontend dédiés.
++
++### Modifié
++
++- Sauvegarde stricte v10 ; les versions v1 à v9 sont refusées.
++- Versions backend et frontend portées à 0.10.0.
++- Les bâtiments tribunal et détention deviennent des employeurs publics ordinaires.
++
++### Limites connues
++
++- Pas d’appel, d’avocat, de jury, de fiscalité pénale ou de procédure contradictoire détaillée.
++- Le parquet est une étape institutionnelle agrégée ; les audiences durent un créneau simulé.
++
+ ## 0.9.0 — Logement, loyers et mobilité résidentielle
+ 
+ ### Ajouté
+diff -ruN city-simulator-v0.9.0/README.md city-simulator-v0.10.0/README.md
+--- city-simulator-v0.9.0/README.md	2026-07-29 13:48:48.349528789 +0200
++++ city-simulator-v0.10.0/README.md	2026-07-29 14:33:17.787234523 +0200
+@@ -1,7 +1,21 @@
+-# City Simulator — v0.9.0 Logement, loyers et mobilité résidentielle
++# City Simulator — v0.10.0 Justice, probation et détention
+ 
+ Prototype web d'une ville persistante simulant 100 habitants, leurs déplacements, relations, conflits, emplois, santé, blessures, maladies, secours médicalisés, finances, incidents, interventions policières et premières procédures judiciaires.
+ 
++## Nouveautés v0.10.0
++
++- Dépôt de plainte persistant, enquête, revue du parquet, classement sans suite, poursuites, audience, verdict et peines structurées.
++- Tribunal municipal avec juge et greffiers citoyens, capacité quotidienne, priorités et reports lorsque le service est sous-staffé.
++- Centre de détention avec surveillants citoyens et suivi de capacité.
++- Rappel judiciaire, amende, indemnisation, probation, travail d’intérêt général, interdiction de contact et détention courte ou longue.
++- Conséquences réelles : paiement et indemnisation, stress, perte d’emploi en détention longue, déplacement alternatif, interactions bloquées et violation de probation.
++- Fenêtre tribunal, fenêtre dossier avec chronologie complète, monitoring des institutions, fiche citoyen enrichie et filtre Justice.
++- Endpoint `/api/justice`, domaine `justice` dans les snapshots/deltas et sauvegarde stricte v10.
++
++## Migration depuis v0.9.0
++
++Le format de sauvegarde passe de 9 à 10. Les sauvegardes v9 et antérieures sont refusées explicitement ; aucune migration approximative n’est appliquée. Sauvegardez ou archivez une ville v9 avant de démarrer cette version si vous souhaitez la conserver.
++
+ ## Nouveautés v0.9.0
+ 
+ - Chaque résidence possède capacité, loyer, état, confort, propriétaire, disponibilité, proximité des services et sécurité locale.
+@@ -198,6 +212,7 @@
+ │   │       ├── snapshot.py
+ │   │       ├── health.py
+ │   │       ├── housing.py
++│   │       ├── justice.py
+ │   │       ├── generator.py
+ │   │       ├── models.py
+ │   │       ├── metrics.py
+@@ -236,6 +251,7 @@
+ GET  /api/economy
+ GET  /api/healthcare
+ GET  /api/housing
++GET  /api/justice
+ GET  /api/households/{id}
+ GET  /api/vehicles/{id}
+ GET  /api/incidents/{id}
+@@ -255,6 +271,8 @@
+ 
+ ## Modèle et limites assumées
+ 
++- La justice reste institutionnelle mais simplifiée : pas d’appel, avocat, régime procédural détaillé ni droit pénal exhaustif.
++- La capacité quotidienne du tribunal est agrégée et le parquet est représenté comme une étape, pas comme un agent autonome.
+ - Le parc ne modélise ni achat immobilier, prêt, fiscalité foncière, bail détaillé, travaux pilotés ni construction.
+ - Le loyer utilise un mois de 30 jours et le revenu mensuel est estimé depuis salaire et planning.
+ - La sécurité locale dérive des incidents récents ; la cohabitation ne fusionne pas les budgets.
+diff -ruN city-simulator-v0.9.0/VALIDATION.md city-simulator-v0.10.0/VALIDATION.md
+--- city-simulator-v0.9.0/VALIDATION.md	2026-07-29 13:48:48.349528789 +0200
++++ city-simulator-v0.10.0/VALIDATION.md	2026-07-29 14:37:47.022580283 +0200
+@@ -1,17 +1,18 @@
+-# Validation de l'archive — v0.9.0
++# Validation de l’archive — v0.10.0
+ 
+ ## Backend
+ 
+-- 54 tests automatisés sous Python 3.12 : scénarios historiques, résidentiels, métriques et persistance atomique.
+-- Foyer pauvre vers moins cher, foyer agrandi vers plus grand, changement de trajet, déménagement groupé, séparation, relogement, anti-boucle, sauvegarde v9 et 30 jours continus.
+-- API `/api/housing`, `/api/households/{id}`, bâtiments résidentiels, snapshot et delta WebSocket couverts.
++- 63 tests automatisés sous Python 3.12, dont 9 scénarios judiciaires v0.10.0.
++- Couverture fonctionnelle : personnel citoyen, classement sans suite, capacité du tribunal, peines structurées, interdiction de contact, détention et emploi, sauvegarde v10, API, WebSocket et 30 jours continus.
++- Aucun dossier ne reste en audience et aucune détention expirée ne reste active après la simulation longue.
+ 
+ ## Frontend
+ 
+-- 9 tests Vitest couvrant les deltas WebSocket, l’URL du flux, les groupes d’indicateurs et l’état immuable des couches ; contrôle TypeScript et build Vite.
+-- Panneau compact par catégories, contrôles, fiche logement, fiche foyer et inspecteurs spécialisés compilés.
++- 12 tests Vitest dans 5 fichiers.
++- Contrôle TypeScript strict et build Vite validés.
++- File d’audiences, progression des peines, tri prioritaire, fenêtres tribunal/dossier, fiche citoyen et filtre Justice compilés.
+ 
+-## Commandes
++## Commandes de validation
+ 
+ ```bash
+ cd backend
+@@ -29,7 +30,17 @@
+ git diff --check
+ ```
+ 
++## Commandes Docker
++
++```bash
++docker compose build
++docker compose up
++```
++
++Frontend : `http://localhost:5173` — API : `http://localhost:8000`.
++
+ ## Couverture et limites de l’environnement
+ 
+-- Les suites passent intégralement, mais aucun collecteur de couverture (`coverage.py`/`pytest-cov` ou provider Vitest) n’est installé dans le projet : aucun pourcentage fiable n’est annoncé.
+-- Le navigateur intégré n'a pas pu charger sa compétence à cause de `helper_unknown_error`. L'inspection visuelle interactive doit être refaite localement ; TypeScript, Vite, API et WebSocket sont validés automatiquement.
++- Aucun collecteur de couverture Python/Vitest n’est installé ; aucun pourcentage non mesuré n’est annoncé.
++- La justice est volontairement simplifiée : pas d’appel, avocat, jury ou procédure juridique exhaustive.
++- Le navigateur intégré reste indisponible à cause de `helper_unknown_error` ; le rendu est validé par TypeScript/Vite mais l’inspection interactive doit être refaite localement.
+diff -ruN city-simulator-v0.9.0/backend/app/api/routes.py city-simulator-v0.10.0/backend/app/api/routes.py
+--- city-simulator-v0.9.0/backend/app/api/routes.py	2026-07-29 13:38:48.469127893 +0200
++++ city-simulator-v0.10.0/backend/app/api/routes.py	2026-07-29 14:17:37.804057399 +0200
+@@ -41,6 +41,10 @@
+     async def economy_overview() -> dict:
+         return await service.economy_overview()
+ 
++    @router.get("/justice")
++    async def justice_overview() -> dict:
++        return await service.justice_overview()
++
+     @router.get("/social/graph")
+     async def social_graph() -> dict:
+         return await service.social_graph()
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/economy.py city-simulator-v0.10.0/backend/app/simulation/economy.py
+--- city-simulator-v0.9.0/backend/app/simulation/economy.py	2026-07-29 12:37:36.934269428 +0200
++++ city-simulator-v0.10.0/backend/app/simulation/economy.py	2026-07-29 14:37:17.851418751 +0200
+@@ -29,8 +29,10 @@
+     BuildingType.PUBLIC,
+     BuildingType.POLICE,
+     BuildingType.HOSPITAL,
++    BuildingType.COURT,
++    BuildingType.DETENTION_CENTER,
+ }
+-PUBLIC_EMPLOYER_TYPES = {BuildingType.PUBLIC, BuildingType.POLICE, BuildingType.HOSPITAL}
++PUBLIC_EMPLOYER_TYPES = {BuildingType.PUBLIC, BuildingType.POLICE, BuildingType.HOSPITAL, BuildingType.COURT, BuildingType.DETENTION_CENTER}
+ MIN_JOB_CHANGE_MINUTES = 7 * 24 * 60
+ MAX_APPLICATION_HISTORY = 40
+ MAX_FINANCIAL_HISTORY = 30
+@@ -44,6 +46,8 @@
+     BuildingType.PUBLIC: ("Agent municipal", 92.0),
+     BuildingType.POLICE: ("Policier municipal", 108.0),
+     BuildingType.HOSPITAL: ("Infirmier", 118.0),
++    BuildingType.COURT: ("Greffier", 112.0),
++    BuildingType.DETENTION_CENTER: ("Surveillant", 106.0),
+ }
+ 
+ 
+@@ -61,7 +65,7 @@
+ 
+ def job_offer(building: Building, employee_index: int = 0) -> tuple[str, float, int, int, tuple[int, ...]]:
+     title, salary = JOB_PROFILES[building.building_type]
+-    if building.building_type in {BuildingType.POLICE, BuildingType.HOSPITAL}:
++    if building.building_type in {BuildingType.POLICE, BuildingType.HOSPITAL, BuildingType.DETENTION_CENTER}:
+         start_hour, end_hour = ((6, 14) if employee_index % 2 == 0 else (14, 22))
+         work_days = (1, 2, 3, 4, 5, 6, 7)
+     elif building.building_type == BuildingType.FACTORY:
+@@ -407,6 +411,9 @@
+     schedule_fit = 8.0 if 6 <= start_hour <= 9 and end_hour <= 19 else 2.0
+     current_salary = max(1.0, citizen.salary_daily)
+     salary_gain = (salary - current_salary) / current_salary * 18.0 if citizen.workplace_id else salary / 12.0
++    criminal_record_penalty = min(18.0, citizen.criminal_record_count * 4.0 + citizen.probation_violations * 6.0)
++    if building.building_type in {BuildingType.POLICE, BuildingType.COURT, BuildingType.DETENTION_CENTER}:
++        criminal_record_penalty *= 1.4
+     return round(
+         experience * 0.65
+         + citizen.job_performance * 0.34
+@@ -414,6 +421,7 @@
+         + schedule_fit
+         + salary_gain
+         - distance * 0.55
++        - criminal_record_penalty
+         + world.rng.uniform(-2.0, 2.0),
+         2,
+     )
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/generator.py city-simulator-v0.10.0/backend/app/simulation/generator.py
+--- city-simulator-v0.9.0/backend/app/simulation/generator.py	2026-07-29 13:49:48.336178541 +0200
++++ city-simulator-v0.10.0/backend/app/simulation/generator.py	2026-07-29 14:14:32.568168619 +0200
+@@ -62,6 +62,8 @@
+         ("Mairie", BuildingType.PUBLIC, 26, 15, 12),
+         ("Commissariat central", BuildingType.POLICE, 34, 15, 12),
+         ("Centre médical Saint-Roch", BuildingType.HOSPITAL, 36, 7, 16),
++        ("Tribunal municipal", BuildingType.COURT, 26, 19, 12),
++        ("Centre de détention", BuildingType.DETENTION_CENTER, 34, 19, 14),
+     ]
+     for name, building_type, x, y, capacity in workplaces:
+         building = Building(
+@@ -81,10 +83,12 @@
+                 BuildingType.PUBLIC: 2,
+                 BuildingType.POLICE: 2,
+                 BuildingType.HOSPITAL: 3,
++                BuildingType.COURT: 2,
++                BuildingType.DETENTION_CENTER: 2,
+                 BuildingType.PARK: 0,
+             }.get(building_type, 1),
+-            employee_capacity=(8 if building_type == BuildingType.HOSPITAL else capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity),
+-            target_employees=(8 if building_type == BuildingType.HOSPITAL else capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity),
++            employee_capacity=(8 if building_type == BuildingType.HOSPITAL else 4 if building_type in {BuildingType.COURT, BuildingType.DETENTION_CENTER} else capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity),
++            target_employees=(8 if building_type == BuildingType.HOSPITAL else 4 if building_type in {BuildingType.COURT, BuildingType.DETENTION_CENTER} else capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity),
+             cash={
+                 BuildingType.OFFICE: 14_000.0,
+                 BuildingType.FACTORY: 12_000.0,
+@@ -93,6 +97,8 @@
+                 BuildingType.PUBLIC: 20_000.0,
+                 BuildingType.POLICE: 25_000.0,
+                 BuildingType.HOSPITAL: 24_000.0,
++                BuildingType.COURT: 18_000.0,
++                BuildingType.DETENTION_CENTER: 20_000.0,
+                 BuildingType.PARK: 0.0,
+             }.get(building_type, 6_000.0),
+             fixed_cost_daily={
+@@ -103,6 +109,8 @@
+                 BuildingType.PUBLIC: 260.0,
+                 BuildingType.POLICE: 340.0,
+                 BuildingType.HOSPITAL: 420.0,
++                BuildingType.COURT: 300.0,
++                BuildingType.DETENTION_CENTER: 360.0,
+                 BuildingType.PARK: 0.0,
+             }.get(building_type, 160.0),
+             food_stock=420.0 if building_type == BuildingType.SHOP else 0.0,
+@@ -127,6 +135,8 @@
+     initial_homes = homes[:-5] if len(homes) > 5 and sum(home.capacity for home in homes[:-5]) >= count else homes
+     police_station = next(b for b in buildings.values() if b.building_type == BuildingType.POLICE)
+     medical_center = next(b for b in buildings.values() if b.building_type == BuildingType.HOSPITAL)
++    court = next(b for b in buildings.values() if b.building_type == BuildingType.COURT)
++    detention_center = next(b for b in buildings.values() if b.building_type == BuildingType.DETENTION_CENTER)
+     ordinary_workplaces = [
+         b for b in buildings.values()
+         if b.building_type in {
+@@ -146,13 +156,17 @@
+         BuildingType.PUBLIC: ("Agent municipal", 92.0),
+         BuildingType.POLICE: ("Policier municipal", 108.0),
+         BuildingType.HOSPITAL: ("Infirmier", 118.0),
++        BuildingType.COURT: ("Greffier", 112.0),
++        BuildingType.DETENTION_CENTER: ("Surveillant", 106.0),
+     }
+ 
+     citizens: dict[int, Citizen] = {}
+     home_load = {home.id: 0 for home in initial_homes}
+-    work_load = {work.id: 0 for work in [*ordinary_workplaces, police_station, medical_center]}
++    work_load = {work.id: 0 for work in [*ordinary_workplaces, police_station, medical_center, court, detention_center]}
+     police_target = min(police_station.capacity, max(4, round(count * 0.08)))
+     medical_target = min(8, max(4, round(count * 0.08)))
++    court_target = min(4, max(2, round(count * 0.03)))
++    detention_target = min(4, max(2, round(count * 0.03)))
+ 
+     for citizen_id in range(1, count + 1):
+         available_homes = [h for h in initial_homes if home_load[h.id] < h.capacity]
+@@ -162,9 +176,12 @@
+         if citizen_id <= police_target:
+             workplace = police_station
+         elif citizen_id <= police_target + medical_target:
+-            # Conserve le flux aléatoire historique des affectations ordinaires.
+             rng.choice(ordinary_workplaces)
+             workplace = medical_center
++        elif citizen_id <= police_target + medical_target + court_target:
++            workplace = court
++        elif citizen_id <= police_target + medical_target + court_target + detention_target:
++            workplace = detention_center
+         else:
+             available_workplaces = [
+                 w for w in ordinary_workplaces if work_load[w.id] < w.employee_capacity
+@@ -175,6 +192,8 @@
+             job_title, salary = job_by_type[workplace.building_type]
+             if workplace.building_type == BuildingType.HOSPITAL and work_load[workplace.id] % 3 == 1:
+                 job_title, salary = "Médecin", 145.0
++            elif workplace.building_type == BuildingType.COURT and work_load[workplace.id] == 1:
++                job_title, salary = "Juge", 148.0
+         else:
+             job_title, salary = None, 0.0
+ 
+@@ -189,6 +208,12 @@
+             shift = (work_load[workplace.id] - 1) % 2
+             start_hour, end_hour = ((6, 14) if shift == 0 else (14, 22))
+             work_days = (1, 2, 3, 4, 5, 6, 7)
++        elif workplace.building_type == BuildingType.DETENTION_CENTER:
++            shift = (work_load[workplace.id] - 1) % 2
++            start_hour, end_hour = ((6, 14) if shift == 0 else (14, 22))
++            work_days = (1, 2, 3, 4, 5, 6, 7)
++        elif workplace.building_type == BuildingType.COURT:
++            start_hour, end_hour, work_days = 8, 17, (1, 2, 3, 4, 5)
+         elif workplace.building_type == BuildingType.FACTORY:
+             shift = citizen_id % 2
+             start_hour, end_hour = ((6, 14) if shift == 0 else (14, 22))
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/justice.py city-simulator-v0.10.0/backend/app/simulation/justice.py
+--- city-simulator-v0.9.0/backend/app/simulation/justice.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.0/backend/app/simulation/justice.py	2026-07-29 14:37:17.851418751 +0200
+@@ -0,0 +1,423 @@
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any
++
++from .economy import terminate_employment
++from .models import (
++    Activity,
++    BuildingType,
++    Complaint,
++    ComplaintStatus,
++    InvestigationStatus,
++    JudicialCase,
++    JudicialCaseStatus,
++    JudicialSentence,
++    JudicialTimelineEntry,
++    SentenceStatus,
++    SentenceType,
++    TravelStage,
++)
++from .work import building_operational, staff_count, weekday
++
++if TYPE_CHECKING:
++    from .models import Citizen, Incident, Investigation
++    from .world import World
++
++COURT_DAILY_CAPACITY = 3
++MAX_JUSTICE_HISTORY = 80
++
++
++def initialize_justice(world: World) -> None:
++    world.complaints: dict[int, Complaint] = {}
++    world.sentences: dict[int, JudicialSentence] = {}
++    world._next_complaint_id = 1
++    world._next_sentence_id = 1
++    world.hearings_today = 0
++    world.cases_dismissed_today = 0
++    world.sentences_started_today = 0
++    world.probation_violations_today = 0
++
++
++def reset_justice_day(world: World) -> None:
++    world.hearings_today = 0
++    world.cases_dismissed_today = 0
++    world.sentences_started_today = 0
++    world.probation_violations_today = 0
++
++
++def file_complaint(world: World, incident: Incident) -> Complaint:
++    if incident.complaint_id is not None and incident.complaint_id in world.complaints:
++        return world.complaints[incident.complaint_id]
++    complaint = Complaint(
++        id=world._next_complaint_id,
++        incident_id=incident.id,
++        complainant_id=incident.victim_ids[0] if incident.victim_ids else None,
++        accused_id=incident.offender_id,
++        status=ComplaintStatus.FILED,
++        filed_tick=world.tick,
++        updated_tick=world.tick,
++        description=f"Plainte relative à l’incident « {incident.title} ».",
++    )
++    world._next_complaint_id += 1
++    world.complaints[complaint.id] = complaint
++    incident.complaint_id = complaint.id
++    _check_probation_violation(world, incident.offender_id, incident.id)
++    world._emit(
++        "complaint_filed",
++        f"La plainte #{complaint.id} est déposée après l’incident « {incident.title} ».",
++        citizen_ids=incident.citizen_ids,
++        building_id=incident.building_id,
++        severity="warning",
++        incident_id=incident.id,
++    )
++    return complaint
++
++
++def link_investigation(world: World, investigation: Investigation, incident: Incident) -> None:
++    complaint = file_complaint(world, incident)
++    investigation.complaint_id = complaint.id
++    complaint.status = ComplaintStatus.INVESTIGATING
++    complaint.updated_tick = world.tick
++
++
++def build_case(world: World, investigation: Investigation, incident: Incident, defendant: Citizen) -> JudicialCase:
++    priority = 3 if incident.incident_type == "serious_assault" else 2 if incident.severity == "danger" else 1
++    case = JudicialCase(
++        id=world._next_case_id,
++        investigation_id=investigation.id,
++        incident_id=incident.id,
++        defendant_id=defendant.id,
++        charges=world._charges_for_incident(incident),
++        status=JudicialCaseStatus.AWAITING_HEARING,
++        filed_tick=world.tick,
++        hearing_tick=_next_hearing_tick(world, priority),
++        evidence_score=investigation.confidence,
++        complaint_id=investigation.complaint_id,
++        prosecutor_review_tick=world.tick + 6 * 60,
++        priority=priority,
++        timeline=[
++            JudicialTimelineEntry(
++                tick=world.tick,
++                event_type="case_filed",
++                label="Saisine du parquet",
++                detail="Le dossier est transmis au parquet pour examen des charges.",
++            )
++        ],
++    )
++    world._next_case_id += 1
++    if case.complaint_id in world.complaints:
++        complaint = world.complaints[case.complaint_id]
++        complaint.status = ComplaintStatus.REFERRED
++        complaint.updated_tick = world.tick
++    return case
++
++
++def advance_justice(world: World) -> None:
++    justice_hour = world.total_minutes // 60
++    if world._last_justice_hour == justice_hour:
++        return
++    world._last_justice_hour = justice_hour
++    _advance_investigations(world)
++    _advance_cases(world)
++    _advance_sentences(world)
++
++
++def _advance_investigations(world: World) -> None:
++    for investigation in world.investigations.values():
++        if investigation.status not in {InvestigationStatus.OPEN, InvestigationStatus.SUSPECT_IDENTIFIED}:
++            continue
++        if world.tick - investigation.updated_tick < 360:
++            continue
++        incident = world.incidents.get(investigation.incident_id)
++        if incident is None:
++            continue
++        if investigation.lead_suspect_id is None and incident.offender_id is not None and world.rng.random() < 0.45:
++            investigation.lead_suspect_id = incident.offender_id
++            if incident.offender_id not in investigation.suspect_ids:
++                investigation.suspect_ids.append(incident.offender_id)
++            investigation.status = InvestigationStatus.SUSPECT_IDENTIFIED
++        world._add_evidence(
++            investigation,
++            "follow_up",
++            "Vérification complémentaire réalisée par les enquêteurs.",
++            world.rng.uniform(0.35, 0.72),
++            citizen_id=investigation.lead_suspect_id,
++        )
++        investigation.confidence = world._investigation_confidence(investigation)
++        if investigation.lead_suspect_id is not None and investigation.confidence >= 72.0:
++            world._arrest_suspect(investigation, reason="recoupements de l’enquête")
++        elif world.tick - investigation.opened_tick > 5 * 24 * 60 and investigation.confidence < 45.0:
++            investigation.status = InvestigationStatus.CLOSED
++            investigation.notes.append("Enquête classée faute d’éléments suffisants.")
++            _dismiss_complaint(world, investigation.complaint_id, "Éléments insuffisants après enquête.")
++
++
++def _advance_cases(world: World) -> None:
++    candidates = sorted(
++        (case for case in world.judicial_cases.values() if case.status == JudicialCaseStatus.AWAITING_HEARING),
++        key=lambda case: (-case.priority, case.hearing_tick, case.id),
++    )
++    for case in candidates:
++        forced_legacy_hearing = case.hearing_tick <= case.filed_tick
++        if case.prosecutor_decision is None:
++            review_due = case.prosecutor_review_tick or case.filed_tick
++            if world.tick < review_due and not forced_legacy_hearing:
++                continue
++            if not _prosecutor_review(world, case):
++                continue
++        if world.tick < case.hearing_tick:
++            continue
++        if not forced_legacy_hearing and not _court_can_hear(world):
++            case.hearing_tick += 60
++            case.delay_count += 1
++            if case.delay_count in {1, 8, 24}:
++                _timeline(case, world.tick, "hearing_delayed", "Audience reportée", "La capacité du tribunal est momentanément insuffisante.")
++            continue
++        _hold_hearing(world, case)
++
++
++def _prosecutor_review(world: World, case: JudicialCase) -> bool:
++    if case.evidence_score < 55.0:
++        case.status = JudicialCaseStatus.DISMISSED
++        case.decided_tick = world.tick
++        case.verdict = "classé sans suite"
++        case.sentence = "aucune peine"
++        case.prosecutor_decision = "classement sans suite"
++        _timeline(case, world.tick, "prosecutor_dismissal", "Classement sans suite", "Le parquet estime les charges insuffisamment étayées.")
++        _dismiss_complaint(world, case.complaint_id, "Classement sans suite par le parquet.")
++        world.cases_dismissed_today += 1
++        world._emit("case_dismissed", f"Le dossier #{case.id} est classé sans suite par le parquet.", citizen_ids=(case.defendant_id,), severity="info", incident_id=case.incident_id)
++        return False
++    case.prosecutor_decision = "poursuites"
++    if case.complaint_id in world.complaints:
++        complaint = world.complaints[case.complaint_id]
++        complaint.status = ComplaintStatus.PROSECUTED
++        complaint.updated_tick = world.tick
++    _timeline(case, world.tick, "prosecution", "Poursuites engagées", "Le parquet renvoie le dossier devant le tribunal.")
++    return True
++
++
++def _court_can_hear(world: World) -> bool:
++    if weekday(world) > 5 or not 9 <= world.hour < 17 or world.hearings_today >= COURT_DAILY_CAPACITY:
++        return False
++    court = world._first_building(BuildingType.COURT)
++    return court is not None and building_operational(world, court.id)
++
++
++def _hold_hearing(world: World, case: JudicialCase) -> None:
++    defendant = world.citizens.get(case.defendant_id)
++    incident = world.incidents.get(case.incident_id)
++    if defendant is None or incident is None:
++        case.status = JudicialCaseStatus.DISMISSED
++        case.verdict = "classé"
++        case.decided_tick = world.tick
++        return
++    case.status = JudicialCaseStatus.IN_HEARING
++    world.hearings_today += 1
++    _timeline(case, world.tick, "hearing", "Audience", "Le tribunal examine les faits, les preuves et la situation du prévenu.")
++    conviction_threshold = 61.0 + world.rng.uniform(-8.0, 8.0)
++    case.decided_tick = world.tick
++    if case.evidence_score < conviction_threshold:
++        case.status = JudicialCaseStatus.DISMISSED
++        case.verdict = "relaxé"
++        case.sentence = "aucune peine"
++        defendant.detained_until_tick = None
++        defendant.current_detention_type = None
++        message = f"Le dossier #{case.id} est jugé : {defendant.full_name} est relaxé faute de preuves suffisantes."
++        _timeline(case, world.tick, "acquittal", "Relaxe", "Les preuves ne franchissent pas le seuil requis.")
++    else:
++        case.status = JudicialCaseStatus.DECIDED
++        case.verdict = "coupable"
++        sentences = _sentence_case(world, case, incident, defendant)
++        case.sentence = ", ".join(sentence.label for sentence in sentences)
++        defendant.criminal_record_count += 1
++        message = f"Le dossier #{case.id} est jugé : {defendant.full_name} est déclaré coupable ({case.sentence})."
++        _timeline(case, world.tick, "conviction", "Condamnation", case.sentence)
++    investigation = world.investigations.get(case.investigation_id)
++    if investigation is not None:
++        investigation.status = InvestigationStatus.CLOSED
++        investigation.updated_tick = world.tick
++    if case.complaint_id in world.complaints:
++        complaint = world.complaints[case.complaint_id]
++        complaint.status = ComplaintStatus.CLOSED
++        complaint.updated_tick = world.tick
++    world._update_conflict_outcome(incident, message)
++    court = world._first_building(BuildingType.COURT)
++    world._emit("case_decided", message, citizen_ids=(defendant.id, *incident.victim_ids), building_id=court.id if court else incident.building_id, severity="warning" if case.verdict == "coupable" else "info", incident_id=incident.id)
++
++
++def _sentence_case(world: World, case: JudicialCase, incident: Incident, defendant: Citizen) -> list[JudicialSentence]:
++    rows: list[JudicialSentence] = []
++    victim_id = incident.victim_ids[0] if incident.victim_ids else None
++    if incident.incident_type == "theft":
++        rows.append(_new_sentence(world, case, defendant, SentenceType.FINE, "Amende", amount=world.rng.uniform(90, 260)))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.COMPENSATION, "Indemnisation de la victime", amount=world.rng.uniform(40, 140), beneficiary_id=victim_id))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.PROBATION, "Probation de 14 jours", duration=14 * 24 * 60))
++    elif incident.incident_type == "serious_assault":
++        rows.append(_new_sentence(world, case, defendant, SentenceType.LONG_DETENTION, "Détention de 4 jours", duration=4 * 24 * 60))
++        if victim_id is not None:
++            rows.append(_new_sentence(world, case, defendant, SentenceType.RESTRAINING_ORDER, "Interdiction de contact de 30 jours", duration=30 * 24 * 60, beneficiary_id=victim_id))
++    elif incident.incident_type in {"assault", "fight"}:
++        rows.append(_new_sentence(world, case, defendant, SentenceType.COMMUNITY_SERVICE, "Travail d’intérêt général de 8 heures", required_minutes=8 * 60))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.PROBATION, "Probation de 14 jours", duration=14 * 24 * 60))
++        if incident.incident_type == "assault" and victim_id is not None:
++            rows.append(_new_sentence(world, case, defendant, SentenceType.RESTRAINING_ORDER, "Interdiction de contact de 21 jours", duration=21 * 24 * 60, beneficiary_id=victim_id))
++    else:
++        rows.append(_new_sentence(world, case, defendant, SentenceType.JUDICIAL_WARNING, "Rappel judiciaire"))
++    for sentence in rows:
++        _activate_sentence(world, sentence, defendant)
++    case.sentence_ids = [sentence.id for sentence in rows]
++    return rows
++
++
++def _new_sentence(world: World, case: JudicialCase, citizen: Citizen, sentence_type: SentenceType, label: str, *, duration: int = 0, amount: float = 0.0, beneficiary_id: int | None = None, required_minutes: int = 0) -> JudicialSentence:
++    sentence = JudicialSentence(id=world._next_sentence_id, case_id=case.id, citizen_id=citizen.id, sentence_type=sentence_type, label=label, status=SentenceStatus.PENDING, start_tick=world.tick, end_tick=world.tick + duration if duration else None, amount=round(amount, 2), beneficiary_id=beneficiary_id, required_minutes=required_minutes)
++    world._next_sentence_id += 1
++    world.sentences[sentence.id] = sentence
++    citizen.sentence_ids.append(sentence.id)
++    world.sentences_started_today += 1
++    return sentence
++
++
++def _activate_sentence(world: World, sentence: JudicialSentence, citizen: Citizen) -> None:
++    sentence.status = SentenceStatus.ACTIVE
++    if sentence.sentence_type in {SentenceType.FINE, SentenceType.COMPENSATION}:
++        paid = min(max(0.0, citizen.money + citizen.overdraft_limit), sentence.amount)
++        citizen.money = round(citizen.money - paid, 2)
++        citizen.financial_stress = min(100.0, citizen.financial_stress + 8.0)
++        if sentence.beneficiary_id in world.citizens:
++            beneficiary = world.citizens[sentence.beneficiary_id]
++            beneficiary.money = round(beneficiary.money + paid, 2)
++        sentence.status = SentenceStatus.COMPLETED
++    elif sentence.sentence_type in {SentenceType.SHORT_DETENTION, SentenceType.LONG_DETENTION}:
++        citizen.detained_until_tick = max(citizen.detained_until_tick or 0, sentence.end_tick or world.tick)
++        citizen.current_detention_type = "judicial_detention"
++        center = world._first_building(BuildingType.DETENTION_CENTER)
++        if center is not None:
++            citizen.destination_building_id = center.id
++            citizen.planned_activity = Activity.DETAINED
++        if sentence.sentence_type == SentenceType.LONG_DETENTION and citizen.workplace_id is not None:
++            terminate_employment(world, citizen, "dismissal", "Rupture du contrat liée à une détention prolongée.")
++    elif sentence.sentence_type == SentenceType.RESTRAINING_ORDER and sentence.beneficiary_id in world.citizens:
++        beneficiary = world.citizens[sentence.beneficiary_id]
++        for source, target in ((citizen, beneficiary), (beneficiary, citizen)):
++            relationship = source.relationships.get(target.id)
++            if relationship is not None:
++                relationship.trust = max(-100.0, relationship.trust - 18.0)
++                relationship.affection = max(-100.0, relationship.affection - 12.0)
++        citizen.needs.stress = min(100.0, citizen.needs.stress + 6.0)
++    elif sentence.sentence_type == SentenceType.JUDICIAL_WARNING:
++        sentence.status = SentenceStatus.COMPLETED
++
++
++def _advance_sentences(world: World) -> None:
++    for sentence in world.sentences.values():
++        if sentence.status not in {SentenceStatus.ACTIVE, SentenceStatus.VIOLATED}:
++            continue
++        citizen = world.citizens.get(sentence.citizen_id)
++        if citizen is None:
++            continue
++        if sentence.sentence_type == SentenceType.COMMUNITY_SERVICE:
++            if citizen.activity == Activity.COMMUNITY_SERVICE and citizen.travel_stage == TravelStage.IDLE:
++                sentence.completed_minutes = min(sentence.required_minutes, sentence.completed_minutes + 60)
++                citizen.community_service_minutes += 60
++            if sentence.completed_minutes >= sentence.required_minutes:
++                sentence.status = SentenceStatus.COMPLETED
++                world._emit("community_service_completed", f"{citizen.full_name} termine son travail d’intérêt général.", citizen_ids=(citizen.id,), severity="info")
++        elif sentence.end_tick is not None and world.tick >= sentence.end_tick:
++            sentence.status = SentenceStatus.COMPLETED
++            if sentence.sentence_type in {SentenceType.SHORT_DETENTION, SentenceType.LONG_DETENTION} and citizen.current_detention_type == "judicial_detention":
++                citizen.detained_until_tick = None
++                citizen.current_detention_type = None
++
++
++def community_service_due(world: World, citizen_id: int) -> bool:
++    return any(sentence.citizen_id == citizen_id and sentence.sentence_type == SentenceType.COMMUNITY_SERVICE and sentence.status in {SentenceStatus.ACTIVE, SentenceStatus.VIOLATED} and sentence.completed_minutes < sentence.required_minutes for sentence in world.sentences.values())
++
++
++def contact_forbidden(world: World, first_id: int, second_id: int) -> bool:
++    return any(sentence.sentence_type == SentenceType.RESTRAINING_ORDER and sentence.status in {SentenceStatus.ACTIVE, SentenceStatus.VIOLATED} and {sentence.citizen_id, sentence.beneficiary_id} == {first_id, second_id} for sentence in world.sentences.values())
++
++
++def _check_probation_violation(world: World, citizen_id: int | None, incident_id: int) -> None:
++    if citizen_id is None:
++        return
++    for sentence in world.sentences.values():
++        if sentence.citizen_id != citizen_id or sentence.sentence_type != SentenceType.PROBATION or sentence.status != SentenceStatus.ACTIVE:
++            continue
++        sentence.status = SentenceStatus.VIOLATED
++        sentence.violation_count += 1
++        citizen = world.citizens[citizen_id]
++        citizen.probation_violations += 1
++        citizen.needs.stress = min(100.0, citizen.needs.stress + 12.0)
++        world.probation_violations_today += 1
++        world._emit("probation_violated", f"{citizen.full_name} viole sa probation à la suite d’un nouvel incident.", citizen_ids=(citizen_id,), severity="danger", incident_id=incident_id)
++
++
++def _dismiss_complaint(world: World, complaint_id: int | None, reason: str) -> None:
++    if complaint_id not in world.complaints:
++        return
++    complaint = world.complaints[complaint_id]
++    complaint.status = ComplaintStatus.DISMISSED
++    complaint.updated_tick = world.tick
++    complaint.dismissal_reason = reason
++
++
++def _next_hearing_tick(world: World, priority: int) -> int:
++    delay_days = 1 if priority >= 3 else 2 if priority == 2 else 3
++    target = world.tick + delay_days * 24 * 60
++    return target - (target % (24 * 60)) + 9 * 60 + (world._next_case_id % COURT_DAILY_CAPACITY) * 120
++
++
++def _timeline(case: JudicialCase, tick: int, event_type: str, label: str, detail: str) -> None:
++    case.timeline.append(JudicialTimelineEntry(tick=tick, event_type=event_type, label=label, detail=detail))
++    case.timeline[:] = case.timeline[-MAX_JUSTICE_HISTORY:]
++
++
++def justice_metrics(world: World) -> dict[str, int | float]:
++    active_sentences = [sentence for sentence in world.sentences.values() if sentence.status in {SentenceStatus.ACTIVE, SentenceStatus.VIOLATED}]
++    court = world._first_building(BuildingType.COURT)
++    detention = world._first_building(BuildingType.DETENTION_CENTER)
++    return {
++        "complaintsFiled": len(world.complaints),
++        "casesAwaitingHearing": sum(case.status == JudicialCaseStatus.AWAITING_HEARING for case in world.judicial_cases.values()),
++        "hearingsToday": world.hearings_today,
++        "courtCapacityToday": COURT_DAILY_CAPACITY,
++        "courtStaffOnDuty": staff_count(world, court.id) if court else 0,
++        "activeSentences": len(active_sentences),
++        "citizensOnProbation": sum(sentence.sentence_type == SentenceType.PROBATION for sentence in active_sentences),
++        "restrainingOrders": sum(sentence.sentence_type == SentenceType.RESTRAINING_ORDER for sentence in active_sentences),
++        "detainedCitizens": sum(citizen.current_detention_type == "judicial_detention" for citizen in world.citizens.values()),
++        "detentionCapacity": detention.capacity if detention else 0,
++        "probationViolationsToday": world.probation_violations_today,
++    }
++
++
++def justice_overview(world: World) -> dict[str, Any]:
++    court = world._first_building(BuildingType.COURT)
++    detention = world._first_building(BuildingType.DETENTION_CENTER)
++    return {
++        "metrics": justice_metrics(world),
++        "court": world._building_to_dict(court) if court else None,
++        "detentionCenter": world._building_to_dict(detention) if detention else None,
++        "queue": [world._case_summary(case) for case in sorted(world.judicial_cases.values(), key=lambda row: (-row.priority, row.hearing_tick, row.id)) if case.status == JudicialCaseStatus.AWAITING_HEARING],
++        "activeSentences": [sentence_summary(world, sentence) for sentence in world.sentences.values() if sentence.status in {SentenceStatus.ACTIVE, SentenceStatus.VIOLATED}],
++    }
++
++
++def sentence_summary(world: World, sentence: JudicialSentence) -> dict[str, Any]:
++    return {
++        "id": sentence.id,
++        "caseId": sentence.case_id,
++        "citizen": world._citizen_ref(sentence.citizen_id),
++        "type": sentence.sentence_type.value,
++        "label": sentence.label,
++        "status": sentence.status.value,
++        "startTick": sentence.start_tick,
++        "endTick": sentence.end_tick,
++        "amount": sentence.amount,
++        "beneficiary": world._citizen_ref(sentence.beneficiary_id),
++        "requiredMinutes": sentence.required_minutes,
++        "completedMinutes": sentence.completed_minutes,
++        "violationCount": sentence.violation_count,
++    }
+\ No newline at end of file
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/metrics.py city-simulator-v0.10.0/backend/app/simulation/metrics.py
+--- city-simulator-v0.9.0/backend/app/simulation/metrics.py	2026-07-29 13:39:31.870313405 +0200
++++ city-simulator-v0.10.0/backend/app/simulation/metrics.py	2026-07-29 14:18:01.071773247 +0200
+@@ -6,6 +6,7 @@
+ from .economy import economy_metrics
+ from .health import health_metrics
+ from .housing import housing_metrics
++from .justice import justice_metrics
+ from .models import (
+     BuildingType,
+     IncidentStatus,
+@@ -188,6 +189,7 @@
+         housing_metrics(world),
+         population_metrics(world),
+         safety_metrics(world),
++        justice_metrics(world),
+         commerce_metrics(world),
+         mobility_metrics(world),
+         social_metrics(world),
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/models.py city-simulator-v0.10.0/backend/app/simulation/models.py
+--- city-simulator-v0.9.0/backend/app/simulation/models.py	2026-07-29 12:18:08.078647375 +0200
++++ city-simulator-v0.10.0/backend/app/simulation/models.py	2026-07-29 14:11:22.647709268 +0200
+@@ -19,6 +19,7 @@
+     WAITING_MEDICAL = "waiting_medical"
+     IN_TREATMENT = "in_treatment"
+     HOSPITALIZED = "hospitalized"
++    COMMUNITY_SERVICE = "community_service"
+ 
+ 
+ class BuildingType(StrEnum):
+@@ -31,6 +32,8 @@
+     PUBLIC = "public"
+     POLICE = "police"
+     HOSPITAL = "hospital"
++    COURT = "court"
++    DETENTION_CENTER = "detention_center"
+ 
+ 
+ class TransportMode(StrEnum):
+@@ -106,11 +109,40 @@
+ 
+ class JudicialCaseStatus(StrEnum):
+     FILED = "filed"
++    PROSECUTOR_REVIEW = "prosecutor_review"
+     AWAITING_HEARING = "awaiting_hearing"
++    IN_HEARING = "in_hearing"
+     DECIDED = "decided"
+     DISMISSED = "dismissed"
+ 
+ 
++class ComplaintStatus(StrEnum):
++    FILED = "filed"
++    INVESTIGATING = "investigating"
++    REFERRED = "referred"
++    PROSECUTED = "prosecuted"
++    DISMISSED = "dismissed"
++    CLOSED = "closed"
++
++
++class SentenceType(StrEnum):
++    JUDICIAL_WARNING = "judicial_warning"
++    FINE = "fine"
++    COMPENSATION = "compensation"
++    PROBATION = "probation"
++    COMMUNITY_SERVICE = "community_service"
++    RESTRAINING_ORDER = "restraining_order"
++    SHORT_DETENTION = "short_detention"
++    LONG_DETENTION = "long_detention"
++
++
++class SentenceStatus(StrEnum):
++    PENDING = "pending"
++    ACTIVE = "active"
++    COMPLETED = "completed"
++    VIOLATED = "violated"
++
++
+ class SocialEventType(StrEnum):
+     COFFEE = "coffee"
+     PARK_MEETUP = "park_meetup"
+@@ -500,6 +532,10 @@
+     # Police et consÃ©quences immÃ©diates.
+     police_history: list[PoliceMeasure] = field(default_factory=list)
+     current_detention_type: str | None = None
++    sentence_ids: list[int] = field(default_factory=list)
++    criminal_record_count: int = 0
++    probation_violations: int = 0
++    community_service_minutes: int = 0
+ 
+     @property
+     def full_name(self) -> str:
+@@ -536,6 +572,7 @@
+     police_officer_ids: tuple[int, ...] = ()
+     detained_ids: tuple[int, ...] = ()
+     health_case_ids: tuple[int, ...] = ()
++    complaint_id: int | None = None
+ 
+ 
+ @dataclass(slots=True)
+@@ -583,6 +620,7 @@
+ class Investigation:
+     id: int
+     incident_id: int
++    complaint_id: int | None
+     status: InvestigationStatus
+     opened_tick: int
+     updated_tick: int
+@@ -596,6 +634,44 @@
+ 
+ 
+ @dataclass(slots=True)
++class Complaint:
++    id: int
++    incident_id: int
++    complainant_id: int | None
++    accused_id: int | None
++    status: ComplaintStatus
++    filed_tick: int
++    updated_tick: int
++    description: str
++    dismissal_reason: str | None = None
++
++
++@dataclass(slots=True)
++class JudicialTimelineEntry:
++    tick: int
++    event_type: str
++    label: str
++    detail: str
++
++
++@dataclass(slots=True)
++class JudicialSentence:
++    id: int
++    case_id: int
++    citizen_id: int
++    sentence_type: SentenceType
++    label: str
++    status: SentenceStatus
++    start_tick: int
++    end_tick: int | None = None
++    amount: float = 0.0
++    beneficiary_id: int | None = None
++    required_minutes: int = 0
++    completed_minutes: int = 0
++    violation_count: int = 0
++
++
++@dataclass(slots=True)
+ class JudicialCase:
+     id: int
+     investigation_id: int
+@@ -609,6 +685,13 @@
+     decided_tick: int | None = None
+     verdict: str | None = None
+     sentence: str | None = None
++    complaint_id: int | None = None
++    prosecutor_review_tick: int | None = None
++    prosecutor_decision: str | None = None
++    priority: int = 1
++    delay_count: int = 0
++    sentence_ids: list[int] = field(default_factory=list)
++    timeline: list[JudicialTimelineEntry] = field(default_factory=list)
+ 
+ 
+ @dataclass(slots=True)
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/monitoring.py city-simulator-v0.10.0/backend/app/simulation/monitoring.py
+--- city-simulator-v0.9.0/backend/app/simulation/monitoring.py	2026-07-29 13:40:17.837287425 +0200
++++ city-simulator-v0.10.0/backend/app/simulation/monitoring.py	2026-07-29 14:18:20.006604030 +0200
+@@ -3,6 +3,7 @@
+ from typing import TYPE_CHECKING, Any
+ 
+ from .housing import common_budget, home_summary, household_summary as housing_household_summary
++from .justice import COURT_DAILY_CAPACITY, sentence_summary
+ from .models import BuildingType, VehicleType
+ from .social import conflict_label, conflict_propensity, relationship_label, temperament_label
+ from .work import building_operational, is_on_duty, staff_count
+@@ -46,6 +47,7 @@
+             else None
+         ),
+         "healthcare": _healthcare_detail(world, building_id),
++        "justice": _justice_detail(world, building_id),
+         "services": {
+             "operational": building_operational(world, building.id),
+             "staffOnDuty": staff_count(world, building.id),
+@@ -100,6 +102,40 @@
+     }
+ 
+ 
++
++def _justice_detail(world: World, building_id: int) -> dict[str, Any] | None:
++    building = world.buildings[building_id]
++    if building.building_type == BuildingType.COURT:
++        queue = sorted(
++            (case for case in world.judicial_cases.values() if case.status.value == "awaiting_hearing"),
++            key=lambda case: (-case.priority, case.hearing_tick, case.id),
++        )
++        return {
++            "institutionType": "court",
++            "dailyCapacity": COURT_DAILY_CAPACITY,
++            "hearingsToday": world.hearings_today,
++            "queue": [world._case_summary(case) for case in queue],
++        }
++    if building.building_type == BuildingType.DETENTION_CENTER:
++        detained = [
++            citizen for citizen in world.citizens.values()
++            if citizen.current_detention_type == "judicial_detention"
++            and citizen.detained_until_tick is not None
++            and world.tick < citizen.detained_until_tick
++        ]
++        active = [
++            sentence_summary(world, sentence) for sentence in world.sentences.values()
++            if sentence.citizen_id in {citizen.id for citizen in detained}
++            and sentence.status.value in {"active", "violated"}
++        ]
++        return {
++            "institutionType": "detention_center",
++            "capacity": building.capacity,
++            "detained": [world._citizen_ref(citizen.id) for citizen in detained],
++            "activeSentences": active,
++        }
++    return None
++
+ def home_detail(world: World, building_id: int) -> dict[str, Any]:
+     building = world.buildings[building_id]
+     households = [
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/persistence.py city-simulator-v0.10.0/backend/app/simulation/persistence.py
+--- city-simulator-v0.9.0/backend/app/simulation/persistence.py	2026-07-29 13:41:58.976277112 +0200
++++ city-simulator-v0.10.0/backend/app/simulation/persistence.py	2026-07-29 14:15:35.102923730 +0200
+@@ -2,7 +2,7 @@
+ import json
+ from pathlib import Path
+ from typing import Any
+-SAVE_VERSION = 9
++SAVE_VERSION = 10
+ 
+ def validate_save_version(state: dict[str, Any]) -> None:
+     if int(state.get("version",0)) != SAVE_VERSION: raise ValueError("Version de sauvegarde non prise en charge.")
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/service.py city-simulator-v0.10.0/backend/app/simulation/service.py
+--- city-simulator-v0.9.0/backend/app/simulation/service.py	2026-07-29 13:34:27.548073291 +0200
++++ city-simulator-v0.10.0/backend/app/simulation/service.py	2026-07-29 14:17:37.804057399 +0200
+@@ -107,6 +107,10 @@
+         async with self._lock:
+             return self.world.get_household_detail(household_id)
+ 
++    async def justice_overview(self) -> dict:
++        async with self._lock:
++            return self.world.get_justice_overview()
++
+     async def social_graph(self) -> dict:
+         async with self._lock:
+             return self.world.get_social_graph()
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/snapshot.py city-simulator-v0.10.0/backend/app/simulation/snapshot.py
+--- city-simulator-v0.9.0/backend/app/simulation/snapshot.py	2026-07-29 13:49:48.336178541 +0200
++++ city-simulator-v0.10.0/backend/app/simulation/snapshot.py	2026-07-29 14:18:01.071773247 +0200
+@@ -3,6 +3,7 @@
+ from .economy import economy_overview
+ from .health import health_overview
+ from .housing import housing_overview
++from .justice import justice_overview
+ from .metrics import city_metrics
+ from .models import IncidentStatus, SocialEventStatus
+ if TYPE_CHECKING:
+@@ -21,7 +22,7 @@
+         "roads":{"congestion":world._congestion_cells()},
+         "transport":{"operating":world.bus_operating},
+         "social":{"events":[world._social_event_to_dict(event) for event in active_social_events],"households":[world._household_summary(household) for household in world.households.values()]},
+-        "economy":economy_overview(world),"health":health_overview(world),"housing":housing_overview(world),
++        "economy":economy_overview(world),"health":health_overview(world),"housing":housing_overview(world),"justice":justice_overview(world),
+         "incidents":[world._incident_summary(incident) for incident in active_incidents],
+         "events":[world._event_to_dict(event) for event in world.events[-80:]],
+     }
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/social.py city-simulator-v0.10.0/backend/app/simulation/social.py
+--- city-simulator-v0.9.0/backend/app/simulation/social.py	2026-07-28 19:35:19.520360469 +0200
++++ city-simulator-v0.10.0/backend/app/simulation/social.py	2026-07-29 14:15:25.445623127 +0200
+@@ -3,6 +3,7 @@
+ from itertools import combinations
+ from typing import TYPE_CHECKING
+ 
++from .justice import contact_forbidden
+ from .models import (
+     BuildingType,
+     Citizen,
+@@ -223,6 +224,8 @@
+     for other in world.citizens.values():
+         if other.id == host.id or other.social_event_id is not None:
+             continue
++        if contact_forbidden(world, host.id, other.id):
++            continue
+         relation = host.relationships.get(other.id)
+         same_work = host.workplace_id is not None and host.workplace_id == other.workplace_id
+         same_household = host.household_id is not None and host.household_id == other.household_id
+@@ -312,6 +315,8 @@
+     strength: float = 1.0,
+     emit: bool = True,
+ ) -> None:
++    if contact_forbidden(world, a.id, b.id):
++        return
+     relation_a = a.relationships.setdefault(b.id, Relationship(other_id=b.id))
+     relation_b = b.relationships.setdefault(a.id, Relationship(other_id=a.id))
+     old_label = relationship_label(relation_a)
+diff -ruN city-simulator-v0.9.0/backend/app/simulation/world.py city-simulator-v0.10.0/backend/app/simulation/world.py
+--- city-simulator-v0.9.0/backend/app/simulation/world.py	2026-07-29 13:34:27.548073291 +0200
++++ city-simulator-v0.10.0/backend/app/simulation/world.py	2026-07-29 14:30:59.688396930 +0200
+@@ -16,6 +16,17 @@
+ from .generator import generate_buildings, generate_citizens, generate_households, generate_vehicles
+ from .health import apply_injury, health_overview, initialize_health, requires_medical_exam, update_health
+ from .housing import common_budget, home_summary, housing_metrics, housing_overview, household_summary as housing_household_summary, initialize_housing, update_housing
++from .justice import (
++    advance_justice,
++    build_case,
++    community_service_due,
++    contact_forbidden,
++    initialize_justice,
++    justice_overview,
++    link_investigation,
++    reset_justice_day,
++    sentence_summary,
++)
+ from .models import (
+     Activity,
+     Building,
+@@ -31,6 +42,8 @@
+     BusLine,
+     BusStop,
+     Citizen,
++    Complaint,
++    ComplaintStatus,
+     ConflictRecord,
+     DomainEvent,
+     Evidence,
+@@ -43,10 +56,14 @@
+     InvestigationStatus,
+     JudicialCase,
+     JudicialCaseStatus,
++    JudicialSentence,
++    JudicialTimelineEntry,
+     MedicalRecord,
+     Needs,
+     PoliceMeasure,
+     Relationship,
++    SentenceStatus,
++    SentenceType,
+     SocialEvent,
+     SocialEventStatus,
+     SocialEventType,
+@@ -175,6 +192,7 @@
+         initialize_health(self)
+         initialize_housing(self)
+         initialize_economy(self)
++        initialize_justice(self)
+         self._emit("simulation_started", "La ville commence une nouvelle journée.")
+ 
+     @property
+@@ -245,6 +263,7 @@
+         self.shopping_trips_today = 0
+         self.police_warnings_today = 0
+         self.police_detentions_today = 0
++        reset_justice_day(self)
+         self.medical_cases_today = 0
+         self.ambulance_dispatches_today = 0
+         self.medical_wait_minutes_today = 0
+@@ -338,13 +357,18 @@
+             reason: str
+ 
+             if citizen.detained_until_tick is not None and self.tick < citizen.detained_until_tick:
+-                station = self._first_building(BuildingType.POLICE)
+-                target_id = station.id if station is not None else citizen.home_id
++                detention_building = (
++                    self._first_building(BuildingType.DETENTION_CENTER)
++                    if citizen.current_detention_type == "judicial_detention"
++                    else self._first_building(BuildingType.POLICE)
++                )
++                target_id = detention_building.id if detention_building is not None else citizen.home_id
+                 planned = Activity.DETAINED
+                 detention_label = {
+                     "temporary_cell": "mise en cellule",
+                     "sobering_cell": "cellule de dégrisement",
+                     "custody": "garde à vue",
++                    "judicial_detention": "détention judiciaire",
+                 }.get(citizen.current_detention_type, "rétention")
+                 reason = f"La personne fait l'objet d'une {detention_label}."
+             else:
+@@ -352,7 +376,12 @@
+                     citizen.detained_until_tick = None
+                     citizen.current_detention_type = None
+ 
+-                if self.hour < 6 or self.hour >= 23:
++                if community_service_due(self, citizen.id) and weekday(self) <= 5 and 18 <= self.hour < 20:
++                    public_site = self._first_building(BuildingType.PUBLIC)
++                    target_id = public_site.id if public_site is not None else citizen.home_id
++                    planned = Activity.COMMUNITY_SERVICE
++                    reason = "Une plage de travail d’intérêt général est planifiée."
++                elif self.hour < 6 or self.hour >= 23:
+                     target_id = citizen.home_id
+                     planned = Activity.SLEEPING
+                     reason = "Il est temps de dormir."
+@@ -406,6 +435,15 @@
+                         reason = "Aucune obligation urgente : retour au domicile."
+ 
+             target = self.buildings[target_id]
++            forbidden_contact_present = any(
++                other_id != citizen.id and contact_forbidden(self, citizen.id, other_id)
++                for other_id in target.occupants
++            )
++            if forbidden_contact_present and 6 <= self.hour < 23 and park is not None:
++                target_id = park.id
++                target = park
++                planned = Activity.RELAXING
++                reason = "L’interdiction de contact impose une destination alternative."
+             trip_is_missing = (
+                 citizen.travel_stage == TravelStage.IDLE
+                 and (citizen.x, citizen.y) != target.entrance
+@@ -954,6 +992,7 @@
+         investigation = Investigation(
+             id=self._next_investigation_id,
+             incident_id=incident.id,
++            complaint_id=None,
+             status=InvestigationStatus.OPEN,
+             opened_tick=self.tick,
+             updated_tick=self.tick,
+@@ -961,6 +1000,7 @@
+         self._next_investigation_id += 1
+         self.investigations[investigation.id] = investigation
+         incident.investigation_id = investigation.id
++        link_investigation(self, investigation, incident)
+ 
+         for witness_id in incident.witness_ids[:4]:
+             witness = self.citizens.get(witness_id)
+@@ -1066,18 +1106,7 @@
+             suspect.current_detention_type = "custody"
+         self.arrests_today += 1
+ 
+-        case = JudicialCase(
+-            id=self._next_case_id,
+-            investigation_id=investigation.id,
+-            incident_id=incident.id,
+-            defendant_id=suspect.id,
+-            charges=self._charges_for_incident(incident),
+-            status=JudicialCaseStatus.AWAITING_HEARING,
+-            filed_tick=self.tick,
+-            hearing_tick=self.tick + self.rng.randint(720, 2160),
+-            evidence_score=investigation.confidence,
+-        )
+-        self._next_case_id += 1
++        case = build_case(self, investigation, incident, suspect)
+         self.judicial_cases[case.id] = case
+         investigation.case_id = case.id
+         investigation.status = InvestigationStatus.REFERRED
+@@ -1093,84 +1122,7 @@
+         )
+ 
+     def _advance_justice(self) -> None:
+-        justice_hour = self.total_minutes // 60
+-        if getattr(self, "_last_justice_hour", -1) == justice_hour:
+-            return
+-        self._last_justice_hour = justice_hour
+-
+-        for investigation in self.investigations.values():
+-            if investigation.status not in {InvestigationStatus.OPEN, InvestigationStatus.SUSPECT_IDENTIFIED}:
+-                continue
+-            if self.tick - investigation.updated_tick < 360:
+-                continue
+-            incident = self.incidents.get(investigation.incident_id)
+-            if incident is None:
+-                continue
+-            if investigation.lead_suspect_id is None and incident.offender_id is not None and self.rng.random() < 0.45:
+-                investigation.lead_suspect_id = incident.offender_id
+-                investigation.suspect_ids.append(incident.offender_id)
+-                investigation.status = InvestigationStatus.SUSPECT_IDENTIFIED
+-            reliability = self.rng.uniform(0.35, 0.72)
+-            self._add_evidence(
+-                investigation,
+-                "follow_up",
+-                "Vérification complémentaire réalisée par les enquêteurs.",
+-                reliability,
+-                citizen_id=investigation.lead_suspect_id,
+-            )
+-            investigation.confidence = self._investigation_confidence(investigation)
+-            if investigation.lead_suspect_id is not None and investigation.confidence >= 72.0:
+-                self._arrest_suspect(investigation, reason="recoupements de l'enquête")
+-            elif self.tick - investigation.opened_tick > 5 * 24 * 60 and investigation.confidence < 45.0:
+-                investigation.status = InvestigationStatus.CLOSED
+-                investigation.notes.append("Enquête classée faute d'éléments suffisants.")
+-
+-        for case in self.judicial_cases.values():
+-            if case.status != JudicialCaseStatus.AWAITING_HEARING or self.tick < case.hearing_tick:
+-                continue
+-            defendant = self.citizens.get(case.defendant_id)
+-            incident = self.incidents.get(case.incident_id)
+-            if defendant is None or incident is None:
+-                case.status = JudicialCaseStatus.DISMISSED
+-                case.verdict = "classé"
+-                continue
+-            conviction_threshold = 61.0 + self.rng.uniform(-8.0, 8.0)
+-            case.decided_tick = self.tick
+-            if case.evidence_score >= conviction_threshold:
+-                case.status = JudicialCaseStatus.DECIDED
+-                case.verdict = "coupable"
+-                if incident.incident_type == "theft":
+-                    fine = round(self.rng.uniform(90.0, 360.0), 2)
+-                    defendant.money = round(max(0.0, defendant.money - fine), 2)
+-                    case.sentence = f"amende de {fine:.0f} € et probation"
+-                elif incident.incident_type == "serious_assault":
+-                    detention = self.rng.randint(2, 5) * 24 * 60
+-                    defendant.detained_until_tick = max(defendant.detained_until_tick or 0, self.tick + detention)
+-                    case.sentence = f"détention de {detention // (24 * 60)} jours"
+-                else:
+-                    detention = self.rng.randint(6, 18) * 60
+-                    defendant.detained_until_tick = max(defendant.detained_until_tick or 0, self.tick + detention)
+-                    case.sentence = f"détention de {detention // 60} heures et probation"
+-                message = f"Le dossier #{case.id} est jugé : {defendant.full_name} est déclaré coupable ({case.sentence})."
+-            else:
+-                case.status = JudicialCaseStatus.DISMISSED
+-                case.verdict = "relaxé"
+-                case.sentence = "aucune peine"
+-                defendant.detained_until_tick = None
+-                message = f"Le dossier #{case.id} est jugé : {defendant.full_name} est relaxé faute de preuves suffisantes."
+-            self._update_conflict_outcome(incident, message)
+-            investigation = self.investigations.get(case.investigation_id)
+-            if investigation is not None:
+-                investigation.status = InvestigationStatus.CLOSED
+-                investigation.updated_tick = self.tick
+-            self._emit(
+-                "case_decided",
+-                message,
+-                citizen_ids=(defendant.id, *incident.victim_ids),
+-                building_id=incident.building_id,
+-                severity="warning" if case.verdict == "coupable" else "info",
+-                incident_id=incident.id,
+-            )
++        advance_justice(self)
+ 
+     def _move_cars(self) -> None:
+         occupancy = self._moving_vehicle_occupancy()
+@@ -1812,6 +1764,8 @@
+                 "offensesCommitted": citizen.offenses_committed,
+                 "victimizations": citizen.victimizations,
+                 "arrests": citizen.arrests,
++                "criminalRecordCount": citizen.criminal_record_count,
++                "probationViolations": citizen.probation_violations,
+             },
+             "needs": {
+                 "hunger": round(citizen.needs.hunger, 1),
+@@ -1895,6 +1849,14 @@
+                     for investigation in citizen_investigations[:12]
+                 ],
+                 "cases": [self._case_summary(case) for case in citizen_cases[:12]],
++                "sentences": [
++                    sentence_summary(self, self.sentences[sentence_id])
++                    for sentence_id in reversed(citizen.sentence_ids)
++                    if sentence_id in self.sentences
++                ][:20],
++                "criminalRecordCount": citizen.criminal_record_count,
++                "probationViolations": citizen.probation_violations,
++                "communityServiceMinutes": citizen.community_service_minutes,
+             },
+             "transport": {
+                 "mode": citizen.transport_mode.value,
+@@ -2009,6 +1971,7 @@
+         return {
+             "id": case.id,
+             "investigationId": case.investigation_id,
++            "complaintId": case.complaint_id,
+             "incidentId": case.incident_id,
+             "defendant": self._citizen_ref(case.defendant_id),
+             "charges": list(case.charges),
+@@ -2019,6 +1982,12 @@
+             "decidedTick": case.decided_tick,
+             "verdict": case.verdict,
+             "sentence": case.sentence,
++            "prosecutorReviewTick": case.prosecutor_review_tick,
++            "prosecutorDecision": case.prosecutor_decision,
++            "priority": case.priority,
++            "delayCount": case.delay_count,
++            "sentences": [sentence_summary(self, self.sentences[sentence_id]) for sentence_id in case.sentence_ids if sentence_id in self.sentences],
++            "timeline": [{"tick": row.tick, "eventType": row.event_type, "label": row.label, "detail": row.detail} for row in case.timeline],
+             "defendantName": defendant.full_name if defendant else None,
+         }
+ 
+@@ -2029,6 +1998,11 @@
+         return {
+             "id": investigation.id,
+             "incidentId": investigation.incident_id,
++            "complaintId": investigation.complaint_id,
++            "complaint": (
++                {"id": complaint.id, "status": complaint.status.value, "filedTick": complaint.filed_tick, "description": complaint.description, "dismissalReason": complaint.dismissal_reason}
++                if (complaint := self.complaints.get(investigation.complaint_id or -1)) is not None else None
++            ),
+             "status": investigation.status.value,
+             "openedTick": investigation.opened_tick,
+             "updatedTick": investigation.updated_tick,
+@@ -2064,6 +2038,9 @@
+     def get_case_detail(self, case_id: int) -> dict[str, Any]:
+         return {"kind": "case", **self._case_summary(self.judicial_cases[case_id])}
+ 
++    def get_justice_overview(self) -> dict[str, Any]:
++        return justice_overview(self)
++
+     def get_social_graph(self) -> dict[str, Any]:
+         return social_graph(self)
+ 
+@@ -2125,6 +2102,8 @@
+             "nextEvidenceId": self._next_evidence_id,
+             "nextInvestigationId": self._next_investigation_id,
+             "nextCaseId": self._next_case_id,
++            "nextComplaintId": self._next_complaint_id,
++            "nextSentenceId": self._next_sentence_id,
+             "nextSocialEventId": self._next_social_event_id,
+             "nextJobApplicationId": self._next_job_application_id,
+             "nextHealthCaseId": self._next_health_case_id,
+@@ -2147,6 +2126,10 @@
+             "policeResponseMinutesToday": self.police_response_minutes_today,
+             "arrestsToday": self.arrests_today,
+             "casesFiledToday": self.cases_filed_today,
++            "hearingsToday": self.hearings_today,
++            "casesDismissedToday": self.cases_dismissed_today,
++            "sentencesStartedToday": self.sentences_started_today,
++            "probationViolationsToday": self.probation_violations_today,
+             "shopSalesToday": self.shop_sales_today,
+             "shoppingTripsToday": self.shopping_trips_today,
+             "policeWarningsToday": self.police_warnings_today,
+@@ -2171,6 +2154,8 @@
+             "evidence": [self._export_evidence(item) for item in self.evidence.values()],
+             "investigations": [self._export_investigation(item) for item in self.investigations.values()],
+             "judicialCases": [self._export_case(item) for item in self.judicial_cases.values()],
++            "complaints": [self._export_complaint(item) for item in self.complaints.values()],
++            "sentences": [self._export_sentence(item) for item in self.sentences.values()],
+             "jobApplications": [self._export_job_application(item) for item in self.job_applications.values()],
+             "events": [self._export_event(event) for event in self.events],
+         }
+@@ -2195,6 +2180,8 @@
+         world._next_evidence_id = int(state.get("nextEvidenceId", 1))
+         world._next_investigation_id = int(state.get("nextInvestigationId", 1))
+         world._next_case_id = int(state.get("nextCaseId", 1))
++        world._next_complaint_id = int(state.get("nextComplaintId", 1))
++        world._next_sentence_id = int(state.get("nextSentenceId", 1))
+         world._next_social_event_id = int(state.get("nextSocialEventId", 1))
+         world._next_job_application_id = int(state.get("nextJobApplicationId", 1))
+         world._next_health_case_id = int(state.get("nextHealthCaseId", 1))
+@@ -2219,6 +2206,10 @@
+         world.police_response_minutes_today = int(state.get("policeResponseMinutesToday", 0))
+         world.arrests_today = int(state.get("arrestsToday", 0))
+         world.cases_filed_today = int(state.get("casesFiledToday", 0))
++        world.hearings_today = int(state.get("hearingsToday", 0))
++        world.cases_dismissed_today = int(state.get("casesDismissedToday", 0))
++        world.sentences_started_today = int(state.get("sentencesStartedToday", 0))
++        world.probation_violations_today = int(state.get("probationViolationsToday", 0))
+         world.shop_sales_today = float(state.get("shopSalesToday", 0.0))
+         world.shopping_trips_today = int(state.get("shoppingTripsToday", 0))
+         world.police_warnings_today = int(state.get("policeWarningsToday", 0))
+@@ -2458,6 +2449,10 @@
+                     for item in row.get("policeHistory", [])
+                 ],
+                 current_detention_type=row.get("currentDetentionType"),
++                sentence_ids=[int(value) for value in row.get("sentenceIds", [])],
++                criminal_record_count=int(row.get("criminalRecordCount", 0)),
++                probation_violations=int(row.get("probationViolations", 0)),
++                community_service_minutes=int(row.get("communityServiceMinutes", 0)),
+             )
+             citizen.relationships = {
+                 int(relationship_row["otherId"]): Relationship(
+@@ -2684,6 +2679,7 @@
+                     police_officer_ids=tuple(int(value) for value in row.get("policeOfficerIds", [])),
+                     detained_ids=tuple(int(value) for value in row.get("detainedIds", [])),
+                     health_case_ids=tuple(int(value) for value in row.get("healthCaseIds", [])),
++                    complaint_id=int(row["complaintId"]) if row.get("complaintId") is not None else None,
+                 )
+                 for row in state.get("incidents", [])
+             }
+@@ -2770,6 +2766,7 @@
+                 int(row["id"]): Investigation(
+                     id=int(row["id"]),
+                     incident_id=int(row["incidentId"]),
++                    complaint_id=int(row["complaintId"]) if row.get("complaintId") is not None else None,
+                     status=InvestigationStatus(row["status"]),
+                     opened_tick=int(row["openedTick"]),
+                     updated_tick=int(row["updatedTick"]),
+@@ -2800,6 +2797,13 @@
+                     decided_tick=(int(row["decidedTick"]) if row.get("decidedTick") is not None else None),
+                     verdict=row.get("verdict"),
+                     sentence=row.get("sentence"),
++                    complaint_id=int(row["complaintId"]) if row.get("complaintId") is not None else None,
++                    prosecutor_review_tick=int(row["prosecutorReviewTick"]) if row.get("prosecutorReviewTick") is not None else None,
++                    prosecutor_decision=row.get("prosecutorDecision"),
++                    priority=int(row.get("priority", 1)),
++                    delay_count=int(row.get("delayCount", 0)),
++                    sentence_ids=[int(value) for value in row.get("sentenceIds", [])],
++                    timeline=[JudicialTimelineEntry(tick=int(item["tick"]), event_type=str(item["eventType"]), label=str(item["label"]), detail=str(item["detail"])) for item in row.get("timeline", [])],
+                 )
+                 for row in state.get("judicialCases", [])
+             }
+@@ -2808,6 +2812,31 @@
+             world._next_investigation_id, max(world.investigations, default=0) + 1
+         )
+         world._next_case_id = max(world._next_case_id, max(world.judicial_cases, default=0) + 1)
++        world.complaints = {
++            int(row["id"]): Complaint(
++                id=int(row["id"]), incident_id=int(row["incidentId"]),
++                complainant_id=int(row["complainantId"]) if row.get("complainantId") is not None else None,
++                accused_id=int(row["accusedId"]) if row.get("accusedId") is not None else None,
++                status=ComplaintStatus(row["status"]), filed_tick=int(row["filedTick"]),
++                updated_tick=int(row["updatedTick"]), description=str(row["description"]),
++                dismissal_reason=row.get("dismissalReason"),
++            ) for row in state.get("complaints", [])
++        }
++        world.sentences = {
++            int(row["id"]): JudicialSentence(
++                id=int(row["id"]), case_id=int(row["caseId"]), citizen_id=int(row["citizenId"]),
++                sentence_type=SentenceType(row["sentenceType"]), label=str(row["label"]),
++                status=SentenceStatus(row["status"]), start_tick=int(row["startTick"]),
++                end_tick=int(row["endTick"]) if row.get("endTick") is not None else None,
++                amount=float(row.get("amount", 0.0)),
++                beneficiary_id=int(row["beneficiaryId"]) if row.get("beneficiaryId") is not None else None,
++                required_minutes=int(row.get("requiredMinutes", 0)),
++                completed_minutes=int(row.get("completedMinutes", 0)),
++                violation_count=int(row.get("violationCount", 0)),
++            ) for row in state.get("sentences", [])
++        }
++        world._next_complaint_id = max(world._next_complaint_id, max(world.complaints, default=0) + 1)
++        world._next_sentence_id = max(world._next_sentence_id, max(world.sentences, default=0) + 1)
+ 
+         world.job_applications = {
+             int(row["id"]): JobApplication(
+@@ -3269,6 +3298,10 @@
+                 for item in citizen.police_history
+             ],
+             "currentDetentionType": citizen.current_detention_type,
++            "sentenceIds": list(citizen.sentence_ids),
++            "criminalRecordCount": citizen.criminal_record_count,
++            "probationViolations": citizen.probation_violations,
++            "communityServiceMinutes": citizen.community_service_minutes,
+         }
+ 
+     @staticmethod
+@@ -3392,6 +3425,7 @@
+             "policeOfficerIds": list(incident.police_officer_ids),
+             "detainedIds": list(incident.detained_ids),
+             "healthCaseIds": list(incident.health_case_ids),
++            "complaintId": incident.complaint_id,
+         }
+ 
+     @staticmethod
+@@ -3419,6 +3453,7 @@
+         return {
+             "id": item.id,
+             "incidentId": item.incident_id,
++            "complaintId": item.complaint_id,
+             "status": item.status.value,
+             "openedTick": item.opened_tick,
+             "updatedTick": item.updated_tick,
+@@ -3446,6 +3481,34 @@
+             "decidedTick": item.decided_tick,
+             "verdict": item.verdict,
+             "sentence": item.sentence,
++            "complaintId": item.complaint_id,
++            "prosecutorReviewTick": item.prosecutor_review_tick,
++            "prosecutorDecision": item.prosecutor_decision,
++            "priority": item.priority,
++            "delayCount": item.delay_count,
++            "sentenceIds": list(item.sentence_ids),
++            "timeline": [{"tick": row.tick, "eventType": row.event_type, "label": row.label, "detail": row.detail} for row in item.timeline],
++        }
++
++    @staticmethod
++    def _export_complaint(item: Complaint) -> dict[str, Any]:
++        return {
++            "id": item.id, "incidentId": item.incident_id,
++            "complainantId": item.complainant_id, "accusedId": item.accused_id,
++            "status": item.status.value, "filedTick": item.filed_tick,
++            "updatedTick": item.updated_tick, "description": item.description,
++            "dismissalReason": item.dismissal_reason,
++        }
++
++    @staticmethod
++    def _export_sentence(item: JudicialSentence) -> dict[str, Any]:
++        return {
++            "id": item.id, "caseId": item.case_id, "citizenId": item.citizen_id,
++            "sentenceType": item.sentence_type.value, "label": item.label,
++            "status": item.status.value, "startTick": item.start_tick, "endTick": item.end_tick,
++            "amount": item.amount, "beneficiaryId": item.beneficiary_id,
++            "requiredMinutes": item.required_minutes, "completedMinutes": item.completed_minutes,
++            "violationCount": item.violation_count,
+         }
+ 
+     @staticmethod
+diff -ruN city-simulator-v0.9.0/backend/pyproject.toml city-simulator-v0.10.0/backend/pyproject.toml
+--- city-simulator-v0.9.0/backend/pyproject.toml	2026-07-29 12:26:38.547511100 +0200
++++ city-simulator-v0.10.0/backend/pyproject.toml	2026-07-29 14:28:48.536697197 +0200
+@@ -4,7 +4,7 @@
+ 
+ [project]
+ name = "city-simulator-mvp"
+-version = "0.9.0"
++version = "0.10.0"
+ description = "Serveur de simulation urbaine observable en temps réel"
+ requires-python = ">=3.11"
+ dependencies = [
+diff -ruN city-simulator-v0.9.0/backend/tests/test_api.py city-simulator-v0.10.0/backend/tests/test_api.py
+--- city-simulator-v0.9.0/backend/tests/test_api.py	2026-07-29 12:32:27.707718849 +0200
++++ city-simulator-v0.10.0/backend/tests/test_api.py	2026-07-29 14:32:03.405281695 +0200
+@@ -106,6 +106,7 @@
+             assert "economy" in delta
+             assert "health" in delta
+             assert "housing" in delta
++            assert "justice" in delta
+             assert "unemploymentRate" in delta["stats"]
+             assert "medicalStaffOnDuty" in delta["stats"]
+             assert "medianRent" in delta["stats"]
+diff -ruN city-simulator-v0.9.0/backend/tests/test_health.py city-simulator-v0.10.0/backend/tests/test_health.py
+--- city-simulator-v0.9.0/backend/tests/test_health.py	2026-07-29 12:30:23.351126194 +0200
++++ city-simulator-v0.10.0/backend/tests/test_health.py	2026-07-29 14:20:22.682043011 +0200
+@@ -116,7 +116,7 @@
+     case = apply_injury(world, world.citizens[30], 72, source="agression")
+     restored = World.from_state(world.export_state())
+ 
+-    assert restored.export_state()["version"] == 9
++    assert restored.export_state()["version"] == 10
+     assert restored.health_cases[case.id].severity == case.severity
+     assert restored.citizens[30].care_status == CareStatus.WAITING_AMBULANCE
+     assert restored.citizens[30].health_history[0].source == "agression"
+diff -ruN city-simulator-v0.9.0/backend/tests/test_housing.py city-simulator-v0.10.0/backend/tests/test_housing.py
+--- city-simulator-v0.9.0/backend/tests/test_housing.py	2026-07-29 12:31:29.446491003 +0200
++++ city-simulator-v0.10.0/backend/tests/test_housing.py	2026-07-29 14:20:22.685709704 +0200
+@@ -70,7 +70,7 @@
+     restored_household = restored.households[household.id]
+     assert restored_household.home_id == destination.id
+     assert restored_household.housing_history[-1].reason == "test justifié"
+-    assert restored.export_state()["version"] == 9
++    assert restored.export_state()["version"] == 10
+ 
+ 
+ def test_housing_metrics_and_thirty_day_run_remain_coherent():
+diff -ruN city-simulator-v0.9.0/backend/tests/test_justice.py city-simulator-v0.10.0/backend/tests/test_justice.py
+--- city-simulator-v0.9.0/backend/tests/test_justice.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.0/backend/tests/test_justice.py	2026-07-29 14:37:17.851418751 +0200
+@@ -0,0 +1,230 @@
++from __future__ import annotations
++
++from fastapi.testclient import TestClient
++
++from app.main import app, service
++from app.simulation.justice import (
++    _hold_hearing,
++    build_case,
++    contact_forbidden,
++)
++from app.simulation.models import (
++    Activity,
++    BuildingType,
++    JudicialCaseStatus,
++    SentenceStatus,
++    SentenceType,
++    TravelStage,
++)
++from app.simulation.world import World
++
++
++def documented_incident(world: World, incident_type: str = "assault"):
++    citizens = list(world.citizens.values())[:6]
++    offender, victim, *witnesses = citizens
++    incident = world.create_incident(
++        incident_type=incident_type,
++        title="Faits documentés",
++        description="Un incident utilisé pour valider la chaîne judiciaire.",
++        severity="danger",
++        citizen_ids=tuple(citizen.id for citizen in citizens),
++        offender_id=offender.id,
++        victim_ids=(victim.id,),
++        witness_ids=tuple(citizen.id for citizen in witnesses),
++        building_id=next(iter(world.buildings)),
++        reported=True,
++        lifetime_minutes=360,
++        conflict_level=5,
++    )
++    investigation = world._open_investigation(incident)
++    return offender, victim, incident, investigation
++
++
++def test_institutional_staff_are_citizens() -> None:
++    world = World(seed=1001, citizen_count=100)
++    court = world._first_building(BuildingType.COURT)
++    detention = world._first_building(BuildingType.DETENTION_CENTER)
++
++    assert court is not None and detention is not None
++    court_staff = [citizen for citizen in world.citizens.values() if citizen.workplace_id == court.id]
++    detention_staff = [citizen for citizen in world.citizens.values() if citizen.workplace_id == detention.id]
++    assert {citizen.job_title for citizen in court_staff} >= {"Juge", "Greffier"}
++    assert detention_staff and all(citizen.job_title == "Surveillant" for citizen in detention_staff)
++
++
++def test_insufficient_investigation_is_dismissed_with_explicit_complaint_state() -> None:
++    world = World(seed=1002, citizen_count=20)
++    offender, victim = list(world.citizens.values())[:2]
++    incident = world.create_incident(
++        incident_type="theft",
++        title="Signalement incertain",
++        description="Aucun témoin ni élément matériel exploitable.",
++        severity="warning",
++        citizen_ids=(offender.id, victim.id),
++        offender_id=offender.id,
++        victim_ids=(victim.id,),
++        witness_ids=(),
++        building_id=offender.home_id,
++        reported=True,
++        conflict_level=1,
++    )
++    investigation = world._open_investigation(incident)
++    investigation.confidence = 0
++    investigation.updated_tick = 0
++    world.tick = 6 * 24 * 60
++    world._last_justice_hour = -1
++    world._advance_justice()
++
++    assert investigation.status.value == "closed"
++    complaint = world.complaints[investigation.complaint_id]
++    assert complaint.status.value == "dismissed"
++    assert complaint.dismissal_reason
++
++
++def test_court_capacity_delays_excess_hearings() -> None:
++    world = World(seed=1003, citizen_count=100)
++    court = world._first_building(BuildingType.COURT)
++    assert court is not None
++    world.hour, world.minute, world.tick = 10, 0, 4 * 24 * 60 + 10 * 60
++    for citizen in world.citizens.values():
++        if citizen.workplace_id == court.id:
++            citizen.activity = Activity.WORKING
++            citizen.destination_building_id = court.id
++            citizen.x, citizen.y = court.entrance
++            citizen.travel_stage = TravelStage.IDLE
++
++    cases = []
++    for index in range(4):
++        offender, _, incident, investigation = documented_incident(world)
++        if investigation.case_id is None:
++            investigation.confidence = 100
++            case = build_case(world, investigation, incident, offender)
++            world.judicial_cases[case.id] = case
++        else:
++            case = world.judicial_cases[investigation.case_id]
++        case.evidence_score = 100
++        case.prosecutor_decision = "poursuites"
++        case.hearing_tick = world.tick + index
++        cases.append(case)
++    for case in cases:
++        case.filed_tick = world.tick - 1
++        case.hearing_tick = world.tick
++    world._last_justice_hour = -1
++    world._advance_justice()
++
++    decided = [case for case in cases if case.status == JudicialCaseStatus.DECIDED]
++    delayed = [case for case in cases if case.status == JudicialCaseStatus.AWAITING_HEARING]
++    assert len(decided) == 3
++    assert len(delayed) == 1 and delayed[0].delay_count == 1
++
++
++def test_sentence_changes_life_and_contact_order_blocks_interaction() -> None:
++    world = World(seed=1004, citizen_count=20)
++    offender, victim, incident, investigation = documented_incident(world, "assault")
++    case = world.judicial_cases[investigation.case_id]
++    case.evidence_score = 100
++    case.prosecutor_decision = "poursuites"
++    _hold_hearing(world, case)
++
++    sentences = [world.sentences[sentence_id] for sentence_id in case.sentence_ids]
++    assert {sentence.sentence_type for sentence in sentences} >= {
++        SentenceType.COMMUNITY_SERVICE,
++        SentenceType.PROBATION,
++        SentenceType.RESTRAINING_ORDER,
++    }
++    assert contact_forbidden(world, offender.id, victim.id)
++    relation_before = offender.relationships.get(victim.id)
++    familiarity_before = relation_before.familiarity if relation_before else 0
++    from app.simulation.social import apply_interaction
++    apply_interaction(world, offender, victim, incident.building_id, positive=True)
++    relation_after = offender.relationships.get(victim.id)
++    assert (relation_after.familiarity if relation_after else 0) == familiarity_before
++
++    offender.detained_until_tick = None
++    offender.current_detention_type = None
++    offender.needs.fatigue = offender.needs.hunger = offender.needs.social = 0
++    world.hour = 20
++    world.buildings[offender.home_id].occupants.add(victim.id)
++    world._plan_activities()
++    park = world._first_building(BuildingType.PARK)
++    assert park is not None and offender.destination_building_id == park.id
++    assert "interdiction de contact" in offender.last_decision_reason
++
++
++def test_long_detention_interrupts_work_but_preserves_household() -> None:
++    world = World(seed=1005, citizen_count=30)
++    offender, _, _, investigation = documented_incident(world, "serious_assault")
++    previous_household = offender.household_id
++    assert offender.workplace_id is not None
++    case = world.judicial_cases[investigation.case_id]
++    case.evidence_score = 100
++    case.prosecutor_decision = "poursuites"
++    _hold_hearing(world, case)
++
++    assert offender.current_detention_type == "judicial_detention"
++    assert offender.workplace_id is None
++    assert offender.household_id == previous_household
++    assert any(world.sentences[sid].sentence_type == SentenceType.LONG_DETENTION for sid in case.sentence_ids)
++
++
++def test_criminal_record_reduces_access_to_sensitive_jobs() -> None:
++    from app.simulation.economy import _application_score
++
++    world = World(seed=1009, citizen_count=100)
++    citizen = next(row for row in world.citizens.values() if row.workplace_id is not None)
++    court = world._first_building(BuildingType.COURT)
++    assert court is not None
++    rng_state = world.rng.getstate()
++    clean_score = _application_score(world, citizen, court)
++    world.rng.setstate(rng_state)
++    citizen.criminal_record_count = 2
++    citizen.probation_violations = 1
++    recorded_score = _application_score(world, citizen, court)
++    assert recorded_score <= clean_score - 19.0
++
++
++def test_v10_save_round_trip_preserves_active_sentences() -> None:
++    world = World(seed=1006, citizen_count=20)
++    _, _, _, investigation = documented_incident(world, "assault")
++    case = world.judicial_cases[investigation.case_id]
++    case.evidence_score = 100
++    case.prosecutor_decision = "poursuites"
++    _hold_hearing(world, case)
++
++    restored = World.from_state(world.export_state())
++    assert restored.export_state()["version"] == 10
++    assert restored.complaints.keys() == world.complaints.keys()
++    assert restored.sentences.keys() == world.sentences.keys()
++    assert restored.export_state() == world.export_state()
++
++
++def test_justice_api_and_websocket_domain(tmp_path) -> None:
++    service.save_path = tmp_path / "city_snapshot.json"
++    with TestClient(app) as client:
++        client.post("/api/city/reset", json={"seed": 1007})
++        overview = client.get("/api/justice")
++        assert overview.status_code == 200
++        assert overview.json()["court"]["type"] == "court"
++        assert overview.json()["detentionCenter"]["type"] == "detention_center"
++        with client.websocket_connect("/ws/city") as socket:
++            payload = socket.receive_json()
++            assert payload["type"] == "city_snapshot"
++            assert payload["justice"]["metrics"]["courtCapacityToday"] == 3
++
++
++def test_thirty_days_leave_no_case_or_sentence_in_transient_state() -> None:
++    world = World(seed=1008, citizen_count=20)
++    world.run_minutes(30 * 24 * 60)
++
++    assert all(case.status != JudicialCaseStatus.IN_HEARING for case in world.judicial_cases.values())
++    assert all(
++        sentence.end_tick is None
++        or sentence.status in {SentenceStatus.COMPLETED, SentenceStatus.VIOLATED}
++        or sentence.end_tick > world.tick
++        for sentence in world.sentences.values()
++    )
++    assert all(
++        citizen.detained_until_tick is None
++        or citizen.detained_until_tick > world.tick
++        for citizen in world.citizens.values()
++    )
+\ No newline at end of file
+diff -ruN city-simulator-v0.9.0/frontend/package-lock.json city-simulator-v0.10.0/frontend/package-lock.json
+--- city-simulator-v0.9.0/frontend/package-lock.json	2026-07-29 12:32:27.707718849 +0200
++++ city-simulator-v0.10.0/frontend/package-lock.json	2026-07-29 14:28:48.536697197 +0200
+@@ -1,12 +1,12 @@
+ {
+   "name": "city-simulator-frontend",
+-  "version": "0.9.0",
++  "version": "0.10.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "city-simulator-frontend",
+-      "version": "0.9.0",
++      "version": "0.10.0",
+       "dependencies": {
+         "pixi.js": "^7.4.2",
+         "react": "^18.3.1",
+diff -ruN city-simulator-v0.9.0/frontend/package.json city-simulator-v0.10.0/frontend/package.json
+--- city-simulator-v0.9.0/frontend/package.json	2026-07-29 12:26:38.547511100 +0200
++++ city-simulator-v0.10.0/frontend/package.json	2026-07-29 14:28:48.536697197 +0200
+@@ -1,7 +1,7 @@
+ {
+   "name": "city-simulator-frontend",
+   "private": true,
+-  "version": "0.9.0",
++  "version": "0.10.0",
+   "type": "module",
+   "scripts": {
+     "dev": "vite",
+diff -ruN city-simulator-v0.9.0/frontend/src/App.tsx city-simulator-v0.10.0/frontend/src/App.tsx
+--- city-simulator-v0.9.0/frontend/src/App.tsx	2026-07-29 13:27:59.845668077 +0200
++++ city-simulator-v0.10.0/frontend/src/App.tsx	2026-07-29 14:26:34.583808425 +0200
+@@ -12,9 +12,11 @@
+   setSimulationSpeed,
+   stepSimulation,
+ } from "./api";
++import { CaseModal } from "./components/CaseModal";
+ import { CitizenModal } from "./components/CitizenModal";
+ import { EntityModal } from "./components/EntityModal";
+ import { HouseholdModal } from "./components/HouseholdModal";
++import { JusticeModal } from "./components/JusticeModal";
+ import { MetricsPanel } from "./components/MetricsPanel";
+ import { ControlPanel } from "./components/ControlPanel";
+ import { EventLog } from "./components/EventLog";
+@@ -33,6 +35,8 @@
+   const [socialGraphOpen, setSocialGraphOpen] = useState(false);
+   const [citizenModalId, setCitizenModalId] = useState<number | null>(null);
+   const [householdModalId, setHouseholdModalId] = useState<number | null>(null);
++  const [justiceModalOpen, setJusticeModalOpen] = useState(false);
++  const [caseModalId, setCaseModalId] = useState<number | null>(null);
+   const pausedRef = useRef(false);
+   const selectedEntityRef = useRef<SelectedEntity | null>(null);
+   const requestInFlightRef = useRef(false);
+@@ -166,7 +170,7 @@
+     <main className="app-shell">
+       <header className="topbar">
+         <div>
+-          <div className="eyebrow">Monitoring urbain · v0.8</div>
++          <div className="eyebrow">Monitoring urbain · v0.10</div>
+           <h1>City Simulator</h1>
+         </div>
+         <div className="time-block">
+@@ -194,7 +198,7 @@
+       <MetricsPanel stats={snapshot?.stats ?? null} />
+ 
+       <section className="workspace">
+-        <ControlPanel snapshot={snapshot} layers={layers} onToggleLayer={toggleLayer} onOpenBuilding={selectBuilding} onOpenHousehold={setHouseholdModalId} onOpenSocialGraph={() => setSocialGraphOpen(true)} onOpenCitizen={selectCitizen} />
++        <ControlPanel snapshot={snapshot} layers={layers} onToggleLayer={toggleLayer} onOpenBuilding={selectBuilding} onOpenHousehold={setHouseholdModalId} onOpenSocialGraph={() => setSocialGraphOpen(true)} onOpenJustice={() => setJusticeModalOpen(true)} onOpenCitizen={selectCitizen} />
+ 
+         <CityMap
+           snapshot={snapshot}
+@@ -256,6 +260,22 @@
+         onSelectIncident={selectIncident}
+         onSelectHousehold={setHouseholdModalId}
+       />
++      <JusticeModal
++        open={justiceModalOpen}
++        data={snapshot?.justice ?? null}
++        onClose={() => setJusticeModalOpen(false)}
++        onSelectCase={setCaseModalId}
++        onSelectCitizen={(id) => { setJusticeModalOpen(false); selectCitizen(id); }}
++        onSelectBuilding={(id) => { setJusticeModalOpen(false); selectBuilding(id); }}
++      />
++      <CaseModal
++        caseId={caseModalId}
++        paused={snapshot?.simulation.paused ?? false}
++        snapshotTick={snapshot?.tick ?? 0}
++        onClose={() => setCaseModalId(null)}
++        onSelectCitizen={(id) => { setCaseModalId(null); selectCitizen(id); }}
++        onSelectIncident={(id) => { setCaseModalId(null); selectIncident(id); }}
++      />
+       <HouseholdModal householdId={householdModalId} paused={snapshot?.simulation.paused ?? false} snapshotTick={snapshot?.tick ?? 0} onClose={() => setHouseholdModalId(null)} onSelectCitizen={(id) => { setHouseholdModalId(null); selectCitizen(id); }} />
+       <CitizenModal
+         citizenId={citizenModalId}
+@@ -265,6 +285,7 @@
+         onClose={() => setCitizenModalId(null)}
+         onSelectCitizen={selectCitizen}
+         onData={handleCitizenData}
++        onSelectCase={setCaseModalId}
+         onSelectIncident={(incidentId) => {
+           setCitizenModalId(null);
+           setSocialGraphOpen(false);
+diff -ruN city-simulator-v0.9.0/frontend/src/api.ts city-simulator-v0.10.0/frontend/src/api.ts
+--- city-simulator-v0.9.0/frontend/src/api.ts	2026-07-29 12:24:11.773751258 +0200
++++ city-simulator-v0.10.0/frontend/src/api.ts	2026-07-29 14:24:34.925828893 +0200
+@@ -4,6 +4,8 @@
+   EconomyOverview,
+   IncidentDetail,
+   HouseholdDetail,
++  JudicialCaseDetail,
++  JusticeOverview,
+   SocialGraphData,
+   VehicleDetail,
+ } from "./types/city";
+@@ -44,6 +46,12 @@
+ export function getEconomy(): Promise<EconomyOverview> {
+   return request<EconomyOverview>("/api/economy");
+ }
++export function getJustice(): Promise<JusticeOverview> {
++  return request<JusticeOverview>("/api/justice");
++}
++export function getCase(id: number): Promise<JudicialCaseDetail> {
++  return request<JudicialCaseDetail>(`/api/cases/${id}`);
++}
+ export function getSocialGraph(): Promise<SocialGraphData> {
+   return request<SocialGraphData>("/api/social/graph");
+ }
+diff -ruN city-simulator-v0.9.0/frontend/src/components/CaseModal.tsx city-simulator-v0.10.0/frontend/src/components/CaseModal.tsx
+--- city-simulator-v0.9.0/frontend/src/components/CaseModal.tsx	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.0/frontend/src/components/CaseModal.tsx	2026-07-29 14:25:24.905852661 +0200
+@@ -0,0 +1,74 @@
++import { useEffect, useState } from "react";
++import { getCase } from "../api";
++import type { JudicialCaseDetail } from "../types/city";
++import "./JusticeMonitoring.css";
++
++interface CaseModalProps {
++  caseId: number | null;
++  paused: boolean;
++  snapshotTick: number;
++  onClose: () => void;
++  onSelectCitizen: (citizenId: number) => void;
++  onSelectIncident: (incidentId: number) => void;
++}
++
++export function CaseModal({ caseId, paused, snapshotTick, onClose, onSelectCitizen, onSelectIncident }: CaseModalProps) {
++  const [data, setData] = useState<JudicialCaseDetail | null>(null);
++  const [refreshing, setRefreshing] = useState(false);
++
++  useEffect(() => {
++    if (caseId === null) { setData(null); return; }
++    let live = true;
++    setRefreshing(true);
++    getCase(caseId)
++      .then((row) => { if (live) setData(row); })
++      .finally(() => { if (live) setRefreshing(false); });
++    return () => { live = false; };
++  }, [caseId, paused ? 0 : snapshotTick]);
++
++  if (caseId === null) return null;
++  return (
++    <div className="entity-modal-overlay nested-entity-modal" role="dialog" aria-modal="true" onMouseDown={onClose}>
++      <section className="entity-modal-window justice-window" onMouseDown={(event) => event.stopPropagation()}>
++        <button className="entity-modal-close" onClick={onClose}>Fermer</button>
++        <div className="inspector-content">
++          <div className="eyebrow">Dossier judiciaire #{caseId}</div>
++          <h2>{data?.charges.join(" · ") ?? "Chargement…"}</h2>
++          {refreshing && data && <span className="live-status refreshing"><i />Actualisation</span>}
++          {data && (
++            <>
++              <p className={`business-status case-status-${data.status}`}>{data.status}</p>
++              <dl className="facts">
++                <div><dt>Prévenu</dt><dd><button onClick={() => data.defendant && onSelectCitizen(data.defendant.id)}>{data.defendant?.name ?? "Inconnu"}</button></dd></div>
++                <div><dt>Décision du parquet</dt><dd>{data.prosecutorDecision ?? "En attente"}</dd></div>
++                <div><dt>Solidité des preuves</dt><dd>{Math.round(data.evidenceScore)} %</dd></div>
++                <div><dt>Reports</dt><dd>{data.delayCount}</dd></div>
++                <div><dt>Verdict</dt><dd>{data.verdict ?? "—"}</dd></div>
++                <div><dt>Peine</dt><dd>{data.sentence ?? "—"}</dd></div>
++              </dl>
++              <button className="entity-link" onClick={() => onSelectIncident(data.incidentId)}>Ouvrir l’incident #{data.incidentId}</button>
++              <h3>Chronologie complète</h3>
++              <div className="justice-timeline">
++                {data.timeline.map((entry, index) => (
++                  <article key={`${entry.tick}-${entry.eventType}-${index}`}>
++                    <strong>{entry.label}</strong><span>{entry.detail}</span><small>Tick {entry.tick}</small>
++                  </article>
++                ))}
++              </div>
++              <h3>Peines structurées</h3>
++              <div className="justice-list">
++                {data.sentences.map((sentence) => (
++                  <article key={sentence.id}>
++                    <strong>{sentence.label}</strong>
++                    <span>{sentence.status}{sentence.requiredMinutes ? ` · ${sentence.completedMinutes}/${sentence.requiredMinutes} min` : ""}</span>
++                    {sentence.beneficiary && <small>Bénéficiaire : {sentence.beneficiary.name}</small>}
++                  </article>
++                ))}
++              </div>
++            </>
++          )}
++        </div>
++      </section>
++    </div>
++  );
++}
+\ No newline at end of file
+diff -ruN city-simulator-v0.9.0/frontend/src/components/CitizenModal.tsx city-simulator-v0.10.0/frontend/src/components/CitizenModal.tsx
+--- city-simulator-v0.9.0/frontend/src/components/CitizenModal.tsx	2026-07-28 20:41:40.790982723 +0200
++++ city-simulator-v0.10.0/frontend/src/components/CitizenModal.tsx	2026-07-29 14:26:11.418687803 +0200
+@@ -14,6 +14,7 @@
+   onData?: (citizen: CitizenDetail) => void;
+   onSelectCitizen: (citizenId: number) => void;
+   onSelectIncident: (incidentId: number) => void;
++  onSelectCase: (caseId: number) => void;
+ }
+ 
+ const ACTIVITY_LABELS: Record<string, string> = {
+@@ -110,7 +111,7 @@
+   );
+ }
+ 
+-function CaseCard({ row, currentTick }: { row: JudicialCaseSummary; currentTick: number }) {
++function CaseCard({ row, currentTick, onSelectCase }: { row: JudicialCaseSummary; currentTick: number; onSelectCase: (caseId: number) => void }) {
+   const untilHearing = row.hearingTick - currentTick;
+   return (
+     <article className="justice-card">
+@@ -125,11 +126,12 @@
+         {row.verdict && <div><dt>Verdict</dt><dd>{row.verdict}</dd></div>}
+         {row.sentence && <div><dt>Peine</dt><dd>{row.sentence}</dd></div>}
+       </dl>
++      <button onClick={() => onSelectCase(row.id)}>Ouvrir le dossier complet</button>
+     </article>
+   );
+ }
+ 
+-export function CitizenModal({ citizenId, graphContext = false, paused, snapshotTick, onClose, onData, onSelectCitizen, onSelectIncident }: CitizenModalProps) {
++export function CitizenModal({ citizenId, graphContext = false, paused, snapshotTick, onClose, onData, onSelectCitizen, onSelectIncident, onSelectCase }: CitizenModalProps) {
+   const [citizen, setCitizen] = useState<CitizenDetail | null>(null);
+   const [loading, setLoading] = useState(false);
+   const [refreshing, setRefreshing] = useState(false);
+@@ -497,7 +499,22 @@
+                 <h3>Dossiers judiciaires</h3>
+                 {citizen.justice.cases.length === 0 ? <p className="muted">Aucun dossier judiciaire.</p> : (
+                   <div className="justice-list justice-list-cases">
+-                    {citizen.justice.cases.map((row) => <CaseCard key={row.id} row={row} currentTick={citizen.currentTick} />)}
++                    {citizen.justice.cases.map((row) => <CaseCard key={row.id} row={row} currentTick={citizen.currentTick} onSelectCase={onSelectCase} />)}
++                  </div>
++                )}
++              </section>
++              <section className="profile-section profile-section-wide">
++                <h3>Peines et mesures en cours</h3>
++                {citizen.justice.sentences.length === 0 ? <p className="muted">Aucune peine enregistrée.</p> : (
++                  <div className="justice-list">
++                    {citizen.justice.sentences.map((sentence) => (
++                      <article className="justice-card" key={sentence.id}>
++                        <header><strong>{sentence.label}</strong><span>{sentence.status}</span></header>
++                        {sentence.requiredMinutes > 0 && <p>Progression : {sentence.completedMinutes} / {sentence.requiredMinutes} min</p>}
++                        {sentence.violationCount > 0 && <p className="conflict-outcome">Violations : {sentence.violationCount}</p>}
++                        <button onClick={() => onSelectCase(sentence.caseId)}>Dossier #{sentence.caseId}</button>
++                      </article>
++                    ))}
+                   </div>
+                 )}
+               </section>
+diff -ruN city-simulator-v0.9.0/frontend/src/components/ControlPanel.tsx city-simulator-v0.10.0/frontend/src/components/ControlPanel.tsx
+--- city-simulator-v0.9.0/frontend/src/components/ControlPanel.tsx	2026-07-29 13:40:56.506064891 +0200
++++ city-simulator-v0.10.0/frontend/src/components/ControlPanel.tsx	2026-07-29 14:26:11.418687803 +0200
+@@ -9,6 +9,7 @@
+   onOpenBuilding: (id: number) => void;
+   onOpenHousehold: (id: number) => void;
+   onOpenSocialGraph: () => void;
++  onOpenJustice: () => void;
+   onOpenCitizen: (id: number) => void;
+ }
+ 
+@@ -56,6 +57,7 @@
+   onOpenBuilding,
+   onOpenHousehold,
+   onOpenSocialGraph,
++  onOpenJustice,
+   onOpenCitizen,
+ }: ControlPanelProps) {
+   const trips = snapshot?.stats.tripCountsToday ?? { walk: 0, car: 0, bus: 0 };
+@@ -117,6 +119,15 @@
+       <button className="graph-open-button" onClick={onOpenSocialGraph}>
+         Ouvrir le graphe social global
+       </button>
++      <h3>Justice</h3>
++      <dl className="compact-metrics">
++        <div><dt>Audiences</dt><dd>{snapshot?.stats.hearingsToday ?? 0} / {snapshot?.stats.courtCapacityToday ?? 0}</dd></div>
++        <div><dt>Dossiers en attente</dt><dd>{snapshot?.stats.casesAwaitingHearing ?? 0}</dd></div>
++        <div><dt>Peines actives</dt><dd>{snapshot?.stats.activeSentences ?? 0}</dd></div>
++      </dl>
++      <button className="graph-open-button" onClick={onOpenJustice}>
++        Ouvrir le tribunal
++      </button>
+       {nextSocialEvent && (
+         <button
+           className="social-event-card"
+diff -ruN city-simulator-v0.9.0/frontend/src/components/EventLog.tsx city-simulator-v0.10.0/frontend/src/components/EventLog.tsx
+--- city-simulator-v0.9.0/frontend/src/components/EventLog.tsx	2026-07-29 12:25:00.109565496 +0200
++++ city-simulator-v0.10.0/frontend/src/components/EventLog.tsx	2026-07-29 14:27:31.311695048 +0200
+@@ -1,7 +1,7 @@
+ import { useMemo, useState } from "react";
+ import type { CityEvent } from "../types/city";
+ 
+-type EventFilter = "all" | "housing" | "economy" | "health" | "social" | "mobility" | "incidents" | "alerts";
++type EventFilter = "all" | "housing" | "economy" | "health" | "justice" | "social" | "mobility" | "incidents" | "alerts";
+ 
+ const ECONOMY_TYPES = new Set([
+   "vacancy_opened",
+@@ -18,6 +18,16 @@
+ 
+ const HEALTH_TYPES = new Set(["medical_emergency", "medical_case", "ambulance_dispatched", "medical_transport", "medical_discharge", "illness"]);
+ 
++const JUSTICE_TYPES = new Set([
++  "complaint_filed",
++  "investigation_opened",
++  "suspect_arrested",
++  "case_dismissed",
++  "case_decided",
++  "probation_violated",
++  "community_service_completed",
++]);
++
+ const SOCIAL_TYPES = new Set([
+   "positive_meeting",
+   "friendship_formed",
+@@ -55,6 +65,7 @@
+   if (filter === "housing") return HOUSING_TYPES.has(event.eventType);
+   if (filter === "economy") return ECONOMY_TYPES.has(event.eventType);
+   if (filter === "health") return HEALTH_TYPES.has(event.eventType);
++  if (filter === "justice") return JUSTICE_TYPES.has(event.eventType);
+   if (filter === "social") return SOCIAL_TYPES.has(event.eventType);
+   if (filter === "mobility") return MOBILITY_TYPES.has(event.eventType);
+   if (filter === "incidents") return INCIDENT_TYPES.has(event.eventType) || event.incidentId !== null;
+@@ -90,6 +101,7 @@
+             ["all", "Tous"],
+             ["economy", "Économie"],
+             ["health", "Santé"],
++            ["justice", "Justice"],
+             ["social", "Social"],
+             ["mobility", "Mobilité"],
+             ["incidents", "Incidents"],
+diff -ruN city-simulator-v0.9.0/frontend/src/components/JusticeModal.tsx city-simulator-v0.10.0/frontend/src/components/JusticeModal.tsx
+--- city-simulator-v0.9.0/frontend/src/components/JusticeModal.tsx	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.0/frontend/src/components/JusticeModal.tsx	2026-07-29 14:29:14.407816323 +0200
+@@ -0,0 +1,64 @@
++import { sortCourtQueue } from "../monitoring/justice";
++import type { JusticeOverview } from "../types/city";
++import "./JusticeMonitoring.css";
++
++interface JusticeModalProps {
++  open: boolean;
++  data: JusticeOverview | null;
++  onClose: () => void;
++  onSelectCase: (caseId: number) => void;
++  onSelectCitizen: (citizenId: number) => void;
++  onSelectBuilding: (buildingId: number) => void;
++}
++
++export function JusticeModal({ open, data, onClose, onSelectCase, onSelectCitizen, onSelectBuilding }: JusticeModalProps) {
++  if (!open) return null;
++  const metrics = data?.metrics;
++  return (
++    <div className="entity-modal-overlay" role="dialog" aria-modal="true" onMouseDown={onClose}>
++      <section className="entity-modal-window justice-window" onMouseDown={(event) => event.stopPropagation()}>
++        <button className="entity-modal-close" onClick={onClose}>Fermer</button>
++        <div className="inspector-content">
++          <div className="eyebrow">Institution judiciaire</div>
++          <h2>Tribunal municipal</h2>
++          {!data ? <p>Chargement…</p> : (
++            <>
++              <dl className="facts justice-metrics">
++                <div><dt>Audiences du jour</dt><dd>{metrics?.hearingsToday} / {metrics?.courtCapacityToday}</dd></div>
++                <div><dt>Personnel présent</dt><dd>{metrics?.courtStaffOnDuty}</dd></div>
++                <div><dt>Dossiers en attente</dt><dd>{metrics?.casesAwaitingHearing}</dd></div>
++                <div><dt>Peines actives</dt><dd>{metrics?.activeSentences}</dd></div>
++                <div><dt>Probations</dt><dd>{metrics?.citizensOnProbation}</dd></div>
++                <div><dt>Détenus</dt><dd>{metrics?.detainedCitizens} / {metrics?.detentionCapacity}</dd></div>
++              </dl>
++              <div className="justice-institution-links">
++                {data.court && <button onClick={() => onSelectBuilding(data.court!.id)}>Inspecter le tribunal</button>}
++                {data.detentionCenter && <button onClick={() => onSelectBuilding(data.detentionCenter!.id)}>Inspecter le centre de détention</button>}
++              </div>
++              <h3>File des audiences</h3>
++              {data.queue.length === 0 ? <p className="muted">Aucun dossier en attente.</p> : (
++                <div className="justice-list">
++                  {sortCourtQueue(data.queue).map((row) => (
++                    <button key={row.id} onClick={() => onSelectCase(row.id)}>
++                      <span><strong>Dossier #{row.id}</strong><small>{row.charges.join(", ")}</small></span>
++                      <b>Priorité {row.priority} · {Math.round(row.evidenceScore)} %</b>
++                    </button>
++                  ))}
++                </div>
++              )}
++              <h3>Peines actives</h3>
++              <div className="justice-list">
++                {data.activeSentences.map((sentence) => (
++                  <button key={sentence.id} onClick={() => sentence.citizen && onSelectCitizen(sentence.citizen.id)}>
++                    <span><strong>{sentence.citizen?.name ?? "Habitant inconnu"}</strong><small>{sentence.label}</small></span>
++                    <b>{sentence.status}</b>
++                  </button>
++                ))}
++              </div>
++            </>
++          )}
++        </div>
++      </section>
++    </div>
++  );
++}
+\ No newline at end of file
+diff -ruN city-simulator-v0.9.0/frontend/src/components/JusticeMonitoring.css city-simulator-v0.10.0/frontend/src/components/JusticeMonitoring.css
+--- city-simulator-v0.9.0/frontend/src/components/JusticeMonitoring.css	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.0/frontend/src/components/JusticeMonitoring.css	2026-07-29 14:25:24.960853067 +0200
+@@ -0,0 +1,11 @@
++.justice-window { max-width: 860px; }
++.justice-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
++.justice-institution-links { display: flex; gap: 8px; margin: 12px 0; }
++.justice-list, .justice-timeline { display: grid; gap: 8px; }
++.justice-list > button, .justice-list > article, .justice-timeline article { display: flex; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid #2d3748; border-radius: 8px; background: #18202c; text-align: left; }
++.justice-list span, .justice-timeline article { display: grid; gap: 4px; }
++.justice-list small, .justice-timeline small { color: #8f9bad; }
++.justice-list b { color: #f4c86d; font-size: 11px; }
++.justice-timeline article { border-left: 3px solid #779ad7; }
++.nested-entity-modal { z-index: 120; }
++@media (max-width: 900px) { .justice-metrics { grid-template-columns: 1fr 1fr; } }
+\ No newline at end of file
+diff -ruN city-simulator-v0.9.0/frontend/src/components/inspectors/BuildingInspector.tsx city-simulator-v0.10.0/frontend/src/components/inspectors/BuildingInspector.tsx
+--- city-simulator-v0.9.0/frontend/src/components/inspectors/BuildingInspector.tsx	2026-07-29 13:44:26.326216220 +0200
++++ city-simulator-v0.10.0/frontend/src/components/inspectors/BuildingInspector.tsx	2026-07-29 14:27:55.545736220 +0200
+@@ -1,5 +1,6 @@
+ import type { BuildingDetail } from "../../types/city";
+ import { BuildingHousingSection } from "./BuildingHousingSection";
++import { BuildingJusticeSection } from "./BuildingJusticeSection";
+ import { moneyFormatter, NeedBar } from "./shared";
+ const BUSINESS_STATUS_LABELS: Record<string, string> = {
+   healthy: "Saine",
+@@ -37,6 +38,9 @@
+           onSelectHousehold={onSelectHousehold}
+         />
+       )}
++      {building.justice && (
++        <BuildingJusticeSection justice={building.justice} onSelectCitizen={onSelectCitizen} />
++      )}
+       <dl className="facts">
+         <div><dt>Occupation</dt><dd>{building.occupancy} / {building.capacity}</dd></div>
+         <div><dt>Personnel présent</dt><dd>{building.services.staffOnDuty} / {building.services.employeesRequired}</dd></div>
+diff -ruN city-simulator-v0.9.0/frontend/src/components/inspectors/BuildingJusticeSection.tsx city-simulator-v0.10.0/frontend/src/components/inspectors/BuildingJusticeSection.tsx
+--- city-simulator-v0.9.0/frontend/src/components/inspectors/BuildingJusticeSection.tsx	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.0/frontend/src/components/inspectors/BuildingJusticeSection.tsx	2026-07-29 14:27:55.492648139 +0200
+@@ -0,0 +1,42 @@
++import type { BuildingDetail } from "../../types/city";
++
++interface BuildingJusticeSectionProps {
++  justice: NonNullable<BuildingDetail["justice"]>;
++  onSelectCitizen: (citizenId: number) => void;
++}
++
++export function BuildingJusticeSection({ justice, onSelectCitizen }: BuildingJusticeSectionProps) {
++  if (justice.institutionType === "court") {
++    return (
++      <>
++        <h3>Monitoring du tribunal</h3>
++        <dl className="facts">
++          <div><dt>Audiences du jour</dt><dd>{justice.hearingsToday} / {justice.dailyCapacity}</dd></div>
++          <div><dt>Dossiers en attente</dt><dd>{justice.queue.length}</dd></div>
++        </dl>
++        <div className="justice-list">
++          {justice.queue.map((row) => (
++            <article key={row.id}>
++              <strong>Dossier #{row.id}</strong>
++              <span>{row.defendantName} · priorité {row.priority} · {Math.round(row.evidenceScore)} %</span>
++            </article>
++          ))}
++        </div>
++      </>
++    );
++  }
++  return (
++    <>
++      <h3>Monitoring de la détention</h3>
++      <dl className="facts">
++        <div><dt>Occupation</dt><dd>{justice.detained.length} / {justice.capacity}</dd></div>
++        <div><dt>Peines actives suivies</dt><dd>{justice.activeSentences.length}</dd></div>
++      </dl>
++      <div className="passenger-list">
++        {justice.detained.filter((person): person is { id: number; name: string } => person !== null).map((person) => (
++          <button key={person.id} onClick={() => onSelectCitizen(person.id)}>{person.name}</button>
++        ))}
++      </div>
++    </>
++  );
++}
+\ No newline at end of file
+diff -ruN city-simulator-v0.9.0/frontend/src/monitoring/justice.test.ts city-simulator-v0.10.0/frontend/src/monitoring/justice.test.ts
+--- city-simulator-v0.9.0/frontend/src/monitoring/justice.test.ts	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.0/frontend/src/monitoring/justice.test.ts	2026-07-29 14:29:14.356482610 +0200
+@@ -0,0 +1,25 @@
++import { describe, expect, it } from "vitest";
++import { isActiveSentence, sentenceProgress, sortCourtQueue } from "./justice";
++import type { JudicialCaseSummary, JudicialSentenceSummary } from "../types/city";
++
++const caseRow = (id: number, priority: number, hearingTick: number) => ({ id, priority, hearingTick }) as JudicialCaseSummary;
++const sentence = (status: JudicialSentenceSummary["status"], completedMinutes = 0, requiredMinutes = 0) => ({ status, completedMinutes, requiredMinutes }) as JudicialSentenceSummary;
++
++describe("justice monitoring", () => {
++  it("orders the court queue by priority, hearing and stable id", () => {
++    const rows = sortCourtQueue([caseRow(3, 1, 50), caseRow(2, 3, 80), caseRow(1, 3, 80)]);
++    expect(rows.map((row) => row.id)).toEqual([1, 2, 3]);
++  });
++
++  it("derives bounded community-service progress", () => {
++    expect(sentenceProgress(sentence("active", 120, 480))).toBe(25);
++    expect(sentenceProgress(sentence("completed", 600, 480))).toBe(100);
++    expect(sentenceProgress(sentence("active"))).toBeNull();
++  });
++
++  it("keeps violated probation visible as active monitoring", () => {
++    expect(isActiveSentence(sentence("active"))).toBe(true);
++    expect(isActiveSentence(sentence("violated"))).toBe(true);
++    expect(isActiveSentence(sentence("completed"))).toBe(false);
++  });
++});
+\ No newline at end of file
+diff -ruN city-simulator-v0.9.0/frontend/src/monitoring/justice.ts city-simulator-v0.10.0/frontend/src/monitoring/justice.ts
+--- city-simulator-v0.9.0/frontend/src/monitoring/justice.ts	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.0/frontend/src/monitoring/justice.ts	2026-07-29 14:29:14.301482205 +0200
+@@ -0,0 +1,18 @@
++import type { JudicialCaseSummary, JudicialSentenceSummary } from "../types/city";
++
++export function sortCourtQueue(cases: JudicialCaseSummary[]): JudicialCaseSummary[] {
++  return [...cases].sort((left, right) =>
++    right.priority - left.priority
++    || left.hearingTick - right.hearingTick
++    || left.id - right.id,
++  );
++}
++
++export function sentenceProgress(sentence: JudicialSentenceSummary): number | null {
++  if (sentence.requiredMinutes <= 0) return null;
++  return Math.min(100, Math.round((sentence.completedMinutes / sentence.requiredMinutes) * 100));
++}
++
++export function isActiveSentence(sentence: JudicialSentenceSummary): boolean {
++  return sentence.status === "active" || sentence.status === "violated";
++}
+\ No newline at end of file
+diff -ruN city-simulator-v0.9.0/frontend/src/monitoring/metrics.ts city-simulator-v0.10.0/frontend/src/monitoring/metrics.ts
+--- city-simulator-v0.9.0/frontend/src/monitoring/metrics.ts	2026-07-29 13:41:39.671323537 +0200
++++ city-simulator-v0.10.0/frontend/src/monitoring/metrics.ts	2026-07-29 14:27:06.651535571 +0200
+@@ -131,7 +131,7 @@
+       label: "Sécurité",
+       metrics: [
+         card("incidents", "Incidents actifs", number.format(stats.activeIncidents), "security"),
+-        card("serious", "Incidents graves", number.format(stats.seriousIncidents), "security"),
++        card("sentences", "Peines actives", number.format(stats.activeSentences), "security"),
+         card("police", "Police disponible", number.format(stats.policeUnitsAvailable), "security"),
+         card("response", "Réponse police", `${number.format(stats.averagePoliceResponseMinutes)} min`, "security"),
+         card("investigations", "Enquêtes ouvertes", number.format(stats.openInvestigations), "security"),
+diff -ruN city-simulator-v0.9.0/frontend/src/types/city.ts city-simulator-v0.10.0/frontend/src/types/city.ts
+--- city-simulator-v0.9.0/frontend/src/types/city.ts	2026-07-29 12:24:11.773751258 +0200
++++ city-simulator-v0.10.0/frontend/src/types/city.ts	2026-07-29 14:24:12.401527027 +0200
+@@ -12,7 +12,8 @@
+   | "shopping"
+   | "waiting_medical"
+   | "in_treatment"
+-  | "hospitalized";
++  | "hospitalized"
++  | "community_service";
+ 
+ export type TransportMode = "walk" | "car" | "bus";
+ export type TravelStage =
+@@ -110,7 +111,7 @@
+ export interface BuildingSummary {
+   id: number;
+   name: string;
+-  type: "home" | "office" | "factory" | "shop" | "cafe" | "park" | "public" | "police" | "hospital";
++  type: "home" | "office" | "factory" | "shop" | "cafe" | "park" | "public" | "police" | "hospital" | "court" | "detention_center";
+   x: number;
+   y: number;
+   width: number;
+@@ -324,6 +325,16 @@
+     casesFiledToday: number;
+     casesAwaitingHearing: number;
+     casesDecided: number;
++    complaintsFiled: number;
++    hearingsToday: number;
++    courtCapacityToday: number;
++    courtStaffOnDuty: number;
++    activeSentences: number;
++    citizensOnProbation: number;
++    restrainingOrders: number;
++    detainedCitizens: number;
++    detentionCapacity: number;
++    probationViolationsToday: number;
+     employedCitizens: number;
+     workersOnDuty: number;
+     operationalWorkplaces: number;
+@@ -378,6 +389,7 @@
+   economy: EconomyOverview;
+   health: HealthOverview;
+   housing: HousingOverview;
++  justice: JusticeOverview;
+   incidents: IncidentSummary[];
+   events: CityEvent[];
+   simulation: {
+@@ -403,6 +415,7 @@
+   | "economy"
+   | "health"
+   | "housing"
++  | "justice"
+   | "incidents"
+   | "events"
+   | "simulation"
+@@ -545,6 +558,10 @@
+       caseId: number | null;
+     }>;
+     cases: JudicialCaseSummary[];
++    sentences: JudicialSentenceSummary[];
++    criminalRecordCount: number;
++    probationViolations: number;
++    communityServiceMinutes: number;
+   };
+   transport: {
+     mode: TransportMode;
+@@ -610,6 +627,7 @@
+   occupants: Array<{ id: number; name: string }>;
+   housing: (HomeSummary & { residents: Array<{id:number;name:string}|null>; households: HouseholdSummary[]; arrears:number; history:HousingRecord[] }) | null;
+   healthcare: { beds: number; queue: HealthCaseSummary[]; hospitalized: Array<{ id: number; name: string } | null>; patientsTreatedToday: number; ambulances: VehicleSummary[] } | null;
++  justice: { institutionType: "court"; dailyCapacity: number; hearingsToday: number; queue: JudicialCaseSummary[] } | { institutionType: "detention_center"; capacity: number; detained: Array<{ id: number; name: string } | null>; activeSentences: JudicialSentenceSummary[] } | null;
+   services: {
+     operational: boolean;
+     staffOnDuty: number;
+@@ -635,7 +653,47 @@
+ }
+ 
+ export type InvestigationStatus = "open" | "suspect_identified" | "arrested" | "referred" | "closed";
+-export type JudicialCaseStatus = "filed" | "awaiting_hearing" | "decided" | "dismissed";
++export type JudicialCaseStatus = "filed" | "prosecutor_review" | "awaiting_hearing" | "in_hearing" | "decided" | "dismissed";
++export type SentenceType = "judicial_warning" | "fine" | "compensation" | "probation" | "community_service" | "restraining_order" | "short_detention" | "long_detention";
++export type SentenceStatus = "pending" | "active" | "completed" | "violated";
++
++export interface JudicialSentenceSummary {
++  id: number;
++  caseId: number;
++  citizen: { id: number; name: string } | null;
++  type: SentenceType;
++  label: string;
++  status: SentenceStatus;
++  startTick: number;
++  endTick: number | null;
++  amount: number;
++  beneficiary: { id: number; name: string } | null;
++  requiredMinutes: number;
++  completedMinutes: number;
++  violationCount: number;
++}
++
++export interface JusticeMetrics {
++  complaintsFiled: number;
++  casesAwaitingHearing: number;
++  hearingsToday: number;
++  courtCapacityToday: number;
++  courtStaffOnDuty: number;
++  activeSentences: number;
++  citizensOnProbation: number;
++  restrainingOrders: number;
++  detainedCitizens: number;
++  detentionCapacity: number;
++  probationViolationsToday: number;
++}
++
++export interface JusticeOverview {
++  metrics: JusticeMetrics;
++  court: BuildingSummary | null;
++  detentionCenter: BuildingSummary | null;
++  queue: JudicialCaseSummary[];
++  activeSentences: JudicialSentenceSummary[];
++}
+ 
+ export interface ConflictHistoryEntry {
+   otherId?: number;
+@@ -663,6 +721,7 @@
+ export interface JudicialCaseSummary {
+   id: number;
+   investigationId: number;
++  complaintId: number | null;
+   incidentId: number;
+   defendant: { id: number; name: string } | null;
+   charges: string[];
+@@ -673,9 +732,19 @@
+   decidedTick: number | null;
+   verdict: string | null;
+   sentence: string | null;
++  prosecutorReviewTick: number | null;
++  prosecutorDecision: string | null;
++  priority: number;
++  delayCount: number;
++  sentences: JudicialSentenceSummary[];
++  timeline: Array<{ tick: number; eventType: string; label: string; detail: string }>;
+   defendantName: string | null;
+ }
+ 
++export interface JudicialCaseDetail extends JudicialCaseSummary {
++  kind: "case";
++}
++
+ export interface InvestigationDetail {
+   id: number;
+   incidentId: number;

@@ -1,0 +1,2561 @@
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/CHANGELOG.md city-simulator-v0.13.0/CHANGELOG.md
+--- city-simulator-v0.12.0/CHANGELOG.md	2026-07-29 16:22:35.000000000 +0200
++++ city-simulator-v0.13.0/CHANGELOG.md	2026-07-29 17:47:43.000000000 +0200
+@@ -1,5 +1,30 @@
+ # Changelog
+ 
++## 0.13.0 — Criminalité systémique et renseignement
++
++### Ajouté
++
++- Factions criminelles typées, hiérarchies de rôles, territoires, influence, rivalités, alliances, recrutement et guerres de territoire.
++- Marchés de drogues, armes, recel et contrefaçons avec prix, offre, demande, stocks, saisies et transactions citoyennes persistantes.
++- Dépendance, risque d’usage, contacts criminels, revenus illégaux, dépenses illégales et conséquences sanitaires/professionnelles individuelles.
++- Trafic de gros, blanchiment, corruption et raids policiers ; qualifications et peines judiciaires dédiées.
++- Monitoring plein écran et endpoint de détail des factions.
++- Six tests backend systémiques supplémentaires.
++
++### Modifié
++
++- Population maximale portée de 1 000 à 5 000 citoyens ; variable d’environnement de démarrage désormais respectée.
++- Cadence WebSocket adaptative de 0,5 à 2 secondes selon la population.
++- Groupe d’indicateurs Sécurité maintenu à six cartes, recentré sur factions, membres, ventes, dépendances et territoires.
++- Sauvegarde stricte v14 ; versions backend et frontend portées à 0.13.0.
++
++### Limites connues
++
++- Le marché clandestin est agrégé par quartier et produit, pas au niveau de chaque rue ou point de deal physique.
++- Les enquêtes financières et infiltrations ne sont pas encore des dossiers spécialisés ; les incidents détectés suivent le pipeline judiciaire commun.
++- À 5 000 citoyens, un snapshot initial approche 3 Mo et l’initialisation observée prend environ 3 secondes sur la machine de validation.
++
++
+ ## 0.12.0 — Banque, précarité et crime organisé
+ 
+ ### Ajouté
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/README.md city-simulator-v0.13.0/README.md
+--- city-simulator-v0.12.0/README.md	2026-07-29 16:28:34.000000000 +0200
++++ city-simulator-v0.13.0/README.md	2026-07-29 17:47:43.000000000 +0200
+@@ -1,6 +1,22 @@
+-# City Simulator — v0.12.0 Banque, précarité et crime organisé
++# City Simulator — v0.13.0 Criminalité systémique et renseignement
+ 
+-Prototype web d'une ville persistante simulant de 20 à 1 000 habitants, avec emplois uniques, logement, banque, communications, quartiers, services publics, criminalité organisée, police et justice.
++Simulateur urbain persistant de 20 à 5 000 habitants : économie, emplois uniques, logement, banque, communications, quartiers, services publics, factions criminelles, police et justice.
++
++## Nouveautés v0.13.0
++
++- Jusqu’à 5 000 citoyens configurables (`CITYSIM_CITIZEN_COUNT` ou sélecteur UI), avec 16 factions au plafond et cadence WebSocket adaptée au volume.
++- Sept familles de factions : gangs de rue ou organisés, mafias, triades, cartels, gangs de motards et réseaux cybercriminels. Chaque groupe possède chef, rôles, territoires, rivaux, alliés, cohésion, violence, sophistication, influence et pression de recrutement.
++- Six marchés illicites : cannabis, cocaïne, drogues de synthèse, armes, biens volés et contrefaçons. Offre, demande, prix, stocks, pression policière et saisies évoluent quotidiennement.
++- Transactions réelles dealer–citoyen : argent retiré des comptes/espèces, commission du vendeur, trésorerie de faction, contacts criminels, exposition, dépendance, santé et performance professionnelle.
++- Recrutement des habitants vulnérables, conflits territoriaux, trafic de gros, blanchiment, corruption, raids et réponse judiciaire différenciée.
++- Monitoring criminel plein écran avec factions, marchés, transactions, opérations et influence territoriale. Les données non détectées sont explicitement présentées comme omniscience de simulation, distincte du savoir policier.
++- Endpoint détaillé `GET /api/crime/factions/{id}`, domaine `crime` enrichi dans le snapshot et le WebSocket, fiche citoyen enrichie.
++- Historiques bornés : 5 000 transactions, 2 000 opérations et 120 jours de tendances criminelles.
++- Sauvegarde stricte v14 comprenant factions, rôles, relations, marchés, transactions, dépendances, compteurs et générateur pseudo-aléatoire criminel.
++
++## Migration depuis v0.12.0
++
++Le schéma passe de 13 à 14. Les sauvegardes antérieures sont refusées : elles ne contiennent pas les factions typées, marchés, transactions, rôles, relations territoriales ni états individuels d’exposition.
+ 
+ ## Nouveautés v0.12.0
+ 
+@@ -258,6 +274,9 @@
+ │   │       ├── banking.py
+ │   │       ├── communication.py
+ │   │       ├── crime.py
++│   │       ├── criminal_factions.py
++│   │       ├── criminal_markets.py
++│   │       ├── crime_monitoring.py
+ │   │       ├── economy.py
+ │   │       ├── snapshot.py
+ │   │       ├── health.py
+@@ -302,6 +321,7 @@
+ GET  /api/economy
+ GET  /api/banking
+ GET  /api/crime
++GET  /api/crime/factions/{id}
+ GET  /api/healthcare
+ GET  /api/housing
+ GET  /api/justice
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/VALIDATION.md city-simulator-v0.13.0/VALIDATION.md
+--- city-simulator-v0.12.0/VALIDATION.md	2026-07-29 16:28:34.000000000 +0200
++++ city-simulator-v0.13.0/VALIDATION.md	2026-07-29 17:47:43.000000000 +0200
+@@ -1,22 +1,22 @@
+-# Validation — v0.12.0
++# Validation — v0.13.0
+ 
+-## Backend
++## Résultats
+ 
+-- 83 tests backend réussis sous Python 3.12, dont 5 scénarios dédiés à la banque, la capacité 1 000, le sans-abrisme, les mafias et les violations d’ordonnance.
+-- Couverture fonctionnelle : divergence des quartiers, distance aux services, incidents répétés, sécurité ressentie, opportunités criminelles, patrouilles citoyennes, API, WebSocket et sauvegarde/reprise déterministe.
+-- Simulation de 30 jours : historiques bornés, zones distinctes et aucune unité bloquée sans route dans un état transitoire.
+-- Les scénarios historiques d’économie, santé, logement, justice et communications restent verts.
+-
+-## Frontend
+-
+-- 16 tests Vitest dans 7 fichiers.
+-- Contrôle TypeScript strict et build Vite validés.
+-- Neuf vues compactes d’indicateurs, carte renouvelée, nouveaux bâtiments et contrats TypeScript compilés.
++- Backend : 89 tests réussis sous Python 3.12, dont 6 scénarios systémiques v0.13.0.
++- Frontend : 16 tests Vitest dans 7 fichiers.
++- TypeScript strict et build Vite de production réussis.
++- Persistance v14 : export/import strictement identique après 900 minutes de simulation criminelle.
++- Déterminisme : deux mondes de même graine produisent un monitoring criminel identique.
++- Capacité : initialisation validée à 5 000 citoyens, 16 factions et au moins 32 marchés.
++- Bornes validées : 5 000 transactions, 2 000 opérations, 120 jours d’historique.
++- Compatibilité : tous les scénarios historiques économie, banque, logement, santé, communications, quartiers, police et justice restent verts.
+ 
+ ## Commandes de validation
+ 
+ ```bash
+ cd backend
++python3 -m venv .venv
++.venv/bin/pip install -r requirements.lock
+ .venv/bin/python -m pytest -q
+ .venv/bin/python -m compileall -q app tests
+ .venv/bin/pip check
+@@ -31,17 +31,20 @@
+ git diff --check
+ ```
+ 
+-## Commandes Docker
++## Lancement
+ 
+ ```bash
+-docker compose build
+-docker compose up
++# Population par défaut : 100
++CITYSIM_CITIZEN_COUNT=1000 docker compose up --build
++
++# Charge maximale validée
++CITYSIM_CITIZEN_COUNT=5000 docker compose up --build
+ ```
+ 
+-Frontend : `http://localhost:5173` — API : `http://localhost:8000`.
++Frontend : `http://localhost:5173` — API : `http://localhost:8000` — WebSocket : `ws://localhost:5173/ws/city`.
+ 
+-## Couverture et limites de l’environnement
++## Limites de validation
+ 
+-- Aucun collecteur de couverture Python/Vitest n’est installé ; aucun pourcentage non mesuré n’est annoncé.
+-- Quatre quartiers fixes, éclairage non administrable et deux patrouilles simultanées au maximum.
+-- Le navigateur intégré est bloqué par `helper_unknown_error` ; TypeScript/Vite valident le rendu, mais l’inspection interactive doit être refaite localement.
++- Aucun collecteur de couverture Python/Vitest n’est installé ; aucun pourcentage non mesuré n’est annoncé. La couverture fonctionnelle est maintenue par 105 tests au total.
++- Le navigateur intégré reste indisponible à cause de `helper_unknown_error`; la compilation valide les contrats et styles, mais une inspection visuelle interactive locale reste recommandée.
++- À 5 000 citoyens, l’initialisation mesurée est d’environ 3 secondes, consomme environ 325 Mo et le snapshot initial JSON approche 3 Mo ; la cadence des deltas monte automatiquement à 2 secondes.
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/api/routes.py city-simulator-v0.13.0/backend/app/api/routes.py
+--- city-simulator-v0.12.0/backend/app/api/routes.py	2026-07-29 16:01:15.000000000 +0200
++++ city-simulator-v0.13.0/backend/app/api/routes.py	2026-07-29 17:31:14.000000000 +0200
+@@ -17,7 +17,7 @@
+ 
+ class ResetRequest(BaseModel):
+     seed: int | None = None
+-    citizen_count: int | None = Field(default=None, alias="citizenCount", ge=20, le=1000)
++    citizen_count: int | None = Field(default=None, alias="citizenCount", ge=20, le=5000)
+ 
+ 
+ class CommunicationRequest(BaseModel):
+@@ -61,6 +61,10 @@
+     async def crime_overview() -> dict:
+         return await service.crime_overview()
+ 
++    @router.get("/crime/factions/{organization_id}")
++    async def crime_faction_detail(organization_id: int) -> dict:
++        return await _detail_or_404(service.crime_faction_detail, organization_id, "Faction criminelle introuvable")
++
+     @router.get("/justice")
+     async def justice_overview() -> dict:
+         return await service.justice_overview()
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/api/websocket.py city-simulator-v0.13.0/backend/app/api/websocket.py
+--- city-simulator-v0.12.0/backend/app/api/websocket.py	2026-07-29 13:29:01.000000000 +0200
++++ city-simulator-v0.13.0/backend/app/api/websocket.py	2026-07-29 17:41:32.000000000 +0200
+@@ -12,5 +12,6 @@
+             initial = False
+             try: await websocket.send_json(payload)
+             except (WebSocketDisconnect, RuntimeError, OSError): return
+-            await asyncio.sleep(interval_seconds)
++            population_interval = min(2.0, max(interval_seconds, len(service.world.citizens) / 2500.0))
++            await asyncio.sleep(population_interval)
+     except WebSocketDisconnect: return
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/main.py city-simulator-v0.13.0/backend/app/main.py
+--- city-simulator-v0.12.0/backend/app/main.py	2026-07-29 15:34:24.000000000 +0200
++++ city-simulator-v0.13.0/backend/app/main.py	2026-07-29 17:31:14.000000000 +0200
+@@ -6,7 +6,7 @@
+ from .api.websocket import stream_city
+ from .simulation.service import SimulationService
+ 
+-service = SimulationService(seed=12345, citizen_count=100)
++service = SimulationService(seed=12345)
+ 
+ @asynccontextmanager
+ async def lifespan(_: FastAPI):
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/simulation/crime.py city-simulator-v0.13.0/backend/app/simulation/crime.py
+--- city-simulator-v0.12.0/backend/app/simulation/crime.py	2026-07-29 16:23:44.000000000 +0200
++++ city-simulator-v0.13.0/backend/app/simulation/crime.py	2026-07-29 17:32:06.000000000 +0200
+@@ -4,6 +4,9 @@
+ from typing import TYPE_CHECKING
+ 
+ from .banking import available_funds, withdraw
++from .criminal_factions import initialize_factions, reset_faction_day, update_faction_dynamics
++from .criminal_markets import initialize_criminal_markets, reset_criminal_market_day, update_criminal_markets
++from .crime_monitoring import crime_faction_detail, crime_overview
+ from .models import (
+     Activity,
+     BuildingType,
+@@ -17,6 +20,9 @@
+     from .world import World
+ 
+ 
++MAX_CRIME_OPERATIONS = 2_000
++MAX_CRIME_HISTORY_DAYS = 120
++
+ ORGANIZATION_NAMES = (
+     "Le Cercle des Docks",
+     "La Fratrie du Canal",
+@@ -33,44 +39,35 @@
+     world._last_crime_hour = -1
+     world.organized_crimes_today = 0
+     world.ransom_paid_today = 0.0
+-    candidates = sorted(
+-        (
+-            citizen
+-            for citizen in world.citizens.values()
+-            if citizen.age >= 18
+-            and (citizen.workplace_id is None or world.buildings[citizen.workplace_id].building_type not in {BuildingType.POLICE, BuildingType.COURT})
+-        ),
+-        key=lambda citizen: (
+-            citizen.aggression + citizen.impulsivity + citizen.financial_stress,
+-            citizen.id,
+-        ),
+-        reverse=True,
+-    )
+-    organization_count = min(4, max(1, len(world.citizens) // 250))
+-    member_count = max(3, min(7, len(world.citizens) // max(20, organization_count * 30)))
+-    for organization_id in range(1, organization_count + 1):
+-        members = candidates[(organization_id - 1) * member_count : organization_id * member_count]
+-        if len(members) < 2:
+-            break
+-        organization = CrimeOrganization(
+-            id=organization_id,
+-            name=ORGANIZATION_NAMES[(organization_id - 1) % len(ORGANIZATION_NAMES)],
+-            leader_id=members[0].id,
+-            member_ids=[citizen.id for citizen in members],
+-            territory_id=((organization_id - 1) % max(1, len(world.neighborhoods))) + 1,
+-            treasury=world.crime_rng.uniform(800.0, 2_500.0),
+-        )
+-        world.crime_organizations[organization.id] = organization
+-        for citizen in members:
+-            citizen.crime_organization_id = organization.id
++    world.crime_history: list[dict[str, object]] = []
++    world._last_crime_faction_day = 0
++    initialize_factions(world)
++    initialize_criminal_markets(world)
+ 
+ 
+ def reset_crime_day(world: World) -> None:
++    world.crime_history.append({
++        "day": world.day - 1,
++        "organizedCrimes": world.organized_crimes_today,
++        "illegalSales": world.illegal_sales_today,
++        "drugSales": world.drug_sales_today,
++        "illegalRevenue": round(world.illegal_revenue_today, 2),
++        "policeSeizures": round(world.police_seizures_today, 2),
++        "dependentCitizens": sum(citizen.addiction_level >= 35.0 for citizen in world.citizens.values()),
++    })
++    world.crime_history[:] = world.crime_history[-MAX_CRIME_HISTORY_DAYS:]
+     world.organized_crimes_today = 0
+     world.ransom_paid_today = 0.0
++    reset_faction_day(world)
++    reset_criminal_market_day(world)
++    for citizen in world.citizens.values():
++        citizen.criminal_income_today = 0.0
++        citizen.illegal_spending_today = 0.0
+ 
+ 
+ def update_crime(world: World) -> None:
++    update_faction_dynamics(world)
++    update_criminal_markets(world)
+     hour_key = world.day * 24 + world.hour
+     if world.minute != 35 or world._last_crime_hour == hour_key:
+         return
+@@ -84,6 +81,7 @@
+         risk = 0.014 + organization.notoriety / 9_000.0 + (0.012 if nighttime else 0.0)
+         if world.crime_rng.random() < risk:
+             _execute_operation(world, organization)
++    _prune_operations(world)
+ 
+ 
+ def _execute_operation(world: World, organization: CrimeOrganization) -> None:
+@@ -96,6 +94,12 @@
+     ]
+     if not available_members:
+         return
++    if world.crime_rng.random() < organization.sophistication / 420.0:
++        _launder_money(world, organization, available_members)
++        return
++    if world.crime_rng.random() < 0.04:
++        _attempt_corruption(world, organization, available_members)
++        return
+     weights = [
+         CrimeOperationType.THEFT,
+         CrimeOperationType.THEFT,
+@@ -282,7 +286,53 @@
+     world.organized_crimes_today += 1
+ 
+ 
+-def crime_overview(world: World) -> dict[str, object]:
++
++def _launder_money(world: World, organization: CrimeOrganization, members: list) -> None:
++    businesses = [building for building in world.buildings.values() if building.building_type in {BuildingType.CAFE, BuildingType.SHOP, BuildingType.OFFICE} and building.business_status.value != "closed"]
++    if not businesses or organization.treasury < 80.0:
++        return
++    building = world.crime_rng.choice(businesses)
++    amount = round(min(organization.treasury * world.crime_rng.uniform(0.03, 0.12), organization.laundering_capacity), 2)
++    fee = round(amount * world.crime_rng.uniform(0.08, 0.18), 2)
++    organization.treasury = round(organization.treasury - amount, 2)
++    organization.expenses_today = round(organization.expenses_today + fee, 2)
++    building.cash = round(building.cash + amount - fee, 2)
++    detected = world.crime_rng.random() < max(0.01, organization.police_heat / 500.0 - organization.sophistication / 1200.0)
++    actor = next((member for member in members if member.criminal_role and member.criminal_role.value == "money_launderer"), members[0])
++    operation = CrimeOperation(id=world._next_crime_operation_id, organization_id=organization.id, operation_type=CrimeOperationType.MONEY_LAUNDERING, status=CrimeOperationStatus.SUCCEEDED, planned_tick=world.tick, perpetrator_ids=[actor.id], victim_ids=[], building_id=building.id, amount=amount, started_tick=world.tick, resolved_tick=world.tick, outcome=f"{amount-fee:.2f} € intégrés à une activité légale", neighborhood_id=building.neighborhood_id, detected=detected)
++    world._next_crime_operation_id += 1
++    world.crime_operations[operation.id] = operation
++    organization.operation_ids.append(operation.id)
++    if detected:
++        incident = world.create_incident(incident_type="money_laundering", title="Soupçon de blanchiment", description=f"Des flux suspects relient {building.name} à {organization.name}.", severity="warning", citizen_ids=(actor.id,), offender_id=actor.id, building_id=building.id, reported=True, lifetime_minutes=12*60, conflict_level=1)
++        operation.incident_id = incident.id
++        organization.police_heat = min(100.0, organization.police_heat + 5.0)
++
++
++def _attempt_corruption(world: World, organization: CrimeOrganization, members: list) -> None:
++    officers = [citizen for citizen in world.citizens.values() if citizen.workplace_id in world.buildings and world.buildings[citizen.workplace_id].building_type == BuildingType.POLICE and citizen.detained_until_tick is None]
++    if not officers or organization.treasury < 150.0:
++        return
++    target = max(officers, key=lambda citizen: (citizen.financial_stress + citizen.impulsivity*.25, -citizen.id))
++    actor = members[0]
++    bribe = round(min(organization.treasury*.025, world.crime_rng.uniform(120.0,500.0)),2)
++    accepted = world.crime_rng.random() < min(.36,.02+target.financial_stress/420.0+target.impulsivity/700.0)
++    detected = world.crime_rng.random() < .12 + organization.police_heat/500.0
++    if accepted:
++        organization.treasury = round(organization.treasury-bribe,2)
++        organization.expenses_today = round(organization.expenses_today+bribe,2)
++        target.money = round(target.money+bribe,2)
++        target.criminal_contact_ids.append(actor.id); target.criminal_contact_ids[:] = target.criminal_contact_ids[-20:]
++        organization.police_heat = max(0.0,organization.police_heat-2.0)
++    operation = CrimeOperation(id=world._next_crime_operation_id, organization_id=organization.id, operation_type=CrimeOperationType.CORRUPTION, status=CrimeOperationStatus.SUCCEEDED if accepted else CrimeOperationStatus.FAILED, planned_tick=world.tick, perpetrator_ids=[actor.id], victim_ids=[target.id], building_id=target.workplace_id, amount=bribe, started_tick=world.tick, resolved_tick=world.tick, outcome="pot-de-vin accepté" if accepted else "approche refusée", neighborhood_id=world.buildings[target.workplace_id].neighborhood_id, detected=detected)
++    world._next_crime_operation_id += 1
++    world.crime_operations[operation.id] = operation
++    organization.operation_ids.append(operation.id)
++    if detected:
++        incident = world.create_incident(incident_type="corruption", title="Tentative de corruption", description=f"Une tentative de corruption relie {organization.name} à un agent public.", severity="danger", citizen_ids=(actor.id,target.id), offender_id=actor.id, witness_ids=(target.id,), building_id=target.workplace_id, reported=True, lifetime_minutes=12*60, conflict_level=2)
++        operation.incident_id = incident.id
++
++def _legacy_crime_overview(world: World) -> dict[str, object]:
+     active_kidnappings = sum(
+         operation.operation_type == CrimeOperationType.KIDNAPPING
+         and operation.status == CrimeOperationStatus.ACTIVE
+@@ -328,3 +378,14 @@
+             for operation in sorted(world.crime_operations.values(), key=lambda item: item.id, reverse=True)[:80]
+         ],
+     }
++
++
++def _prune_operations(world: World) -> None:
++    if len(world.crime_operations) <= MAX_CRIME_OPERATIONS:
++        return
++    removable = sorted(world.crime_operations)[: len(world.crime_operations) - MAX_CRIME_OPERATIONS]
++    for operation_id in removable:
++        world.crime_operations.pop(operation_id, None)
++    removed = set(removable)
++    for organization in world.crime_organizations.values():
++        organization.operation_ids[:] = [operation_id for operation_id in organization.operation_ids if operation_id not in removed]
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/simulation/crime_monitoring.py city-simulator-v0.13.0/backend/app/simulation/crime_monitoring.py
+--- city-simulator-v0.12.0/backend/app/simulation/crime_monitoring.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.13.0/backend/app/simulation/crime_monitoring.py	2026-07-29 17:32:06.000000000 +0200
+@@ -0,0 +1,313 @@
++from __future__ import annotations
++
++from collections import Counter
++from typing import TYPE_CHECKING
++
++from .criminal_factions import relation_key
++from .criminal_markets import DRUGS
++from .models import CrimeOperationStatus, CrimeOperationType
++
++if TYPE_CHECKING:
++    from .world import World
++
++
++def crime_overview(world: World) -> dict[str, object]:
++    organizations = list(world.crime_organizations.values())
++    markets = list(world.criminal_markets.values())
++    transactions = list(world.illegal_transactions.values())
++    active_kidnappings = sum(
++        operation.operation_type == CrimeOperationType.KIDNAPPING
++        and operation.status == CrimeOperationStatus.ACTIVE
++        for operation in world.crime_operations.values()
++    )
++    exposed_citizens = {
++        transaction.buyer_id for transaction in transactions
++    }
++    commodity_sales = Counter(transaction.commodity.value for transaction in transactions)
++    commodity_revenue: Counter[str] = Counter()
++    for transaction in transactions:
++        commodity_revenue[transaction.commodity.value] += transaction.total
++    contested = sum(
++        1
++        for neighborhood_id in world.neighborhoods
++        if _territory_contestedness(world, neighborhood_id) >= 45.0
++    )
++    return {
++        "tick": world.tick,
++        "metrics": {
++            "organizations": sum(organization.active for organization in organizations),
++            "factionMembers": sum(len(organization.member_ids) for organization in organizations),
++            "criminalMarkets": sum(market.active for market in markets),
++            "operations": len(world.crime_operations),
++            "organizedCrimesToday": world.organized_crimes_today,
++            "activeKidnappings": active_kidnappings,
++            "ransomPaidToday": round(world.ransom_paid_today, 2),
++            "illegalSalesToday": world.illegal_sales_today,
++            "drugSalesToday": world.drug_sales_today,
++            "illegalRevenueToday": round(world.illegal_revenue_today, 2),
++            "policeSeizuresToday": round(world.police_seizures_today, 2),
++            "exposedCitizens": len(exposed_citizens),
++            "dependentCitizens": sum(
++                citizen.addiction_level >= 35.0 for citizen in world.citizens.values()
++            ),
++            "highRiskCitizens": sum(
++                citizen.addiction_level >= 65.0 for citizen in world.citizens.values()
++            ),
++            "contestedNeighborhoods": contested,
++            "detectedTransactions": sum(transaction.detected for transaction in transactions),
++        },
++        "organizations": [_organization_summary(world, organization.id) for organization in organizations],
++        "markets": [_market_summary(world, market.id) for market in markets],
++        "transactions": [
++            _transaction_summary(world, transaction.id)
++            for transaction in sorted(transactions, key=lambda item: item.id, reverse=True)[:150]
++        ],
++        "operations": [
++            {
++                "id": operation.id,
++                "organizationId": operation.organization_id,
++                "organizationName": world.crime_organizations[operation.organization_id].name,
++                "type": operation.operation_type.value,
++                "status": operation.status.value,
++                "perpetratorIds": operation.perpetrator_ids,
++                "victimIds": operation.victim_ids,
++                "buildingId": operation.building_id,
++                "neighborhoodId": operation.neighborhood_id,
++                "commodity": operation.commodity.value if operation.commodity else None,
++                "quantity": round(operation.quantity, 2),
++                "amount": round(operation.amount, 2),
++                "detected": operation.detected,
++                "incidentId": operation.incident_id,
++                "startedTick": operation.started_tick,
++                "resolvedTick": operation.resolved_tick,
++                "outcome": operation.outcome,
++            }
++            for operation in sorted(
++                world.crime_operations.values(), key=lambda item: item.id, reverse=True
++            )[:120]
++        ],
++        "relations": [
++            _relation_summary(world, first_id, second_id)
++            for first_id, second_id in sorted(world.crime_relations)
++        ],
++        "territories": [
++            {
++                "neighborhoodId": neighborhood_id,
++                "neighborhoodName": world.neighborhoods[neighborhood_id].name,
++                "contestedness": _territory_contestedness(world, neighborhood_id),
++                "factions": sorted(
++                    [
++                        {
++                            "organizationId": organization.id,
++                            "name": organization.name,
++                            "influence": round(
++                                organization.influence_by_neighborhood.get(neighborhood_id, 0.0),
++                                1,
++                            ),
++                        }
++                        for organization in organizations
++                    ],
++                    key=lambda item: item["influence"],
++                    reverse=True,
++                ),
++            }
++            for neighborhood_id in sorted(world.neighborhoods)
++        ],
++        "history": list(world.crime_history),
++        "commodities": [
++            {
++                "commodity": commodity,
++                "transactions": commodity_sales[commodity],
++                "revenue": round(commodity_revenue[commodity], 2),
++                "supply": round(
++                    sum(
++                        market.supply
++                        for market in markets
++                        if market.commodity.value == commodity
++                    ),
++                    2,
++                ),
++            }
++            for commodity in sorted(
++                {market.commodity.value for market in markets}
++                | set(commodity_sales)
++            )
++        ],
++    }
++
++
++def crime_faction_detail(world: World, organization_id: int) -> dict[str, object]:
++    organization = world.crime_organizations[organization_id]
++    summary = _organization_summary(world, organization_id)
++    return {
++        "kind": "crime_faction",
++        **summary,
++        "members": [
++            {
++                "id": citizen_id,
++                "name": world.citizens[citizen_id].full_name,
++                "role": organization.role_by_member[citizen_id].value,
++                "criminalIncomeToday": round(
++                    world.citizens[citizen_id].criminal_income_today, 2
++                ),
++                "offenses": world.citizens[citizen_id].offenses_committed,
++                "arrests": world.citizens[citizen_id].arrests,
++                "detained": world.citizens[citizen_id].detained_until_tick is not None,
++            }
++            for citizen_id in organization.member_ids
++            if citizen_id in world.citizens
++        ],
++        "markets": [
++            _market_summary(world, market.id)
++            for market in world.criminal_markets.values()
++            if market.organization_id == organization_id
++        ],
++        "operations": [
++            operation
++            for operation in crime_overview(world)["operations"]
++            if operation["organizationId"] == organization_id
++        ][:80],
++        "transactions": [
++            _transaction_summary(world, transaction.id)
++            for transaction in sorted(
++                world.illegal_transactions.values(), key=lambda item: item.id, reverse=True
++            )
++            if transaction.organization_id == organization_id
++        ][:100],
++        "relations": [
++            _relation_summary(world, *key)
++            for key in sorted(world.crime_relations)
++            if organization_id in key
++        ],
++    }
++
++
++def _organization_summary(world: World, organization_id: int) -> dict[str, object]:
++    organization = world.crime_organizations[organization_id]
++    markets = [
++        market
++        for market in world.criminal_markets.values()
++        if market.organization_id == organization_id
++    ]
++    return {
++        "id": organization.id,
++        "name": organization.name,
++        "factionType": organization.faction_type.value,
++        "leaderId": organization.leader_id,
++        "leaderName": world.citizens[organization.leader_id].full_name,
++        "memberCount": len(organization.member_ids),
++        "territoryId": organization.territory_id,
++        "territoryIds": organization.territory_ids,
++        "treasury": round(organization.treasury, 2),
++        "revenueToday": round(organization.revenue_today, 2),
++        "expensesToday": round(organization.expenses_today, 2),
++        "notoriety": round(organization.notoriety, 1),
++        "policeHeat": round(organization.police_heat, 1),
++        "cohesion": round(organization.cohesion, 1),
++        "violence": round(organization.violence, 1),
++        "sophistication": round(organization.sophistication, 1),
++        "recruitmentPressure": round(organization.recruitment_pressure, 1),
++        "membersRecruited": organization.members_recruited,
++        "specialties": [commodity.value for commodity in organization.specialties],
++        "inventory": {
++            commodity: round(quantity, 2)
++            for commodity, quantity in organization.inventory.items()
++        },
++        "rivalIds": organization.rival_ids,
++        "allyIds": organization.ally_ids,
++        "marketCount": len(markets),
++        "customers": len(
++            {
++                transaction.buyer_id
++                for transaction in world.illegal_transactions.values()
++                if transaction.organization_id == organization_id
++            }
++        ),
++        "active": organization.active,
++    }
++
++
++def _market_summary(world: World, market_id: int) -> dict[str, object]:
++    market = world.criminal_markets[market_id]
++    organization = world.crime_organizations[market.organization_id]
++    return {
++        "id": market.id,
++        "organizationId": organization.id,
++        "organizationName": organization.name,
++        "neighborhoodId": market.neighborhood_id,
++        "neighborhoodName": world.neighborhoods[market.neighborhood_id].name,
++        "commodity": market.commodity.value,
++        "supply": round(market.supply, 2),
++        "demand": round(market.demand, 1),
++        "unitPrice": round(market.unit_price, 2),
++        "policePressure": round(market.police_pressure, 1),
++        "transactionsToday": market.transactions_today,
++        "revenueToday": round(market.revenue_today, 2),
++        "seizedToday": round(market.seized_today, 2),
++        "drugMarket": market.commodity in DRUGS,
++        "active": market.active,
++    }
++
++
++def _transaction_summary(world: World, transaction_id: int) -> dict[str, object]:
++    transaction = world.illegal_transactions[transaction_id]
++    return {
++        "id": transaction.id,
++        "tick": transaction.tick,
++        "organizationId": transaction.organization_id,
++        "organizationName": world.crime_organizations[transaction.organization_id].name,
++        "marketId": transaction.market_id,
++        "seller": {
++            "id": transaction.seller_id,
++            "name": world.citizens[transaction.seller_id].full_name,
++        },
++        "buyer": {
++            "id": transaction.buyer_id,
++            "name": world.citizens[transaction.buyer_id].full_name,
++        },
++        "commodity": transaction.commodity.value,
++        "quantity": round(transaction.quantity, 3),
++        "unitPrice": round(transaction.unit_price, 2),
++        "total": round(transaction.total, 2),
++        "neighborhoodId": transaction.neighborhood_id,
++        "buildingId": transaction.building_id,
++        "detected": transaction.detected,
++        "incidentId": transaction.incident_id,
++    }
++
++
++def _relation_summary(world: World, first_id: int, second_id: int) -> dict[str, object]:
++    relation = world.crime_relations[relation_key(first_id, second_id)]
++    return {
++        "firstId": first_id,
++        "firstName": world.crime_organizations[first_id].name,
++        "secondId": second_id,
++        "secondName": world.crime_organizations[second_id].name,
++        "tension": round(relation.tension, 1),
++        "trust": round(relation.trust, 1),
++        "conflictCount": relation.conflict_count,
++        "lastConflictTick": relation.last_conflict_tick,
++        "truceUntilTick": relation.truce_until_tick,
++        "status": (
++            "war"
++            if relation.tension >= 72.0
++            else "rivalry"
++            if relation.tension >= 48.0
++            else "cooperation"
++            if relation.trust >= 8.0
++            else "neutral"
++        ),
++    }
++
++
++def _territory_contestedness(world: World, neighborhood_id: int) -> float:
++    influences = sorted(
++        (
++            organization.influence_by_neighborhood.get(neighborhood_id, 0.0)
++            for organization in world.crime_organizations.values()
++        ),
++        reverse=True,
++    )
++    if len(influences) < 2:
++        return 0.0
++    return round(min(100.0, influences[1] * 1.35 + max(0.0, 18.0 - (influences[0] - influences[1]))), 1)
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/simulation/criminal_factions.py city-simulator-v0.13.0/backend/app/simulation/criminal_factions.py
+--- city-simulator-v0.12.0/backend/app/simulation/criminal_factions.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.13.0/backend/app/simulation/criminal_factions.py	2026-07-29 17:55:47.000000000 +0200
+@@ -0,0 +1,417 @@
++from __future__ import annotations
++
++from itertools import combinations
++from typing import TYPE_CHECKING
++
++from .models import (
++    CrimeFactionRelation,
++    CrimeOperation,
++    CrimeOperationStatus,
++    CrimeOperationType,
++    CrimeFactionType,
++    CrimeOrganization,
++    CrimeRole,
++    IllegalCommodity,
++)
++
++if TYPE_CHECKING:
++    from .models import Citizen
++    from .world import World
++
++
++FACTION_IDENTITIES: tuple[tuple[str, CrimeFactionType], ...] = (
++    ("Les Éperviers du Bloc", CrimeFactionType.STREET_GANG),
++    ("Union des Docks", CrimeFactionType.ORGANIZED_GANG),
++    ("Famille Bellandi", CrimeFactionType.MAFIA),
++    ("Triade du Lotus Gris", CrimeFactionType.TRIAD),
++    ("Cartel de la Traverse", CrimeFactionType.CARTEL),
++    ("Les Cavaliers d’Acier", CrimeFactionType.BIKER_GANG),
++    ("Réseau Zéro", CrimeFactionType.CYBER_NETWORK),
++    ("Clan des Arcades", CrimeFactionType.MAFIA),
++    ("Les Chiens Rouges", CrimeFactionType.STREET_GANG),
++    ("Syndicat du Canal", CrimeFactionType.ORGANIZED_GANG),
++    ("Triade des Trois Ponts", CrimeFactionType.TRIAD),
++    ("Route Noire", CrimeFactionType.BIKER_GANG),
++    ("Collectif Spectre", CrimeFactionType.CYBER_NETWORK),
++    ("Cartel du Levant", CrimeFactionType.CARTEL),
++    ("Famille Orsini", CrimeFactionType.MAFIA),
++    ("Les Cobras du Sud", CrimeFactionType.STREET_GANG),
++)
++
++SPECIALTIES: dict[CrimeFactionType, tuple[IllegalCommodity, ...]] = {
++    CrimeFactionType.STREET_GANG: (
++        IllegalCommodity.CANNABIS,
++        IllegalCommodity.STOLEN_GOODS,
++    ),
++    CrimeFactionType.ORGANIZED_GANG: (
++        IllegalCommodity.COCAINE,
++        IllegalCommodity.STOLEN_GOODS,
++        IllegalCommodity.COUNTERFEIT_GOODS,
++    ),
++    CrimeFactionType.MAFIA: (
++        IllegalCommodity.COCAINE,
++        IllegalCommodity.WEAPONS,
++        IllegalCommodity.COUNTERFEIT_GOODS,
++    ),
++    CrimeFactionType.TRIAD: (
++        IllegalCommodity.SYNTHETIC_DRUGS,
++        IllegalCommodity.COUNTERFEIT_GOODS,
++        IllegalCommodity.WEAPONS,
++    ),
++    CrimeFactionType.CARTEL: (
++        IllegalCommodity.CANNABIS,
++        IllegalCommodity.COCAINE,
++        IllegalCommodity.SYNTHETIC_DRUGS,
++    ),
++    CrimeFactionType.BIKER_GANG: (
++        IllegalCommodity.WEAPONS,
++        IllegalCommodity.SYNTHETIC_DRUGS,
++        IllegalCommodity.STOLEN_GOODS,
++    ),
++    CrimeFactionType.CYBER_NETWORK: (
++        IllegalCommodity.COUNTERFEIT_GOODS,
++        IllegalCommodity.STOLEN_GOODS,
++    ),
++}
++
++PROFILE: dict[CrimeFactionType, tuple[float, float, float]] = {
++    CrimeFactionType.STREET_GANG: (62.0, 35.0, 68.0),
++    CrimeFactionType.ORGANIZED_GANG: (52.0, 61.0, 48.0),
++    CrimeFactionType.MAFIA: (55.0, 82.0, 36.0),
++    CrimeFactionType.TRIAD: (48.0, 88.0, 32.0),
++    CrimeFactionType.CARTEL: (74.0, 72.0, 60.0),
++    CrimeFactionType.BIKER_GANG: (78.0, 46.0, 58.0),
++    CrimeFactionType.CYBER_NETWORK: (20.0, 94.0, 26.0),
++}
++
++
++def initialize_factions(world: World) -> None:
++    world.crime_organizations = {}
++    world.crime_relations: dict[tuple[int, int], CrimeFactionRelation] = {}
++    candidates = sorted(
++        (
++            citizen
++            for citizen in world.citizens.values()
++            if citizen.age >= 18
++            and not _protected_profession(world, citizen)
++        ),
++        key=lambda citizen: (
++            citizen.aggression * 0.34
++            + citizen.impulsivity * 0.26
++            + citizen.financial_stress * 0.28
++            + citizen.spontaneity * 0.12,
++            citizen.id,
++        ),
++        reverse=True,
++    )
++    faction_count = min(len(FACTION_IDENTITIES), max(4, len(world.citizens) // 300))
++    desired_members = max(7, len(world.citizens) // max(18, faction_count * 22))
++    member_target = max(3, min(12, len(candidates) // faction_count, desired_members))
++    cursor = 0
++    neighborhood_ids = sorted(world.neighborhoods)
++    for organization_id in range(1, faction_count + 1):
++        members = candidates[cursor : cursor + member_target]
++        cursor += member_target
++        if len(members) < 2:
++            break
++        name, faction_type = FACTION_IDENTITIES[(organization_id - 1) % len(FACTION_IDENTITIES)]
++        violence, sophistication, recruitment = PROFILE[faction_type]
++        home_territory = neighborhood_ids[(organization_id - 1) % len(neighborhood_ids)]
++        specialties = list(SPECIALTIES[faction_type])
++        organization = CrimeOrganization(
++            id=organization_id,
++            name=name,
++            leader_id=members[0].id,
++            member_ids=[citizen.id for citizen in members],
++            territory_id=home_territory,
++            territory_ids=[home_territory],
++            treasury=round(world.crime_rng.uniform(1_200.0, 8_000.0), 2),
++            faction_type=faction_type,
++            specialties=specialties,
++            inventory={
++                commodity.value: round(world.crime_rng.uniform(18.0, 65.0), 2)
++                for commodity in specialties
++            },
++            influence_by_neighborhood={
++                neighborhood_id: (
++                    world.crime_rng.uniform(52.0, 78.0)
++                    if neighborhood_id == home_territory
++                    else world.crime_rng.uniform(2.0, 18.0)
++                )
++                for neighborhood_id in neighborhood_ids
++            },
++            cohesion=world.crime_rng.uniform(48.0, 82.0),
++            violence=violence + world.crime_rng.uniform(-8.0, 8.0),
++            sophistication=sophistication + world.crime_rng.uniform(-7.0, 7.0),
++            recruitment_pressure=recruitment + world.crime_rng.uniform(-8.0, 8.0),
++            laundering_capacity=world.crime_rng.uniform(120.0, 600.0),
++        )
++        _assign_roles(organization)
++        world.crime_organizations[organization.id] = organization
++        for citizen in members:
++            citizen.crime_organization_id = organization.id
++            citizen.criminal_role = organization.role_by_member[citizen.id]
++            citizen.recruited_tick = world.tick
++            citizen.criminal_contact_ids = sorted(
++                member.id for member in members if member.id != citizen.id
++            )[:12]
++
++    for first, second in combinations(world.crime_organizations.values(), 2):
++        same_territory = first.territory_id == second.territory_id
++        relation = CrimeFactionRelation(
++            first_id=first.id,
++            second_id=second.id,
++            tension=world.crime_rng.uniform(58.0, 84.0) if same_territory else world.crime_rng.uniform(18.0, 58.0),
++            trust=world.crime_rng.uniform(-35.0, 18.0),
++        )
++        world.crime_relations[(first.id, second.id)] = relation
++        if relation.tension >= 52.0:
++            first.rival_ids.append(second.id)
++            second.rival_ids.append(first.id)
++        elif relation.trust >= 8.0:
++            first.ally_ids.append(second.id)
++            second.ally_ids.append(first.id)
++
++
++def update_faction_dynamics(world: World) -> None:
++    if world.hour == 2 and world.minute == 10 and world._last_crime_faction_day != world.day:
++        world._last_crime_faction_day = world.day
++        for organization in sorted(world.crime_organizations.values(), key=lambda item: item.id):
++            _daily_recruitment(world, organization)
++            organization.cohesion = _clamp(
++                organization.cohesion
++                + world.crime_rng.uniform(-1.5, 1.5)
++                - organization.police_heat * 0.004
++            )
++            organization.influence_by_neighborhood = {
++                neighborhood_id: _clamp(
++                    influence
++                    + world.crime_rng.uniform(-0.7, 0.7)
++                    - organization.police_heat * 0.002
++                )
++                for neighborhood_id, influence in organization.influence_by_neighborhood.items()
++            }
++        for relation in world.crime_relations.values():
++            relation.tension = _clamp(relation.tension + world.crime_rng.uniform(-1.2, 1.2))
++
++    if world.minute == 45 and world.crime_rng.random() < min(
++        0.12, len(world.crime_organizations) * 0.008
++    ):
++        _attempt_turf_conflict(world)
++
++
++def reset_faction_day(world: World) -> None:
++    for organization in world.crime_organizations.values():
++        organization.revenue_today = 0.0
++        organization.expenses_today = 0.0
++
++
++def relation_key(first_id: int, second_id: int) -> tuple[int, int]:
++    return (min(first_id, second_id), max(first_id, second_id))
++
++
++def _assign_roles(organization: CrimeOrganization) -> None:
++    role_cycle = (
++        CrimeRole.BOSS,
++        CrimeRole.LIEUTENANT,
++        CrimeRole.DEALER,
++        CrimeRole.DEALER,
++        CrimeRole.ENFORCER,
++        CrimeRole.SUPPLIER,
++        CrimeRole.LOOKOUT,
++        CrimeRole.MONEY_LAUNDERER,
++        CrimeRole.RECRUITER,
++    )
++    organization.role_by_member = {
++        citizen_id: role_cycle[index % len(role_cycle)]
++        for index, citizen_id in enumerate(organization.member_ids)
++    }
++
++
++def _daily_recruitment(world: World, organization: CrimeOrganization) -> None:
++    if len(organization.member_ids) >= max(18, len(world.citizens) // 120):
++        return
++    chance = organization.recruitment_pressure / 260.0 * (organization.cohesion / 100.0)
++    if world.crime_rng.random() >= chance:
++        return
++    candidates = [
++        citizen
++        for citizen in world.citizens.values()
++        if citizen.age >= 18
++        and citizen.crime_organization_id is None
++        and not _protected_profession(world, citizen)
++        and (
++            citizen.is_homeless
++            or citizen.workplace_id is None
++            or citizen.financial_stress >= 55.0
++            or citizen.aggression + citizen.impulsivity >= 115.0
++        )
++    ]
++    if not candidates:
++        return
++    recruit = max(
++        candidates,
++        key=lambda citizen: (
++            citizen.financial_stress
++            + citizen.aggression * 0.5
++            + citizen.impulsivity * 0.5
++            + (25.0 if citizen.is_homeless else 0.0),
++            -citizen.id,
++        ),
++    )
++    recruit.crime_organization_id = organization.id
++    recruit.criminal_role = (
++        CrimeRole.DEALER
++        if sum(role == CrimeRole.DEALER for role in organization.role_by_member.values()) < 4
++        else CrimeRole.LOOKOUT
++    )
++    recruit.recruited_tick = world.tick
++    recruit.criminal_contact_ids = organization.member_ids[-12:]
++    organization.member_ids.append(recruit.id)
++    organization.role_by_member[recruit.id] = recruit.criminal_role
++    organization.members_recruited += 1
++    organization.cohesion = min(100.0, organization.cohesion + 0.8)
++    operation = CrimeOperation(
++        id=world._next_crime_operation_id,
++        organization_id=organization.id,
++        operation_type=CrimeOperationType.RECRUITMENT,
++        status=CrimeOperationStatus.SUCCEEDED,
++        planned_tick=world.tick,
++        perpetrator_ids=[organization.leader_id],
++        victim_ids=[recruit.id],
++        building_id=recruit.home_id,
++        amount=0.0,
++        started_tick=world.tick,
++        resolved_tick=world.tick,
++        outcome=f"recrutement comme {recruit.criminal_role.value}",
++        neighborhood_id=world.buildings[recruit.home_id].neighborhood_id,
++        detected=False,
++    )
++    world._next_crime_operation_id += 1
++    world.crime_operations[operation.id] = operation
++    organization.operation_ids.append(operation.id)
++    world._emit(
++        "criminal_recruitment",
++        f"{recruit.full_name} rejoint {organization.name} comme {recruit.criminal_role.value}.",
++        citizen_ids=(recruit.id, organization.leader_id),
++        severity="warning",
++    )
++
++
++def _attempt_turf_conflict(world: World) -> None:
++    eligible = [
++        relation
++        for relation in world.crime_relations.values()
++        if relation.tension >= 62.0
++        and (relation.truce_until_tick is None or world.tick >= relation.truce_until_tick)
++    ]
++    if not eligible:
++        return
++    relation = world.crime_rng.choice(sorted(eligible, key=lambda item: (item.first_id, item.second_id)))
++    first = world.crime_organizations[relation.first_id]
++    second = world.crime_organizations[relation.second_id]
++    first_members = _available_enforcers(world, first)
++    second_members = _available_enforcers(world, second)
++    if not first_members or not second_members:
++        return
++    first_actor = world.crime_rng.choice(first_members)
++    second_actor = world.crime_rng.choice(second_members)
++    neighborhood_id = max(
++        world.neighborhoods,
++        key=lambda neighborhood_id: min(
++            first.influence_by_neighborhood.get(neighborhood_id, 0.0),
++            second.influence_by_neighborhood.get(neighborhood_id, 0.0),
++        ),
++    )
++    buildings = [
++        building
++        for building in world.buildings.values()
++        if building.neighborhood_id == neighborhood_id
++    ]
++    building = world.crime_rng.choice(buildings) if buildings else None
++    incident = world.create_incident(
++        incident_type="turf_war",
++        title="Affrontement entre factions",
++        description=f"{first.name} et {second.name} s’affrontent pour le contrôle du quartier.",
++        severity="danger",
++        citizen_ids=(first_actor.id, second_actor.id),
++        offender_id=first_actor.id,
++        victim_ids=(second_actor.id,),
++        building_id=building.id if building else None,
++        reported=True,
++        lifetime_minutes=10 * 60,
++        conflict_level=4,
++    )
++    operation = CrimeOperation(
++        id=world._next_crime_operation_id,
++        organization_id=first.id,
++        operation_type=CrimeOperationType.TURF_WAR,
++        status=CrimeOperationStatus.SUCCEEDED,
++        planned_tick=world.tick,
++        perpetrator_ids=[first_actor.id, second_actor.id],
++        victim_ids=[second_actor.id],
++        building_id=building.id if building else None,
++        amount=0.0,
++        incident_id=incident.id,
++        started_tick=world.tick,
++        resolved_tick=world.tick,
++        outcome=f"affrontement avec {second.name}",
++        neighborhood_id=neighborhood_id,
++        detected=True,
++    )
++    world._next_crime_operation_id += 1
++    world.crime_operations[operation.id] = operation
++    first.operation_ids.append(operation.id)
++    world.organized_crimes_today += 1
++    relation.conflict_count += 1
++    relation.last_conflict_tick = world.tick
++    relation.tension = min(100.0, relation.tension + 8.0)
++    first.police_heat = min(100.0, first.police_heat + 7.0)
++    second.police_heat = min(100.0, second.police_heat + 7.0)
++    first.influence_by_neighborhood[neighborhood_id] = _clamp(
++        first.influence_by_neighborhood.get(neighborhood_id, 0.0)
++        + world.crime_rng.uniform(-3.0, 4.0)
++    )
++    second.influence_by_neighborhood[neighborhood_id] = _clamp(
++        second.influence_by_neighborhood.get(neighborhood_id, 0.0)
++        + world.crime_rng.uniform(-3.0, 4.0)
++    )
++    from .health import apply_injury
++
++    apply_injury(
++        world,
++        second_actor,
++        severity=world.crime_rng.uniform(25.0, 62.0),
++        source="guerre de territoire",
++        incident_id=incident.id,
++    )
++
++
++def _available_enforcers(world: World, organization: CrimeOrganization) -> list[Citizen]:
++    preferred = [
++        world.citizens[citizen_id]
++        for citizen_id, role in organization.role_by_member.items()
++        if role in {CrimeRole.ENFORCER, CrimeRole.LIEUTENANT, CrimeRole.BOSS}
++        and citizen_id in world.citizens
++        and world.citizens[citizen_id].detained_until_tick is None
++    ]
++    return preferred or [
++        world.citizens[citizen_id]
++        for citizen_id in organization.member_ids
++        if citizen_id in world.citizens
++        and world.citizens[citizen_id].detained_until_tick is None
++    ]
++
++
++def _protected_profession(world: World, citizen: Citizen) -> bool:
++    if citizen.workplace_id not in world.buildings:
++        return False
++    return world.buildings[citizen.workplace_id].building_type.value in {
++        "police",
++        "court",
++        "detention_center",
++    }
++
++
++def _clamp(value: float) -> float:
++    return round(max(0.0, min(100.0, value)), 2)
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/simulation/criminal_markets.py city-simulator-v0.13.0/backend/app/simulation/criminal_markets.py
+--- city-simulator-v0.12.0/backend/app/simulation/criminal_markets.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.13.0/backend/app/simulation/criminal_markets.py	2026-07-29 17:49:16.000000000 +0200
+@@ -0,0 +1,523 @@
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++from .banking import available_funds, withdraw
++from .models import (
++    CrimeOperation,
++    CrimeOperationStatus,
++    CrimeOperationType,
++    CrimeRole,
++    CriminalMarket,
++    IllegalCommodity,
++    IllegalTransaction,
++)
++
++if TYPE_CHECKING:
++    from .models import Citizen, CrimeOrganization
++    from .world import World
++
++
++MAX_ILLEGAL_TRANSACTIONS = 5_000
++MARKET_HOURS = {8, 12, 17, 20, 23}
++DRUGS = {
++    IllegalCommodity.CANNABIS,
++    IllegalCommodity.COCAINE,
++    IllegalCommodity.SYNTHETIC_DRUGS,
++}
++COMMODITY_PROFILE: dict[IllegalCommodity, tuple[float, float, float]] = {
++    # prix, effet addictif, dommage santé
++    IllegalCommodity.CANNABIS: (18.0, 1.4, 0.35),
++    IllegalCommodity.COCAINE: (72.0, 4.8, 1.4),
++    IllegalCommodity.SYNTHETIC_DRUGS: (42.0, 6.2, 2.0),
++    IllegalCommodity.STOLEN_GOODS: (55.0, 0.0, 0.0),
++    IllegalCommodity.WEAPONS: (380.0, 0.0, 0.0),
++    IllegalCommodity.COUNTERFEIT_GOODS: (32.0, 0.0, 0.0),
++}
++
++
++def initialize_criminal_markets(world: World) -> None:
++    world.criminal_markets: dict[int, CriminalMarket] = {}
++    world.illegal_transactions: dict[int, IllegalTransaction] = {}
++    world._next_criminal_market_id = 1
++    world._next_illegal_transaction_id = 1
++    world._last_illegal_market_slot = -1
++    world._last_illegal_market_day = 0
++    world.illegal_sales_today = 0
++    world.illegal_revenue_today = 0.0
++    world.drug_sales_today = 0
++    world.police_seizures_today = 0.0
++    for organization in sorted(world.crime_organizations.values(), key=lambda item: item.id):
++        for index, commodity in enumerate(organization.specialties):
++            neighborhood_id = (
++                organization.territory_ids[index % len(organization.territory_ids)]
++                if organization.territory_ids
++                else organization.territory_id
++            )
++            base_price = COMMODITY_PROFILE[commodity][0]
++            market = CriminalMarket(
++                id=world._next_criminal_market_id,
++                organization_id=organization.id,
++                neighborhood_id=neighborhood_id,
++                commodity=commodity,
++                supply=round(organization.inventory.get(commodity.value, 25.0), 2),
++                demand=world.crime_rng.uniform(32.0, 74.0),
++                unit_price=round(base_price * world.crime_rng.uniform(0.82, 1.24), 2),
++                police_pressure=world.crime_rng.uniform(4.0, 22.0),
++            )
++            world._next_criminal_market_id += 1
++            world.criminal_markets[market.id] = market
++
++
++def update_criminal_markets(world: World) -> None:
++    if world.minute == 15 and world.hour in MARKET_HOURS:
++        slot = world.day * 24 + world.hour
++        if slot != world._last_illegal_market_slot:
++            world._last_illegal_market_slot = slot
++            _run_market_slot(world)
++
++    if world.hour == 3 and world.minute == 5 and world._last_illegal_market_day != world.day:
++        world._last_illegal_market_day = world.day
++        _close_market_day(world)
++
++    if world.hour == 4 and world.minute == 20:
++        _attempt_police_raid(world)
++
++    if world.hour == 22 and world.minute == 30:
++        _apply_substance_consequences(world)
++
++
++def reset_criminal_market_day(world: World) -> None:
++    world.illegal_sales_today = 0
++    world.illegal_revenue_today = 0.0
++    world.drug_sales_today = 0
++    world.police_seizures_today = 0.0
++    for market in world.criminal_markets.values():
++        market.transactions_today = 0
++        market.revenue_today = 0.0
++        market.seized_today = 0.0
++
++
++def _run_market_slot(world: World) -> None:
++    markets = sorted(world.criminal_markets.values(), key=lambda item: item.id)
++    # Une tentative par marché et par créneau : volume linéaire et coût borné.
++    for market in markets:
++        if not market.active or market.supply <= 0.05:
++            continue
++        organization = world.crime_organizations.get(market.organization_id)
++        if organization is None or not organization.active:
++            continue
++        seller = _select_seller(world, organization)
++        buyer = _select_buyer(world, market, organization)
++        if seller is None or buyer is None:
++            continue
++        probability = min(
++            0.9,
++            0.18
++            + market.demand / 150.0
++            + buyer.addiction_level / 220.0
++            + buyer.financial_stress / 600.0,
++        )
++        if world.crime_rng.random() >= probability:
++            continue
++        _complete_sale(world, market, organization, seller, buyer)
++
++
++def _select_seller(world: World, organization: CrimeOrganization) -> Citizen | None:
++    dealers = [
++        world.citizens[citizen_id]
++        for citizen_id, role in sorted(organization.role_by_member.items())
++        if role in {CrimeRole.DEALER, CrimeRole.LIEUTENANT}
++        and citizen_id in world.citizens
++        and world.citizens[citizen_id].detained_until_tick is None
++        and world.citizens[citizen_id].kidnapped_until_tick is None
++    ]
++    return world.crime_rng.choice(dealers) if dealers else None
++
++
++def _select_buyer(
++    world: World,
++    market: CriminalMarket,
++    organization: CrimeOrganization,
++) -> Citizen | None:
++    candidates = [
++        citizen
++        for citizen in world.citizens.values()
++        if citizen.age >= 18
++        and citizen.crime_organization_id != organization.id
++        and citizen.detained_until_tick is None
++        and citizen.kidnapped_until_tick is None
++        and world.buildings[citizen.home_id].neighborhood_id == market.neighborhood_id
++        and available_funds(citizen) >= market.unit_price * 0.25
++    ]
++    if not candidates:
++        candidates = [
++            citizen
++            for citizen in world.citizens.values()
++            if citizen.age >= 18
++            and citizen.crime_organization_id != organization.id
++            and citizen.detained_until_tick is None
++            and available_funds(citizen) >= market.unit_price * 0.25
++        ]
++    if not candidates:
++        return None
++    ranked = sorted(
++        candidates,
++        key=lambda citizen: (
++            _buyer_propensity(citizen, market.commodity),
++            -citizen.id,
++        ),
++        reverse=True,
++    )
++    pool = ranked[: max(3, min(30, len(ranked) // 8 + 1))]
++    return world.crime_rng.choice(pool)
++
++
++def _buyer_propensity(citizen: Citizen, commodity: IllegalCommodity) -> float:
++    if commodity in DRUGS:
++        return (
++            citizen.addiction_level * 1.4
++            + citizen.substance_use_risk
++            + citizen.needs.stress * 0.28
++            + citizen.impulsivity * 0.18
++            + citizen.financial_stress * 0.1
++        )
++    if commodity == IllegalCommodity.WEAPONS:
++        return citizen.aggression * 0.55 + citizen.criminal_record_count * 12.0
++    return citizen.financial_stress * 0.35 + citizen.impulsivity * 0.25
++
++
++def _complete_sale(
++    world: World,
++    market: CriminalMarket,
++    organization: CrimeOrganization,
++    seller: Citizen,
++    buyer: Citizen,
++) -> None:
++    quantity = min(
++        market.supply,
++        world.crime_rng.uniform(0.2, 1.2)
++        * (1.0 + buyer.addiction_level / 140.0),
++    )
++    requested = round(quantity * market.unit_price, 2)
++    paid = withdraw(
++        world,
++        buyer,
++        min(requested, available_funds(buyer)),
++        label=f"Achat illégal — {market.commodity.value}",
++        transaction_type="illegal_purchase",
++        counterparty_id=seller.id,
++    )
++    if paid <= 0.0:
++        return
++    quantity = round(quantity * paid / max(0.01, requested), 3)
++    detected = world.crime_rng.random() < _detection_probability(world, market, seller)
++    transaction = IllegalTransaction(
++        id=world._next_illegal_transaction_id,
++        tick=world.tick,
++        organization_id=organization.id,
++        market_id=market.id,
++        seller_id=seller.id,
++        buyer_id=buyer.id,
++        commodity=market.commodity,
++        quantity=quantity,
++        unit_price=market.unit_price,
++        total=paid,
++        neighborhood_id=market.neighborhood_id,
++        building_id=buyer.home_id,
++        detected=detected,
++    )
++    world._next_illegal_transaction_id += 1
++    world.illegal_transactions[transaction.id] = transaction
++    _prune_transactions(world)
++
++    market.supply = round(max(0.0, market.supply - quantity), 3)
++    market.transactions_today += 1
++    market.revenue_today = round(market.revenue_today + paid, 2)
++    organization.inventory[market.commodity.value] = market.supply
++    seller_share = round(paid * 0.18, 2)
++    organization_share = round(paid - seller_share, 2)
++    organization.treasury = round(organization.treasury + organization_share, 2)
++    organization.revenue_today = round(organization.revenue_today + organization_share, 2)
++    seller.criminal_income_today = round(seller.criminal_income_today + seller_share, 2)
++    seller.money = round(seller.money + seller_share, 2)
++    buyer.illegal_spending_today = round(buyer.illegal_spending_today + paid, 2)
++    buyer.illegal_purchase_count += 1
++    buyer.last_illegal_purchase_tick = world.tick
++    if seller.id not in buyer.criminal_contact_ids:
++        buyer.criminal_contact_ids.append(seller.id)
++        buyer.criminal_contact_ids[:] = buyer.criminal_contact_ids[-20:]
++    if buyer.id not in seller.criminal_contact_ids:
++        seller.criminal_contact_ids.append(buyer.id)
++        seller.criminal_contact_ids[:] = seller.criminal_contact_ids[-40:]
++    world.illegal_sales_today += 1
++    world.illegal_revenue_today = round(world.illegal_revenue_today + paid, 2)
++    if market.commodity in DRUGS:
++        world.drug_sales_today += 1
++        _apply_drug_effect(world, buyer, market.commodity, quantity)
++    if detected:
++        _report_detected_sale(world, transaction, seller, buyer)
++    elif world.crime_rng.random() < 0.12:
++        world._emit(
++            "illegal_market_sale",
++            f"Une transaction clandestine de {market.commodity.value} a lieu dans le quartier #{market.neighborhood_id}.",
++            citizen_ids=(seller.id, buyer.id),
++            building_id=buyer.home_id,
++            severity="warning",
++        )
++
++
++def _apply_drug_effect(
++    world: World,
++    buyer: Citizen,
++    commodity: IllegalCommodity,
++    quantity: float,
++) -> None:
++    _, addictive_effect, health_damage = COMMODITY_PROFILE[commodity]
++    buyer.addiction_level = min(
++        100.0,
++        buyer.addiction_level + addictive_effect * quantity * world.crime_rng.uniform(0.65, 1.25),
++    )
++    buyer.substance_use_risk = min(100.0, buyer.substance_use_risk + addictive_effect * 0.35)
++    buyer.health = max(5.0, buyer.health - health_damage * quantity)
++    buyer.needs.stress = max(0.0, buyer.needs.stress - min(12.0, addictive_effect * 0.9))
++    buyer.job_performance = max(0.0, buyer.job_performance - health_damage * 0.18)
++
++
++def _report_detected_sale(
++    world: World,
++    transaction: IllegalTransaction,
++    seller: Citizen,
++    buyer: Citizen,
++) -> None:
++    incident_type = (
++        "drug_dealing"
++        if transaction.commodity in DRUGS
++        else "arms_trafficking"
++        if transaction.commodity == IllegalCommodity.WEAPONS
++        else "illegal_goods_trafficking"
++    )
++    incident = world.create_incident(
++        incident_type=incident_type,
++        title="Transaction clandestine détectée",
++        description=f"La police détecte une vente de {transaction.commodity.value} entre {seller.full_name} et {buyer.full_name}.",
++        severity="danger" if transaction.commodity == IllegalCommodity.WEAPONS else "warning",
++        citizen_ids=(seller.id, buyer.id),
++        offender_id=seller.id,
++        witness_ids=(buyer.id,),
++        building_id=transaction.building_id,
++        reported=True,
++        lifetime_minutes=8 * 60,
++        conflict_level=2,
++    )
++    transaction.incident_id = incident.id
++    organization = world.crime_organizations[transaction.organization_id]
++    organization.police_heat = min(100.0, organization.police_heat + 3.5)
++    market = world.criminal_markets[transaction.market_id]
++    market.police_pressure = min(100.0, market.police_pressure + 5.0)
++
++
++def _detection_probability(world: World, market: CriminalMarket, seller: Citizen) -> float:
++    neighborhood = world.neighborhoods.get(market.neighborhood_id)
++    coverage = (
++        min(100.0, neighborhood.patrol_minutes_today / 8.0)
++        if neighborhood is not None
++        else 0.0
++    )
++    organization = world.crime_organizations[market.organization_id]
++    lookout_available = any(
++        role == CrimeRole.LOOKOUT
++        and citizen_id in world.citizens
++        and world.citizens[citizen_id].detained_until_tick is None
++        for citizen_id, role in organization.role_by_member.items()
++    )
++    lookout_bonus = 0.45 if lookout_available else 1.0
++    concealment = organization.sophistication / 280.0
++    return max(
++        0.01,
++        min(
++            0.42,
++            (0.025 + market.police_pressure / 500.0 + coverage / 900.0 - concealment * 0.08)
++            * lookout_bonus,
++        ),
++    )
++
++
++def _close_market_day(world: World) -> None:
++    for market in world.criminal_markets.values():
++        profile_price = COMMODITY_PROFILE[market.commodity][0]
++        scarcity = max(0.72, min(1.8, 35.0 / max(8.0, market.supply)))
++        demand_factor = 0.75 + market.demand / 135.0
++        market.unit_price = round(
++            profile_price * scarcity * demand_factor * world.crime_rng.uniform(0.96, 1.04),
++            2,
++        )
++        market.demand = max(
++            5.0,
++            min(
++                100.0,
++                market.demand
++                + world.crime_rng.uniform(-4.0, 4.0)
++                + market.transactions_today * 0.35
++                - market.police_pressure * 0.025,
++            ),
++        )
++        market.police_pressure = max(0.0, market.police_pressure * 0.94)
++        organization = world.crime_organizations[market.organization_id]
++        if market.supply < 12.0:
++            shipment = world.crime_rng.uniform(18.0, 55.0)
++            market.supply = round(market.supply + shipment, 2)
++            organization.inventory[market.commodity.value] = market.supply
++            cost = round(shipment * COMMODITY_PROFILE[market.commodity][0] * 0.22, 2)
++            organization.treasury = round(max(0.0, organization.treasury - cost), 2)
++            organization.expenses_today = round(organization.expenses_today + cost, 2)
++            _record_trafficking_operation(world, organization, market, shipment, cost)
++
++
++def _record_trafficking_operation(
++    world: World,
++    organization: CrimeOrganization,
++    market: CriminalMarket,
++    quantity: float,
++    cost: float,
++) -> None:
++    operation_type = (
++        CrimeOperationType.DRUG_TRAFFICKING
++        if market.commodity in DRUGS
++        else CrimeOperationType.ARMS_TRAFFICKING
++        if market.commodity == IllegalCommodity.WEAPONS
++        else CrimeOperationType.STOLEN_GOODS
++    )
++    detected = world.crime_rng.random() < 0.08 + organization.police_heat / 400.0
++    operation = CrimeOperation(
++        id=world._next_crime_operation_id,
++        organization_id=organization.id,
++        operation_type=operation_type,
++        status=CrimeOperationStatus.SUCCEEDED,
++        planned_tick=world.tick,
++        perpetrator_ids=[
++            citizen_id
++            for citizen_id, role in organization.role_by_member.items()
++            if role == CrimeRole.SUPPLIER
++        ][:2]
++        or [organization.leader_id],
++        victim_ids=[],
++        building_id=None,
++        amount=cost,
++        started_tick=world.tick,
++        resolved_tick=world.tick,
++        outcome=f"approvisionnement de {quantity:.1f} unités",
++        commodity=market.commodity,
++        quantity=quantity,
++        neighborhood_id=market.neighborhood_id,
++        detected=detected,
++    )
++    world._next_crime_operation_id += 1
++    world.crime_operations[operation.id] = operation
++    organization.operation_ids.append(operation.id)
++    if detected:
++        organization.police_heat = min(100.0, organization.police_heat + 8.0)
++        incident_type = (
++            "drug_dealing" if market.commodity in DRUGS
++            else "arms_trafficking" if market.commodity == IllegalCommodity.WEAPONS
++            else "illegal_goods_trafficking"
++        )
++        incident = world.create_incident(
++            incident_type=incident_type,
++            title="Approvisionnement clandestin détecté",
++            description=f"Un approvisionnement de {quantity:.1f} unités de {market.commodity.value} lié à {organization.name} est détecté.",
++            severity="danger" if market.commodity == IllegalCommodity.WEAPONS else "warning",
++            citizen_ids=tuple(operation.perpetrator_ids),
++            offender_id=operation.perpetrator_ids[0],
++            reported=True,
++            lifetime_minutes=12 * 60,
++            conflict_level=3,
++        )
++        operation.incident_id = incident.id
++        for perpetrator_id in operation.perpetrator_ids:
++            world.citizens[perpetrator_id].offenses_committed += 1
++
++
++def _attempt_police_raid(world: World) -> None:
++    candidates = [
++        market
++        for market in world.criminal_markets.values()
++        if market.supply > 5.0
++        and market.police_pressure + world.crime_organizations[market.organization_id].police_heat >= 72.0
++    ]
++    if not candidates:
++        return
++    market = max(
++        candidates,
++        key=lambda item: (
++            item.police_pressure + world.crime_organizations[item.organization_id].police_heat,
++            -item.id,
++        ),
++    )
++    organization = world.crime_organizations[market.organization_id]
++    chance = min(0.72, 0.15 + market.police_pressure / 180.0)
++    if world.crime_rng.random() >= chance:
++        return
++    seized = round(market.supply * world.crime_rng.uniform(0.18, 0.55), 2)
++    market.supply = round(max(0.0, market.supply - seized), 2)
++    market.seized_today += seized
++    market.police_pressure = min(100.0, market.police_pressure + 12.0)
++    organization.inventory[market.commodity.value] = market.supply
++    organization.police_heat = min(100.0, organization.police_heat + 10.0)
++    world.police_seizures_today = round(world.police_seizures_today + seized, 2)
++    suspects = [
++        citizen_id
++        for citizen_id, role in organization.role_by_member.items()
++        if role in {CrimeRole.DEALER, CrimeRole.SUPPLIER, CrimeRole.LIEUTENANT}
++    ][:5]
++    incident = world.create_incident(
++        incident_type="criminal_market_raid",
++        title="Opération contre un trafic",
++        description=f"La police saisit {seized:.1f} unités de {market.commodity.value} liées à {organization.name}.",
++        severity="danger",
++        citizen_ids=tuple(suspects),
++        offender_id=suspects[0] if suspects else organization.leader_id,
++        building_id=world.citizens[suspects[0]].home_id if suspects else None,
++        reported=True,
++        lifetime_minutes=12 * 60,
++        conflict_level=3,
++    )
++    for transaction in sorted(
++        (
++            item
++            for item in world.illegal_transactions.values()
++            if item.market_id == market.id
++        ),
++        key=lambda item: item.id,
++        reverse=True,
++    )[:5]:
++        if transaction.incident_id is None:
++            transaction.incident_id = incident.id
++
++
++def _apply_substance_consequences(world: World) -> None:
++    for citizen in world.citizens.values():
++        if citizen.addiction_level <= 0.0:
++            continue
++        days_since_purchase = (
++            99
++            if citizen.last_illegal_purchase_tick is None
++            else (world.tick - citizen.last_illegal_purchase_tick) / (24 * 60)
++        )
++        if days_since_purchase >= 1.0:
++            citizen.needs.stress = min(100.0, citizen.needs.stress + citizen.addiction_level * 0.025)
++            citizen.needs.fatigue = min(100.0, citizen.needs.fatigue + citizen.addiction_level * 0.012)
++        recovery = 0.18 if days_since_purchase >= 2.0 else 0.035
++        citizen.addiction_level = max(0.0, citizen.addiction_level - recovery)
++        if citizen.addiction_level >= 65.0:
++            citizen.health = max(5.0, citizen.health - 0.08)
++            citizen.job_performance = max(0.0, citizen.job_performance - 0.12)
++            citizen.financial_stress = min(100.0, citizen.financial_stress + 0.18)
++
++
++def _prune_transactions(world: World) -> None:
++    overflow = len(world.illegal_transactions) - MAX_ILLEGAL_TRANSACTIONS
++    if overflow <= 0:
++        return
++    for transaction_id in sorted(world.illegal_transactions)[:overflow]:
++        del world.illegal_transactions[transaction_id]
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/simulation/justice.py city-simulator-v0.13.0/backend/app/simulation/justice.py
+--- city-simulator-v0.12.0/backend/app/simulation/justice.py	2026-07-29 16:19:14.000000000 +0200
++++ city-simulator-v0.13.0/backend/app/simulation/justice.py	2026-07-29 17:31:14.000000000 +0200
+@@ -266,6 +266,22 @@
+         rows.append(_new_sentence(world, case, defendant, SentenceType.COMPENSATION, "Indemnisation de la victime", amount=world.rng.uniform(1000, 3000), beneficiary_id=victim_id))
+         if victim_id is not None:
+             rows.append(_new_sentence(world, case, defendant, SentenceType.RESTRAINING_ORDER, "Interdiction de contact de 60 jours", duration=60 * 24 * 60, beneficiary_id=victim_id))
++    elif incident.incident_type in {"drug_dealing", "criminal_market_raid"}:
++        rows.append(_new_sentence(world, case, defendant, SentenceType.LONG_DETENTION, "Détention de 5 jours pour trafic", duration=5 * 24 * 60))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.FINE, "Confiscation et amende", amount=world.rng.uniform(900, 2800)))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.PROBATION, "Probation renforcée de 45 jours", duration=45 * 24 * 60))
++    elif incident.incident_type == "arms_trafficking":
++        rows.append(_new_sentence(world, case, defendant, SentenceType.LONG_DETENTION, "Détention de 9 jours pour trafic d’armes", duration=9 * 24 * 60))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.FINE, "Amende pour trafic d’armes", amount=world.rng.uniform(1800, 5200)))
++    elif incident.incident_type in {"illegal_goods_trafficking", "money_laundering"}:
++        rows.append(_new_sentence(world, case, defendant, SentenceType.SHORT_DETENTION, "Détention de 3 jours", duration=3 * 24 * 60))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.FINE, "Amende et confiscation des profits", amount=world.rng.uniform(1200, 4200)))
++    elif incident.incident_type == "turf_war":
++        rows.append(_new_sentence(world, case, defendant, SentenceType.LONG_DETENTION, "Détention de 8 jours pour violences en bande", duration=8 * 24 * 60))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.PROBATION, "Probation renforcée de 60 jours", duration=60 * 24 * 60))
++    elif incident.incident_type == "corruption":
++        rows.append(_new_sentence(world, case, defendant, SentenceType.SHORT_DETENTION, "Détention de 2 jours pour corruption", duration=2 * 24 * 60))
++        rows.append(_new_sentence(world, case, defendant, SentenceType.FINE, "Amende pour corruption", amount=world.rng.uniform(1000, 3500)))
+     elif incident.incident_type == "restraining_order_violation":
+         rows.append(_new_sentence(world, case, defendant, SentenceType.SHORT_DETENTION, "Détention pour violation d’ordonnance", duration=24 * 60))
+         rows.append(_new_sentence(world, case, defendant, SentenceType.PROBATION, "Probation renforcée de 30 jours", duration=30 * 24 * 60))
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/simulation/models.py city-simulator-v0.13.0/backend/app/simulation/models.py
+--- city-simulator-v0.12.0/backend/app/simulation/models.py	2026-07-29 16:00:15.000000000 +0200
++++ city-simulator-v0.13.0/backend/app/simulation/models.py	2026-07-29 17:19:28.000000000 +0200
+@@ -152,6 +152,44 @@
+     EXTORTION = "extortion"
+     KIDNAPPING = "kidnapping"
+     RANSOM = "ransom"
++    DRUG_TRAFFICKING = "drug_trafficking"
++    STREET_DEALING = "street_dealing"
++    ARMS_TRAFFICKING = "arms_trafficking"
++    STOLEN_GOODS = "stolen_goods"
++    MONEY_LAUNDERING = "money_laundering"
++    TURF_WAR = "turf_war"
++    RECRUITMENT = "recruitment"
++    CORRUPTION = "corruption"
++
++
++class CrimeFactionType(StrEnum):
++    STREET_GANG = "street_gang"
++    ORGANIZED_GANG = "organized_gang"
++    MAFIA = "mafia"
++    TRIAD = "triad"
++    CARTEL = "cartel"
++    BIKER_GANG = "biker_gang"
++    CYBER_NETWORK = "cyber_network"
++
++
++class CrimeRole(StrEnum):
++    BOSS = "boss"
++    LIEUTENANT = "lieutenant"
++    ENFORCER = "enforcer"
++    DEALER = "dealer"
++    SUPPLIER = "supplier"
++    MONEY_LAUNDERER = "money_launderer"
++    LOOKOUT = "lookout"
++    RECRUITER = "recruiter"
++
++
++class IllegalCommodity(StrEnum):
++    CANNABIS = "cannabis"
++    COCAINE = "cocaine"
++    SYNTHETIC_DRUGS = "synthetic_drugs"
++    STOLEN_GOODS = "stolen_goods"
++    WEAPONS = "weapons"
++    COUNTERFEIT_GOODS = "counterfeit_goods"
+ 
+ 
+ class CrimeOperationStatus(StrEnum):
+@@ -653,6 +691,16 @@
+     crime_organization_id: int | None = None
+     kidnapped_until_tick: int | None = None
+     kidnapped_by_organization_id: int | None = None
++    criminal_role: CrimeRole | None = None
++    criminal_income_today: float = 0.0
++    illegal_spending_today: float = 0.0
++    illegal_purchase_count: int = 0
++    last_illegal_purchase_tick: int | None = None
++    substance_use_risk: float = 5.0
++    addiction_level: float = 0.0
++    intimidation_level: float = 0.0
++    recruited_tick: int | None = None
++    criminal_contact_ids: list[int] = field(default_factory=list)
+ 
+     @property
+     def full_name(self) -> str:
+@@ -847,6 +895,22 @@
+     police_heat: float = 0.0
+     active: bool = True
+     operation_ids: list[int] = field(default_factory=list)
++    faction_type: CrimeFactionType = CrimeFactionType.ORGANIZED_GANG
++    territory_ids: list[int] = field(default_factory=list)
++    role_by_member: dict[int, CrimeRole] = field(default_factory=dict)
++    rival_ids: list[int] = field(default_factory=list)
++    ally_ids: list[int] = field(default_factory=list)
++    specialties: list[IllegalCommodity] = field(default_factory=list)
++    inventory: dict[str, float] = field(default_factory=dict)
++    influence_by_neighborhood: dict[int, float] = field(default_factory=dict)
++    cohesion: float = 60.0
++    violence: float = 40.0
++    sophistication: float = 40.0
++    recruitment_pressure: float = 25.0
++    laundering_capacity: float = 100.0
++    revenue_today: float = 0.0
++    expenses_today: float = 0.0
++    members_recruited: int = 0
+ 
+ 
+ @dataclass(slots=True)
+@@ -865,6 +929,55 @@
+     resolved_tick: int | None = None
+     ransom_due_tick: int | None = None
+     outcome: str | None = None
++    commodity: IllegalCommodity | None = None
++    quantity: float = 0.0
++    neighborhood_id: int | None = None
++    detected: bool = False
++
++
++@dataclass(slots=True)
++class CriminalMarket:
++    id: int
++    organization_id: int
++    neighborhood_id: int
++    commodity: IllegalCommodity
++    supply: float
++    demand: float
++    unit_price: float
++    police_pressure: float = 0.0
++    transactions_today: int = 0
++    revenue_today: float = 0.0
++    seized_today: float = 0.0
++    active: bool = True
++
++
++@dataclass(slots=True)
++class IllegalTransaction:
++    id: int
++    tick: int
++    organization_id: int
++    market_id: int
++    seller_id: int
++    buyer_id: int
++    commodity: IllegalCommodity
++    quantity: float
++    unit_price: float
++    total: float
++    neighborhood_id: int
++    building_id: int | None
++    detected: bool = False
++    incident_id: int | None = None
++
++
++@dataclass(slots=True)
++class CrimeFactionRelation:
++    first_id: int
++    second_id: int
++    tension: float = 35.0
++    trust: float = 0.0
++    conflict_count: int = 0
++    last_conflict_tick: int | None = None
++    truce_until_tick: int | None = None
+ 
+ 
+ @dataclass(slots=True)
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/simulation/persistence.py city-simulator-v0.13.0/backend/app/simulation/persistence.py
+--- city-simulator-v0.12.0/backend/app/simulation/persistence.py	2026-07-29 15:52:45.000000000 +0200
++++ city-simulator-v0.13.0/backend/app/simulation/persistence.py	2026-07-29 17:27:55.000000000 +0200
+@@ -2,7 +2,7 @@
+ import json
+ from pathlib import Path
+ from typing import Any
+-SAVE_VERSION = 13
++SAVE_VERSION = 14
+ 
+ def validate_save_version(state: dict[str, Any]) -> None:
+     if int(state.get("version",0)) != SAVE_VERSION: raise ValueError("Version de sauvegarde non prise en charge.")
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/simulation/service.py city-simulator-v0.13.0/backend/app/simulation/service.py
+--- city-simulator-v0.12.0/backend/app/simulation/service.py	2026-07-29 16:08:12.000000000 +0200
++++ city-simulator-v0.13.0/backend/app/simulation/service.py	2026-07-29 17:31:14.000000000 +0200
+@@ -20,7 +20,7 @@
+ class SimulationService:
+     ALLOWED_SPEEDS = {1, 5, 20, 60}
+     MIN_CITIZENS = 20
+-    MAX_CITIZENS = 1000
++    MAX_CITIZENS = 5000
+ 
+     def __init__(self, *, seed: int = 12345, citizen_count: int | None = None) -> None:
+         citizen_count = citizen_count or int(os.getenv("CITYSIM_CITIZEN_COUNT", "100"))
+@@ -126,6 +126,10 @@
+         async with self._lock:
+             return self.world.get_crime_overview()
+ 
++    async def crime_faction_detail(self, organization_id: int) -> dict:
++        async with self._lock:
++            return self.world.get_crime_faction_detail(organization_id)
++
+     async def justice_overview(self) -> dict:
+         async with self._lock:
+             return self.world.get_justice_overview()
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/app/simulation/world.py city-simulator-v0.13.0/backend/app/simulation/world.py
+--- city-simulator-v0.12.0/backend/app/simulation/world.py	2026-07-29 16:20:49.000000000 +0200
++++ city-simulator-v0.13.0/backend/app/simulation/world.py	2026-07-29 17:32:06.000000000 +0200
+@@ -13,7 +13,7 @@
+     reset_communication_day,
+     update_communications,
+ )
+-from .crime import crime_overview, initialize_crime, reset_crime_day, update_crime
++from .crime import crime_faction_detail, crime_overview, initialize_crime, reset_crime_day, update_crime
+ from .economy import (
+     assigned_staff_count,
+     close_economic_day,
+@@ -57,10 +57,16 @@
+     CommunicationChannel,
+     CommunicationStatus,
+     CommunicationTone,
++    CrimeFactionRelation,
++    CrimeFactionType,
+     CrimeOperation,
+     CrimeOperationStatus,
+     CrimeOperationType,
+     CrimeOrganization,
++    CrimeRole,
++    CriminalMarket,
++    IllegalCommodity,
++    IllegalTransaction,
+     Complaint,
+     ComplaintStatus,
+     ConflictRecord,
+@@ -1128,6 +1134,13 @@
+             "assault": ["violences volontaires"],
+             "serious_assault": ["violences volontaires aggravées"],
+             "heated_dispute": ["trouble à l'ordre public"],
++            "drug_dealing": ["trafic de stupéfiants", "association de malfaiteurs"],
++            "arms_trafficking": ["trafic d'armes", "association de malfaiteurs"],
++            "illegal_goods_trafficking": ["recel en bande organisée"],
++            "criminal_market_raid": ["trafic en bande organisée"],
++            "turf_war": ["violences en bande organisée", "association de malfaiteurs"],
++            "money_laundering": ["blanchiment d'argent"],
++            "corruption": ["corruption active"],
+         }
+         return mapping.get(incident.incident_type, ["infraction liée à l'incident"])
+ 
+@@ -1934,7 +1947,7 @@
+             },
+             "banking": {"cash": citizen.money, "balance": citizen.bank_balance, "savings": citizen.savings_balance, "debt": citizen.bank_debt, "creditScore": round(citizen.credit_score, 1), "history": [{"tick": item.tick, "transactionType": item.transaction_type, "amount": item.amount, "balanceAfter": item.balance_after, "label": item.label, "counterpartyId": item.counterparty_id} for item in reversed(citizen.banking_history[-30:])]},
+             "housingSituation": {"isHomeless": citizen.is_homeless, "homelessSinceTick": citizen.homeless_since_tick, "previousHomeId": citizen.previous_home_id, "foodInsecurityDays": citizen.food_insecurity_days},
+-            "organizedCrime": {"organizationId": citizen.crime_organization_id, "kidnappedUntilTick": citizen.kidnapped_until_tick, "kidnappedByOrganizationId": citizen.kidnapped_by_organization_id},
++            "organizedCrime": {"organizationId": citizen.crime_organization_id, "organizationName": self.crime_organizations[citizen.crime_organization_id].name if citizen.crime_organization_id in self.crime_organizations else None, "factionType": self.crime_organizations[citizen.crime_organization_id].faction_type.value if citizen.crime_organization_id in self.crime_organizations else None, "role": citizen.criminal_role.value if citizen.criminal_role else None, "criminalIncomeToday": round(citizen.criminal_income_today, 2), "illegalSpendingToday": round(citizen.illegal_spending_today, 2), "illegalPurchaseCount": citizen.illegal_purchase_count, "substanceUseRisk": round(citizen.substance_use_risk, 1), "addictionLevel": round(citizen.addiction_level, 1), "intimidationLevel": round(citizen.intimidation_level, 1), "criminalContacts": [self._citizen_ref(contact_id) for contact_id in citizen.criminal_contact_ids[-20:]], "kidnappedUntilTick": citizen.kidnapped_until_tick, "kidnappedByOrganizationId": citizen.kidnapped_by_organization_id},
+             "transport": {
+                 "mode": citizen.transport_mode.value,
+                 "lastMode": citizen.last_transport_mode.value,
+@@ -2136,6 +2149,9 @@
+     def get_crime_overview(self) -> dict[str, Any]:
+         return crime_overview(self)
+ 
++    def get_crime_faction_detail(self, organization_id: int) -> dict[str, Any]:
++        return crime_faction_detail(self, organization_id)
++
+     def get_social_graph(self) -> dict[str, Any]:
+         return social_graph(self)
+ 
+@@ -2255,8 +2271,18 @@
+             "crimeRngState": self.crime_rng.getstate(),
+             "nextCrimeOperationId": self._next_crime_operation_id,
+             "lastCrimeHour": self._last_crime_hour,
++            "lastCrimeFactionDay": self._last_crime_faction_day,
++            "nextCriminalMarketId": self._next_criminal_market_id,
++            "nextIllegalTransactionId": self._next_illegal_transaction_id,
++            "lastIllegalMarketSlot": self._last_illegal_market_slot,
++            "lastIllegalMarketDay": self._last_illegal_market_day,
+             "organizedCrimesToday": self.organized_crimes_today,
+             "ransomPaidToday": self.ransom_paid_today,
++            "illegalSalesToday": self.illegal_sales_today,
++            "illegalRevenueToday": self.illegal_revenue_today,
++            "drugSalesToday": self.drug_sales_today,
++            "policeSeizuresToday": self.police_seizures_today,
++            "crimeHistory": self.crime_history,
+             "neighborhoods": [self._export_neighborhood(item) for item in self.neighborhoods.values()],
+             "buildings": [self._export_building(building) for building in self.buildings.values()],
+             "citizens": [self._export_citizen(citizen) for citizen in self.citizens.values()],
+@@ -2273,8 +2299,11 @@
+             "communications": [self._export_communication(item) for item in self.communications.values()],
+             "communicationQueue": [list(item) for item in self.communication_queue],
+             "jobApplications": [self._export_job_application(item) for item in self.job_applications.values()],
+-            "crimeOrganizations": [{"id": item.id, "name": item.name, "leaderId": item.leader_id, "memberIds": item.member_ids, "territoryId": item.territory_id, "treasury": item.treasury, "notoriety": item.notoriety, "policeHeat": item.police_heat, "active": item.active, "operationIds": item.operation_ids} for item in self.crime_organizations.values()],
+-            "crimeOperations": [{"id": item.id, "organizationId": item.organization_id, "operationType": item.operation_type.value, "status": item.status.value, "plannedTick": item.planned_tick, "perpetratorIds": item.perpetrator_ids, "victimIds": item.victim_ids, "buildingId": item.building_id, "amount": item.amount, "incidentId": item.incident_id, "startedTick": item.started_tick, "resolvedTick": item.resolved_tick, "ransomDueTick": item.ransom_due_tick, "outcome": item.outcome} for item in self.crime_operations.values()],
++            "crimeOrganizations": [{"id": item.id, "name": item.name, "leaderId": item.leader_id, "memberIds": item.member_ids, "territoryId": item.territory_id, "territoryIds": item.territory_ids, "treasury": item.treasury, "notoriety": item.notoriety, "policeHeat": item.police_heat, "active": item.active, "operationIds": item.operation_ids, "factionType": item.faction_type.value, "roleByMember": {str(key): value.value for key,value in item.role_by_member.items()}, "rivalIds": item.rival_ids, "allyIds": item.ally_ids, "specialties": [value.value for value in item.specialties], "inventory": item.inventory, "influenceByNeighborhood": {str(key): value for key,value in item.influence_by_neighborhood.items()}, "cohesion": item.cohesion, "violence": item.violence, "sophistication": item.sophistication, "recruitmentPressure": item.recruitment_pressure, "launderingCapacity": item.laundering_capacity, "revenueToday": item.revenue_today, "expensesToday": item.expenses_today, "membersRecruited": item.members_recruited} for item in self.crime_organizations.values()],
++            "crimeOperations": [{"id": item.id, "organizationId": item.organization_id, "operationType": item.operation_type.value, "status": item.status.value, "plannedTick": item.planned_tick, "perpetratorIds": item.perpetrator_ids, "victimIds": item.victim_ids, "buildingId": item.building_id, "amount": item.amount, "incidentId": item.incident_id, "startedTick": item.started_tick, "resolvedTick": item.resolved_tick, "ransomDueTick": item.ransom_due_tick, "outcome": item.outcome, "commodity": item.commodity.value if item.commodity else None, "quantity": item.quantity, "neighborhoodId": item.neighborhood_id, "detected": item.detected} for item in self.crime_operations.values()],
++            "criminalMarkets": [{"id": item.id, "organizationId": item.organization_id, "neighborhoodId": item.neighborhood_id, "commodity": item.commodity.value, "supply": item.supply, "demand": item.demand, "unitPrice": item.unit_price, "policePressure": item.police_pressure, "transactionsToday": item.transactions_today, "revenueToday": item.revenue_today, "seizedToday": item.seized_today, "active": item.active} for item in self.criminal_markets.values()],
++            "illegalTransactions": [{"id": item.id, "tick": item.tick, "organizationId": item.organization_id, "marketId": item.market_id, "sellerId": item.seller_id, "buyerId": item.buyer_id, "commodity": item.commodity.value, "quantity": item.quantity, "unitPrice": item.unit_price, "total": item.total, "neighborhoodId": item.neighborhood_id, "buildingId": item.building_id, "detected": item.detected, "incidentId": item.incident_id} for item in self.illegal_transactions.values()],
++            "crimeRelations": [{"firstId": item.first_id, "secondId": item.second_id, "tension": item.tension, "trust": item.trust, "conflictCount": item.conflict_count, "lastConflictTick": item.last_conflict_tick, "truceUntilTick": item.truce_until_tick} for item in self.crime_relations.values()],
+             "events": [self._export_event(event) for event in self.events],
+         }
+ 
+@@ -2356,8 +2385,18 @@
+         world.bank_defaults_today = float(state.get("bankDefaultsToday", 0.0))
+         world._next_crime_operation_id = int(state.get("nextCrimeOperationId", 1))
+         world._last_crime_hour = int(state.get("lastCrimeHour", -1))
++        world._last_crime_faction_day = int(state.get("lastCrimeFactionDay", 0))
++        world._next_criminal_market_id = int(state.get("nextCriminalMarketId", 1))
++        world._next_illegal_transaction_id = int(state.get("nextIllegalTransactionId", 1))
++        world._last_illegal_market_slot = int(state.get("lastIllegalMarketSlot", -1))
++        world._last_illegal_market_day = int(state.get("lastIllegalMarketDay", 0))
+         world.organized_crimes_today = int(state.get("organizedCrimesToday", 0))
+         world.ransom_paid_today = float(state.get("ransomPaidToday", 0.0))
++        world.illegal_sales_today = int(state.get("illegalSalesToday", 0))
++        world.illegal_revenue_today = float(state.get("illegalRevenueToday", 0.0))
++        world.drug_sales_today = int(state.get("drugSalesToday", 0))
++        world.police_seizures_today = float(state.get("policeSeizuresToday", 0.0))
++        world.crime_history = [dict(row) for row in state.get("crimeHistory", [])][-120:]
+         world._last_health_hour = int(state.get("lastHealthHour", -1))
+         world.medical_cases_today = int(state.get("medicalCasesToday", 0))
+         world.ambulance_dispatches_today = int(state.get("ambulanceDispatchesToday", 0))
+@@ -2615,6 +2654,7 @@
+                 banking_history=[BankTransaction(tick=int(item["tick"]), transaction_type=str(item["transactionType"]), amount=float(item["amount"]), balance_after=float(item["balanceAfter"]), label=str(item["label"]), counterparty_id=int(item["counterpartyId"]) if item.get("counterpartyId") is not None else None) for item in row.get("bankingHistory", [])],
+                 is_homeless=bool(row.get("isHomeless", False)), homeless_since_tick=int(row["homelessSinceTick"]) if row.get("homelessSinceTick") is not None else None, previous_home_id=int(row["previousHomeId"]) if row.get("previousHomeId") is not None else None, food_insecurity_days=int(row.get("foodInsecurityDays", 0)),
+                 crime_organization_id=int(row["crimeOrganizationId"]) if row.get("crimeOrganizationId") is not None else None, kidnapped_until_tick=int(row["kidnappedUntilTick"]) if row.get("kidnappedUntilTick") is not None else None, kidnapped_by_organization_id=int(row["kidnappedByOrganizationId"]) if row.get("kidnappedByOrganizationId") is not None else None,
++                criminal_role=CrimeRole(row["criminalRole"]) if row.get("criminalRole") else None, criminal_income_today=float(row.get("criminalIncomeToday",0.0)), illegal_spending_today=float(row.get("illegalSpendingToday",0.0)), illegal_purchase_count=int(row.get("illegalPurchaseCount",0)), last_illegal_purchase_tick=int(row["lastIllegalPurchaseTick"]) if row.get("lastIllegalPurchaseTick") is not None else None, substance_use_risk=float(row.get("substanceUseRisk",5.0)), addiction_level=float(row.get("addictionLevel",0.0)), intimidation_level=float(row.get("intimidationLevel",0.0)), recruited_tick=int(row["recruitedTick"]) if row.get("recruitedTick") is not None else None, criminal_contact_ids=[int(value) for value in row.get("criminalContactIds",[])],
+             )
+             citizen.relationships = {
+                 int(relationship_row["otherId"]): Relationship(
+@@ -3042,9 +3082,14 @@
+             world._next_job_application_id, max(world.job_applications, default=0) + 1
+         )
+ 
+-        world.crime_organizations = {int(row["id"]): CrimeOrganization(id=int(row["id"]), name=str(row["name"]), leader_id=int(row["leaderId"]), member_ids=[int(value) for value in row.get("memberIds", [])], territory_id=int(row.get("territoryId", 1)), treasury=float(row.get("treasury", 0.0)), notoriety=float(row.get("notoriety", 10.0)), police_heat=float(row.get("policeHeat", 0.0)), active=bool(row.get("active", True)), operation_ids=[int(value) for value in row.get("operationIds", [])]) for row in state.get("crimeOrganizations", [])}
+-        world.crime_operations = {int(row["id"]): CrimeOperation(id=int(row["id"]), organization_id=int(row["organizationId"]), operation_type=CrimeOperationType(row["operationType"]), status=CrimeOperationStatus(row["status"]), planned_tick=int(row["plannedTick"]), perpetrator_ids=[int(value) for value in row.get("perpetratorIds", [])], victim_ids=[int(value) for value in row.get("victimIds", [])], building_id=int(row["buildingId"]) if row.get("buildingId") is not None else None, amount=float(row.get("amount", 0.0)), incident_id=int(row["incidentId"]) if row.get("incidentId") is not None else None, started_tick=int(row["startedTick"]) if row.get("startedTick") is not None else None, resolved_tick=int(row["resolvedTick"]) if row.get("resolvedTick") is not None else None, ransom_due_tick=int(row["ransomDueTick"]) if row.get("ransomDueTick") is not None else None, outcome=row.get("outcome")) for row in state.get("crimeOperations", [])}
++        world.crime_organizations = {int(row["id"]): CrimeOrganization(id=int(row["id"]), name=str(row["name"]), leader_id=int(row["leaderId"]), member_ids=[int(value) for value in row.get("memberIds", [])], territory_id=int(row.get("territoryId", 1)), treasury=float(row.get("treasury", 0.0)), notoriety=float(row.get("notoriety", 10.0)), police_heat=float(row.get("policeHeat", 0.0)), active=bool(row.get("active", True)), operation_ids=[int(value) for value in row.get("operationIds", [])], faction_type=CrimeFactionType(row.get("factionType","organized_gang")), territory_ids=[int(value) for value in row.get("territoryIds",[row.get("territoryId",1)])], role_by_member={int(key): CrimeRole(value) for key,value in row.get("roleByMember",{}).items()}, rival_ids=[int(value) for value in row.get("rivalIds",[])], ally_ids=[int(value) for value in row.get("allyIds",[])], specialties=[IllegalCommodity(value) for value in row.get("specialties",[])], inventory={str(key):float(value) for key,value in row.get("inventory",{}).items()}, influence_by_neighborhood={int(key):float(value) for key,value in row.get("influenceByNeighborhood",{}).items()}, cohesion=float(row.get("cohesion",60.0)), violence=float(row.get("violence",40.0)), sophistication=float(row.get("sophistication",40.0)), recruitment_pressure=float(row.get("recruitmentPressure",25.0)), laundering_capacity=float(row.get("launderingCapacity",100.0)), revenue_today=float(row.get("revenueToday",0.0)), expenses_today=float(row.get("expensesToday",0.0)), members_recruited=int(row.get("membersRecruited",0))) for row in state.get("crimeOrganizations", [])}
++        world.crime_operations = {int(row["id"]): CrimeOperation(id=int(row["id"]), organization_id=int(row["organizationId"]), operation_type=CrimeOperationType(row["operationType"]), status=CrimeOperationStatus(row["status"]), planned_tick=int(row["plannedTick"]), perpetrator_ids=[int(value) for value in row.get("perpetratorIds", [])], victim_ids=[int(value) for value in row.get("victimIds", [])], building_id=int(row["buildingId"]) if row.get("buildingId") is not None else None, amount=float(row.get("amount", 0.0)), incident_id=int(row["incidentId"]) if row.get("incidentId") is not None else None, started_tick=int(row["startedTick"]) if row.get("startedTick") is not None else None, resolved_tick=int(row["resolvedTick"]) if row.get("resolvedTick") is not None else None, ransom_due_tick=int(row["ransomDueTick"]) if row.get("ransomDueTick") is not None else None, outcome=row.get("outcome"), commodity=IllegalCommodity(row["commodity"]) if row.get("commodity") else None, quantity=float(row.get("quantity",0.0)), neighborhood_id=int(row["neighborhoodId"]) if row.get("neighborhoodId") is not None else None, detected=bool(row.get("detected",False))) for row in state.get("crimeOperations", [])}
++        world.criminal_markets = {int(row["id"]): CriminalMarket(id=int(row["id"]), organization_id=int(row["organizationId"]), neighborhood_id=int(row["neighborhoodId"]), commodity=IllegalCommodity(row["commodity"]), supply=float(row["supply"]), demand=float(row["demand"]), unit_price=float(row["unitPrice"]), police_pressure=float(row.get("policePressure",0.0)), transactions_today=int(row.get("transactionsToday",0)), revenue_today=float(row.get("revenueToday",0.0)), seized_today=float(row.get("seizedToday",0.0)), active=bool(row.get("active",True))) for row in state.get("criminalMarkets",[])}
++        world.illegal_transactions = {int(row["id"]): IllegalTransaction(id=int(row["id"]), tick=int(row["tick"]), organization_id=int(row["organizationId"]), market_id=int(row["marketId"]), seller_id=int(row["sellerId"]), buyer_id=int(row["buyerId"]), commodity=IllegalCommodity(row["commodity"]), quantity=float(row["quantity"]), unit_price=float(row["unitPrice"]), total=float(row["total"]), neighborhood_id=int(row["neighborhoodId"]), building_id=int(row["buildingId"]) if row.get("buildingId") is not None else None, detected=bool(row.get("detected",False)), incident_id=int(row["incidentId"]) if row.get("incidentId") is not None else None) for row in state.get("illegalTransactions",[])}
++        world.crime_relations = {(min(int(row["firstId"]),int(row["secondId"])),max(int(row["firstId"]),int(row["secondId"]))): CrimeFactionRelation(first_id=int(row["firstId"]),second_id=int(row["secondId"]),tension=float(row.get("tension",35.0)),trust=float(row.get("trust",0.0)),conflict_count=int(row.get("conflictCount",0)),last_conflict_tick=int(row["lastConflictTick"]) if row.get("lastConflictTick") is not None else None,truce_until_tick=int(row["truceUntilTick"]) if row.get("truceUntilTick") is not None else None) for row in state.get("crimeRelations",[])}
+         world._next_crime_operation_id = max(world._next_crime_operation_id, max(world.crime_operations, default=0) + 1)
++        world._next_criminal_market_id = max(world._next_criminal_market_id, max(world.criminal_markets,default=0)+1)
++        world._next_illegal_transaction_id = max(world._next_illegal_transaction_id,max(world.illegal_transactions,default=0)+1)
+ 
+         world.events = [
+             DomainEvent(
+@@ -3094,6 +3139,10 @@
+             "careStatus": citizen.care_status.value,
+             "pain": round(citizen.pain, 1),
+             "activeHealthCaseId": citizen.active_health_case_id,
++            "crimeOrganizationId": citizen.crime_organization_id,
++            "criminalRole": citizen.criminal_role.value if citizen.criminal_role else None,
++            "addictionLevel": round(citizen.addiction_level, 1),
++            "substanceUseRisk": round(citizen.substance_use_risk, 1),
+         }
+ 
+     def _building_to_dict(self, building: Building) -> dict[str, Any]:
+@@ -3515,6 +3564,7 @@
+             "bankingHistory": [{"tick": item.tick, "transactionType": item.transaction_type, "amount": item.amount, "balanceAfter": item.balance_after, "label": item.label, "counterpartyId": item.counterparty_id} for item in citizen.banking_history],
+             "isHomeless": citizen.is_homeless, "homelessSinceTick": citizen.homeless_since_tick, "previousHomeId": citizen.previous_home_id, "foodInsecurityDays": citizen.food_insecurity_days,
+             "crimeOrganizationId": citizen.crime_organization_id, "kidnappedUntilTick": citizen.kidnapped_until_tick, "kidnappedByOrganizationId": citizen.kidnapped_by_organization_id,
++            "criminalRole": citizen.criminal_role.value if citizen.criminal_role else None, "criminalIncomeToday": citizen.criminal_income_today, "illegalSpendingToday": citizen.illegal_spending_today, "illegalPurchaseCount": citizen.illegal_purchase_count, "lastIllegalPurchaseTick": citizen.last_illegal_purchase_tick, "substanceUseRisk": citizen.substance_use_risk, "addictionLevel": citizen.addiction_level, "intimidationLevel": citizen.intimidation_level, "recruitedTick": citizen.recruited_tick, "criminalContactIds": citizen.criminal_contact_ids,
+         }
+ 
+     @staticmethod
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/pyproject.toml city-simulator-v0.13.0/backend/pyproject.toml
+--- city-simulator-v0.12.0/backend/pyproject.toml	2026-07-29 16:22:35.000000000 +0200
++++ city-simulator-v0.13.0/backend/pyproject.toml	2026-07-29 17:47:43.000000000 +0200
+@@ -4,7 +4,7 @@
+ 
+ [project]
+ name = "city-simulator-mvp"
+-version = "0.12.0"
++version = "0.13.0"
+ description = "Serveur de simulation urbaine observable en temps réel"
+ requires-python = ">=3.11"
+ dependencies = [
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/requirements.lock city-simulator-v0.13.0/backend/requirements.lock
+--- city-simulator-v0.12.0/backend/requirements.lock	2026-07-28 20:08:58.000000000 +0200
++++ city-simulator-v0.13.0/backend/requirements.lock	2026-07-29 17:47:43.000000000 +0200
+@@ -1,4 +1,4 @@
+-# Reproducible Python 3.12 environment for City Simulator v0.7.0.
++# Reproducible Python 3.12 environment for City Simulator v0.13.0.
+ # Regenerate after dependency changes with: pip freeze --exclude-editable
+ annotated-doc==0.0.5
+ annotated-types==0.8.0
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/tests/test_api.py city-simulator-v0.13.0/backend/tests/test_api.py
+--- city-simulator-v0.12.0/backend/tests/test_api.py	2026-07-29 16:24:46.000000000 +0200
++++ city-simulator-v0.13.0/backend/tests/test_api.py	2026-07-29 17:41:32.000000000 +0200
+@@ -48,6 +48,11 @@
+         crime = client.get("/api/crime")
+         assert crime.status_code == 200
+         assert crime.json()["metrics"]["organizations"] >= 1
++        faction_id = crime.json()["organizations"][0]["id"]
++        faction = client.get(f"/api/crime/factions/{faction_id}")
++        assert faction.status_code == 200
++        assert faction.json()["members"]
++        assert faction.json()["markets"]
+ 
+         housing = client.get("/api/housing")
+         assert housing.status_code == 200
+@@ -79,7 +84,7 @@
+         assert "economy" in payload
+         assert "banking" in payload
+         assert "crime" in payload
+-        assert payload["simulation"]["maxCitizenCount"] == 1000
++        assert payload["simulation"]["maxCitizenCount"] == 5000
+ 
+         assert client.post("/api/simulation/pause").status_code == 200
+         assert client.post("/api/simulation/speed", json={"speed": 20}).status_code == 200
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/backend/tests/test_crime_systemic.py city-simulator-v0.13.0/backend/tests/test_crime_systemic.py
+--- city-simulator-v0.12.0/backend/tests/test_crime_systemic.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.13.0/backend/tests/test_crime_systemic.py	2026-07-29 17:42:23.000000000 +0200
+@@ -0,0 +1,108 @@
++from app.simulation.crime import MAX_CRIME_HISTORY_DAYS, MAX_CRIME_OPERATIONS, _prune_operations
++from app.simulation.criminal_factions import FACTION_IDENTITIES
++from app.simulation.criminal_markets import DRUGS, MAX_ILLEGAL_TRANSACTIONS, _complete_sale
++from app.simulation.models import CrimeOperation, CrimeOperationStatus, CrimeOperationType, CrimeRole
++from app.simulation.world import World
++
++
++def test_factions_scale_and_represent_distinct_criminal_models() -> None:
++    world = World(seed=13001, citizen_count=2500)
++
++    assert len(world.crime_organizations) == 8
++    assert len({organization.faction_type for organization in world.crime_organizations.values()}) >= 6
++    assert len(world.crime_relations) == 28
++    assert all(organization.territory_ids for organization in world.crime_organizations.values())
++    assert all(organization.specialties for organization in world.crime_organizations.values())
++    assert all(CrimeRole.BOSS in organization.role_by_member.values() for organization in world.crime_organizations.values())
++    assert len(FACTION_IDENTITIES) >= 16
++
++
++def test_dealer_sale_moves_real_money_and_affects_an_ordinary_citizen() -> None:
++    world = World(seed=13002, citizen_count=100)
++    market = next(market for market in world.criminal_markets.values() if market.commodity in DRUGS)
++    organization = world.crime_organizations[market.organization_id]
++    seller_id = next(
++        citizen_id for citizen_id, role in organization.role_by_member.items()
++        if role in {CrimeRole.DEALER, CrimeRole.LIEUTENANT}
++    )
++    seller = world.citizens[seller_id]
++    buyer = next(
++        citizen for citizen in world.citizens.values()
++        if citizen.age >= 18 and citizen.crime_organization_id != organization.id
++    )
++    buyer.money = max(buyer.money, 1000.0)
++    funds_before = buyer.money + buyer.bank_balance + buyer.savings_balance
++    treasury_before = organization.treasury
++    seller_before = seller.money
++
++    _complete_sale(world, market, organization, seller, buyer)
++
++    transaction = next(reversed(world.illegal_transactions.values()))
++    assert transaction.buyer_id == buyer.id
++    assert transaction.seller_id == seller.id
++    assert transaction.total > 0
++    assert round(funds_before - (buyer.money + buyer.bank_balance + buyer.savings_balance), 2) == transaction.total
++    assert round((organization.treasury - treasury_before) + (seller.money - seller_before), 2) == transaction.total
++    assert buyer.illegal_purchase_count == 1
++    assert seller.id in buyer.criminal_contact_ids
++    assert buyer.addiction_level > 0
++
++
++def test_illegal_markets_generate_volume_and_monitoring_depth() -> None:
++    world = World(seed=13003, citizen_count=250)
++    world.run_minutes(15 * 60)
++    overview = world.get_crime_overview()
++
++    assert overview["metrics"]["criminalMarkets"] >= len(world.crime_organizations)
++    assert overview["metrics"]["illegalSalesToday"] > 0
++    assert overview["transactions"]
++    assert overview["territories"]
++    assert overview["relations"]
++    assert overview["commodities"]
++    assert any(transaction["buyer"]["id"] != transaction["seller"]["id"] for transaction in overview["transactions"])
++
++
++def test_crime_state_is_deterministic_and_round_trips() -> None:
++    first = World(seed=13004, citizen_count=100)
++    second = World(seed=13004, citizen_count=100)
++    first.run_minutes(900)
++    second.run_minutes(900)
++
++    assert first.get_crime_overview() == second.get_crime_overview()
++    restored = World.from_state(first.export_state())
++    assert restored.export_state() == first.export_state()
++    assert restored.get_crime_overview() == first.get_crime_overview()
++
++
++def test_crime_histories_are_bounded() -> None:
++    world = World(seed=13005, citizen_count=20)
++    world.crime_history = [{"day": day} for day in range(MAX_CRIME_HISTORY_DAYS + 5)]
++    world._reset_daily_counters()
++    assert len(world.crime_history) == MAX_CRIME_HISTORY_DAYS
++
++    organization = next(iter(world.crime_organizations.values()))
++    for operation_id in range(1, MAX_CRIME_OPERATIONS + 15):
++        world.crime_operations[operation_id] = CrimeOperation(
++            id=operation_id,
++            organization_id=organization.id,
++            operation_type=CrimeOperationType.THEFT,
++            status=CrimeOperationStatus.SUCCEEDED,
++            planned_tick=0,
++            perpetrator_ids=[],
++            victim_ids=[],
++            building_id=None,
++            amount=0.0,
++        )
++        organization.operation_ids.append(operation_id)
++    _prune_operations(world)
++    assert len(world.crime_operations) == MAX_CRIME_OPERATIONS
++    assert min(world.crime_operations) == 15
++
++    assert MAX_ILLEGAL_TRANSACTIONS == 5000
++
++
++def test_population_ceiling_world_initializes_with_5000_citizens() -> None:
++    world = World(seed=13006, citizen_count=5000)
++    assert len(world.citizens) == 5000
++    assert len(world.crime_organizations) == 16
++    assert len(world.criminal_markets) >= 32
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/frontend/package-lock.json city-simulator-v0.13.0/frontend/package-lock.json
+--- city-simulator-v0.12.0/frontend/package-lock.json	2026-07-29 16:22:35.000000000 +0200
++++ city-simulator-v0.13.0/frontend/package-lock.json	2026-07-29 17:49:16.000000000 +0200
+@@ -1,12 +1,12 @@
+ {
+   "name": "city-simulator-frontend",
+-  "version": "0.12.0",
++  "version": "0.13.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "city-simulator-frontend",
+-      "version": "0.12.0",
++      "version": "0.13.0",
+       "dependencies": {
+         "pixi.js": "^7.4.2",
+         "react": "^18.3.1",
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/frontend/package.json city-simulator-v0.13.0/frontend/package.json
+--- city-simulator-v0.12.0/frontend/package.json	2026-07-29 16:22:35.000000000 +0200
++++ city-simulator-v0.13.0/frontend/package.json	2026-07-29 17:47:43.000000000 +0200
+@@ -1,7 +1,7 @@
+ {
+   "name": "city-simulator-frontend",
+   "private": true,
+-  "version": "0.12.0",
++  "version": "0.13.0",
+   "type": "module",
+   "scripts": {
+     "dev": "vite",
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/frontend/src/App.tsx city-simulator-v0.13.0/frontend/src/App.tsx
+--- city-simulator-v0.12.0/frontend/src/App.tsx	2026-07-29 16:05:08.000000000 +0200
++++ city-simulator-v0.13.0/frontend/src/App.tsx	2026-07-29 17:35:24.000000000 +0200
+@@ -15,6 +15,7 @@
+ import { CaseModal } from "./components/CaseModal";
+ import { CitizenModal } from "./components/CitizenModal";
+ import { CommunicationModal } from "./components/CommunicationModal";
++import { CrimeMonitoring } from "./components/CrimeMonitoring";
+ import { EntityModal } from "./components/EntityModal";
+ import { HouseholdModal } from "./components/HouseholdModal";
+ import { JusticeModal } from "./components/JusticeModal";
+@@ -40,6 +41,7 @@
+   const [householdModalId, setHouseholdModalId] = useState<number | null>(null);
+   const [justiceModalOpen, setJusticeModalOpen] = useState(false);
+   const [communicationModalOpen, setCommunicationModalOpen] = useState(false);
++  const [crimeMonitoringOpen, setCrimeMonitoringOpen] = useState(false);
+   const [neighborhoodModalId, setNeighborhoodModalId] = useState<number | null>(null);
+   const [thematicLayer, setThematicLayer] = useState<ThematicLayer>("none");
+   const [caseModalId, setCaseModalId] = useState<number | null>(null);
+@@ -177,7 +179,7 @@
+     <main className="app-shell">
+       <header className="topbar">
+         <div>
+-          <div className="eyebrow">Monitoring urbain · v0.12</div>
++          <div className="eyebrow">Monitoring urbain · v0.13</div>
+           <h1>City Simulator</h1>
+         </div>
+         <div className="time-block">
+@@ -200,7 +202,7 @@
+           <button disabled={!snapshot?.simulation.hasSave} onClick={() => loadCity()}>Charger</button>
+           <label className="population-control">Population
+             <select value={citizenCount} onChange={(event) => setCitizenCount(Number(event.target.value))}>
+-              {[100, 250, 500, 1000].map((count) => <option key={count} value={count}>{count}</option>)}
++              {[100, 250, 500, 1000, 2500, 5000].map((count) => <option key={count} value={count}>{count}</option>)}
+             </select>
+           </label>
+           <button className="danger-button" onClick={() => resetCity(12345, citizenCount)}>Réinitialiser</button>
+@@ -210,7 +212,7 @@
+       <MetricsPanel stats={snapshot?.stats ?? null} />
+ 
+       <section className="workspace">
+-        <ControlPanel snapshot={snapshot} layers={layers} onToggleLayer={toggleLayer} onOpenBuilding={selectBuilding} onOpenHousehold={setHouseholdModalId} onOpenSocialGraph={() => setSocialGraphOpen(true)} onOpenJustice={() => setJusticeModalOpen(true)} onOpenCommunications={() => setCommunicationModalOpen(true)} thematicLayer={thematicLayer} onThematicLayerChange={setThematicLayer} onOpenNeighborhood={setNeighborhoodModalId} onOpenCitizen={selectCitizen} />
++        <ControlPanel snapshot={snapshot} layers={layers} onToggleLayer={toggleLayer} onOpenBuilding={selectBuilding} onOpenHousehold={setHouseholdModalId} onOpenSocialGraph={() => setSocialGraphOpen(true)} onOpenJustice={() => setJusticeModalOpen(true)} onOpenCommunications={() => setCommunicationModalOpen(true)} onOpenCrime={() => setCrimeMonitoringOpen(true)} thematicLayer={thematicLayer} onThematicLayerChange={setThematicLayer} onOpenNeighborhood={setNeighborhoodModalId} onOpenCitizen={selectCitizen} />
+ 
+         <CityMap
+           snapshot={snapshot}
+@@ -276,6 +278,14 @@
+       />
+       <NeighborhoodModal neighborhoodId={neighborhoodModalId} paused={snapshot?.simulation.paused ?? false} snapshotTick={snapshot?.tick ?? 0} onClose={() => setNeighborhoodModalId(null)} onSelectBuilding={(id) => { setNeighborhoodModalId(null); selectBuilding(id); }} onSelectIncident={(id) => { setNeighborhoodModalId(null); selectIncident(id); }} onSelectVehicle={(id) => { setNeighborhoodModalId(null); selectVehicle(id); }} />
+       <CommunicationModal open={communicationModalOpen} data={snapshot?.communications ?? null} onClose={() => setCommunicationModalOpen(false)} onSelectCitizen={(id) => { setCommunicationModalOpen(false); selectCitizen(id); }} />
++      <CrimeMonitoring
++        open={crimeMonitoringOpen}
++        data={snapshot?.crime ?? null}
++        onClose={() => setCrimeMonitoringOpen(false)}
++        onSelectCitizen={(id) => { setCrimeMonitoringOpen(false); selectCitizen(id); }}
++        onSelectIncident={(id) => { setCrimeMonitoringOpen(false); selectIncident(id); }}
++        onSelectNeighborhood={(id) => { setCrimeMonitoringOpen(false); setNeighborhoodModalId(id); }}
++      />
+       <JusticeModal
+         open={justiceModalOpen}
+         data={snapshot?.justice ?? null}
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/frontend/src/components/ControlPanel.tsx city-simulator-v0.13.0/frontend/src/components/ControlPanel.tsx
+--- city-simulator-v0.12.0/frontend/src/components/ControlPanel.tsx	2026-07-29 15:27:26.000000000 +0200
++++ city-simulator-v0.13.0/frontend/src/components/ControlPanel.tsx	2026-07-29 17:35:24.000000000 +0200
+@@ -11,6 +11,7 @@
+   onOpenHousehold: (id: number) => void;
+   onOpenSocialGraph: () => void;
+   onOpenJustice: () => void;
++  onOpenCrime: () => void;
+   onOpenCommunications: () => void;
+   thematicLayer: ThematicLayer;
+   onThematicLayerChange: (layer: ThematicLayer) => void;
+@@ -63,6 +64,7 @@
+   onOpenHousehold,
+   onOpenSocialGraph,
+   onOpenJustice,
++  onOpenCrime,
+   onOpenCommunications,
+   thematicLayer,
+   onThematicLayerChange,
+@@ -135,6 +137,13 @@
+       <h3>Communications</h3>
+       <dl className="compact-metrics"><div><dt>Envoyées aujourd’hui</dt><dd>{snapshot?.stats.sentToday ?? 0}</dd></div><div><dt>Non lues</dt><dd>{snapshot?.stats.unreadCommunications ?? 0}</dd></div><div><dt>Réponses</dt><dd>{snapshot?.stats.communicationRepliesToday ?? 0}</dd></div></dl>
+       <button className="graph-open-button" onClick={onOpenCommunications}>Ouvrir le monitoring des communications</button>
++      <h3>Criminalité organisée</h3>
++      <dl className="compact-metrics">
++        <div><dt>Factions / membres</dt><dd>{snapshot?.crime.metrics.organizations ?? 0} / {snapshot?.crime.metrics.factionMembers ?? 0}</dd></div>
++        <div><dt>Ventes illégales</dt><dd>{snapshot?.crime.metrics.illegalSalesToday ?? 0}</dd></div>
++        <div><dt>Territoires disputés</dt><dd>{snapshot?.crime.metrics.contestedNeighborhoods ?? 0}</dd></div>
++      </dl>
++      <button className="graph-open-button" onClick={onOpenCrime}>Ouvrir le monitoring criminel</button>
+       <h3>Justice</h3>
+       <dl className="compact-metrics">
+         <div><dt>Audiences</dt><dd>{snapshot?.stats.hearingsToday ?? 0} / {snapshot?.stats.courtCapacityToday ?? 0}</dd></div>
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/frontend/src/components/CrimeMonitoring.css city-simulator-v0.13.0/frontend/src/components/CrimeMonitoring.css
+--- city-simulator-v0.12.0/frontend/src/components/CrimeMonitoring.css	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.13.0/frontend/src/components/CrimeMonitoring.css	2026-07-29 17:34:07.000000000 +0200
+@@ -0,0 +1,37 @@
++.crime-monitor { width:min(1500px,96vw); height:min(900px,92vh); display:grid; grid-template-rows:auto auto auto minmax(0,1fr); overflow:hidden; border:1px solid #533642; border-radius:14px; background:#11151d; box-shadow:0 24px 90px #000a; }
++.crime-header { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; padding:16px 18px; border-bottom:1px solid #392934; background:linear-gradient(120deg,#1c1720,#151b25); }
++.crime-header h2 { margin:2px 0 3px; }
++.crime-header p { margin:0; color:#a8939e; font-size:12px; }
++.crime-kpis { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:1px; background:#33242c; }
++.crime-kpis span { display:grid; gap:2px; padding:11px 14px; background:#171b24; color:#a8afbd; font-size:11px; }
++.crime-kpis b { color:#f1bdc5; font-size:18px; }
++.crime-tabs { display:flex; gap:6px; padding:9px 14px; border-bottom:1px solid #302a34; background:#151922; }
++.crime-tabs button.active { border-color:#b65767; background:#4b242d; color:#fff; }
++.crime-content { min-height:0; overflow:auto; padding:14px; }
++.crime-card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:10px; }
++.crime-card { display:grid; gap:9px; padding:12px; border:1px solid #3a303a; border-radius:10px; background:#191d26; }
++.crime-card > header { display:flex; justify-content:space-between; gap:8px; align-items:center; }
++.crime-card h3,.crime-card p { margin:0; }
++.crime-card p { color:#a8afbd; font-size:11px; }
++.crime-card dl { display:grid; grid-template-columns:1fr 1fr; gap:5px 12px; margin:0; }
++.crime-card dl div { display:flex; justify-content:space-between; gap:5px; }
++.crime-card dt { color:#929cab; font-size:11px; }
++.crime-card dd { margin:0; color:#ecdae0; font-weight:700; }
++.crime-type { padding:4px 7px; border-radius:999px; background:#492b35; color:#ffc2cb; font-size:10px; text-transform:uppercase; }
++.crime-person { text-align:left; color:#d98d9a; }
++.crime-table-wrap { overflow:auto; }
++.crime-table { width:100%; border-collapse:collapse; white-space:nowrap; }
++.crime-table th,.crime-table td { padding:9px 10px; border-bottom:1px solid #2e3038; text-align:left; }
++.crime-table th { position:sticky; top:0; background:#1d2028; color:#aa9aa1; font-size:10px; text-transform:uppercase; }
++.crime-feed { display:grid; gap:7px; }
++.crime-feed article { display:grid; grid-template-columns:minmax(170px,.8fr) minmax(220px,1.4fr) auto auto; gap:12px; align-items:center; padding:10px; border:1px solid #33333d; border-left:3px solid #5b4a54; border-radius:8px; background:#191d25; }
++.crime-feed article.detected { border-left-color:#e15b68; background:#21191e; }
++.crime-feed span { display:grid; gap:3px; }
++.crime-feed small { color:#8f98a8; }
++.crime-territory { display:grid; gap:10px; padding:13px; text-align:left; }
++.crime-territory span { display:flex; justify-content:space-between; gap:12px; }
++.crime-territory div { display:flex; gap:3px; height:7px; }
++.crime-territory i { display:block; max-width:100%; border-radius:5px; background:#bb5c69; }
++.crime-territory i:nth-child(2) { background:#9c72ca; }
++.crime-territory i:nth-child(3) { background:#cf934f; }
++@media (max-width:900px) { .crime-kpis { grid-template-columns:repeat(3,1fr); } .crime-feed article { grid-template-columns:1fr; } }
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/frontend/src/components/CrimeMonitoring.tsx city-simulator-v0.13.0/frontend/src/components/CrimeMonitoring.tsx
+--- city-simulator-v0.12.0/frontend/src/components/CrimeMonitoring.tsx	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.13.0/frontend/src/components/CrimeMonitoring.tsx	2026-07-29 17:36:23.000000000 +0200
+@@ -0,0 +1,137 @@
++import { useMemo, useState } from "react";
++import type { CrimeOverview } from "../types/city";
++import "./CrimeMonitoring.css";
++
++type CrimeTab = "factions" | "markets" | "transactions" | "territories" | "operations";
++
++const FACTION_LABELS: Record<string, string> = {
++  street_gang: "Gang de rue",
++  organized_gang: "Gang organisé",
++  mafia: "Mafia",
++  triad: "Triade",
++  cartel: "Cartel",
++  biker_gang: "Gang de motards",
++  cyber_network: "Réseau cybercriminel",
++};
++
++const COMMODITY_LABELS: Record<string, string> = {
++  cannabis: "Cannabis",
++  cocaine: "Cocaïne",
++  synthetic_drugs: "Drogues de synthèse",
++  stolen_goods: "Biens volés",
++  weapons: "Armes",
++  counterfeit_goods: "Contrefaçons",
++};
++
++function label(value: string, labels: Record<string, string>) {
++  return labels[value] ?? value.replace(/_/g, " ");
++}
++
++export function CrimeMonitoring({
++  open,
++  data,
++  onClose,
++  onSelectCitizen,
++  onSelectIncident,
++  onSelectNeighborhood,
++}: {
++  open: boolean;
++  data: CrimeOverview | null;
++  onClose: () => void;
++  onSelectCitizen: (id: number) => void;
++  onSelectIncident: (id: number) => void;
++  onSelectNeighborhood: (id: number) => void;
++}) {
++  const [tab, setTab] = useState<CrimeTab>("factions");
++  const factions = useMemo(
++    () => data?.organizations.slice().sort((a, b) => b.policeHeat - a.policeHeat) ?? [],
++    [data],
++  );
++  if (!open) return null;
++  const metrics = data?.metrics;
++
++  return (
++    <div className="graph-overlay" role="dialog" aria-modal="true" aria-label="Monitoring criminel" onMouseDown={onClose}>
++      <section className="crime-monitor" onMouseDown={(event) => event.stopPropagation()}>
++        <header className="crime-header">
++          <div>
++            <div className="eyebrow">Renseignement · marchés clandestins · territoires</div>
++            <h2>Activités criminelles</h2>
++            <p>Les transactions non détectées figurent comme renseignement de simulation, pas comme connaissance policière.</p>
++          </div>
++          <button onClick={onClose}>Fermer</button>
++        </header>
++
++        <div className="crime-kpis">
++          <span><b>{metrics?.organizations ?? 0}</b> factions</span>
++          <span><b>{metrics?.factionMembers ?? 0}</b> membres</span>
++          <span><b>{metrics?.illegalSalesToday ?? 0}</b> ventes aujourd’hui</span>
++          <span><b>{Math.round(metrics?.illegalRevenueToday ?? 0)} €</b> de flux</span>
++          <span><b>{metrics?.dependentCitizens ?? 0}</b> dépendances</span>
++          <span><b>{metrics?.contestedNeighborhoods ?? 0}</b> territoires disputés</span>
++        </div>
++
++        <nav className="crime-tabs" aria-label="Vues du monitoring criminel">
++          {([
++            ["factions", "Factions"],
++            ["markets", "Marchés"],
++            ["transactions", "Transactions"],
++            ["territories", "Territoires"],
++            ["operations", "Opérations"],
++          ] as Array<[CrimeTab, string]>).map(([value, title]) => (
++            <button className={tab === value ? "active" : ""} key={value} onClick={() => setTab(value)}>{title}</button>
++          ))}
++        </nav>
++
++        <div className="crime-content">
++          {tab === "factions" && (
++            <div className="crime-card-grid">
++              {factions.map((faction) => (
++                <article className="crime-card" key={faction.id}>
++                  <header><span className={`crime-type crime-type-${faction.factionType}`}>{label(faction.factionType, FACTION_LABELS)}</span><b>Chaleur {Math.round(faction.policeHeat)} %</b></header>
++                  <h3>{faction.name}</h3>
++                  <button className="crime-person" onClick={() => onSelectCitizen(faction.leaderId)}>Chef : {faction.leaderName}</button>
++                  <dl>
++                    <div><dt>Membres</dt><dd>{faction.memberCount}</dd></div>
++                    <div><dt>Marchés</dt><dd>{faction.marketCount}</dd></div>
++                    <div><dt>Trésorerie</dt><dd>{Math.round(faction.treasury)} €</dd></div>
++                    <div><dt>Recettes du jour</dt><dd>{Math.round(faction.revenueToday)} €</dd></div>
++                    <div><dt>Violence</dt><dd>{Math.round(faction.violence)} %</dd></div>
++                    <div><dt>Sophistication</dt><dd>{Math.round(faction.sophistication)} %</dd></div>
++                  </dl>
++                  <p>{faction.specialties.map((item) => label(item, COMMODITY_LABELS)).join(" · ")}</p>
++                  <button onClick={() => faction.territoryId && onSelectNeighborhood(faction.territoryId)}>Inspecter le territoire principal</button>
++                </article>
++              ))}
++            </div>
++          )}
++
++          {tab === "markets" && (
++            <div className="crime-table-wrap"><table className="crime-table"><thead><tr><th>Faction</th><th>Produit</th><th>Territoire</th><th>Offre</th><th>Prix</th><th>Demande</th><th>Pression police</th><th>Ventes</th></tr></thead><tbody>
++              {data?.markets.map((market) => <tr key={market.id}><td>{market.organizationName}</td><td>{label(market.commodity, COMMODITY_LABELS)}</td><td><button onClick={() => onSelectNeighborhood(market.neighborhoodId)}>{market.neighborhoodName}</button></td><td>{market.supply.toFixed(1)}</td><td>{market.unitPrice.toFixed(0)} €</td><td>{Math.round(market.demand)} %</td><td>{Math.round(market.policePressure)} %</td><td>{market.transactionsToday}</td></tr>)}
++            </tbody></table></div>
++          )}
++
++          {tab === "transactions" && (
++            <div className="crime-feed">
++              {data?.transactions.map((transaction) => <article className={transaction.detected ? "detected" : ""} key={transaction.id}><span><b>{label(transaction.commodity, COMMODITY_LABELS)}</b><small>tick {transaction.tick} · {transaction.quantity.toFixed(2)} unité</small></span><span><button onClick={() => onSelectCitizen(transaction.seller.id)}>{transaction.seller.name}</button> → <button onClick={() => onSelectCitizen(transaction.buyer.id)}>{transaction.buyer.name}</button></span><strong>{transaction.total.toFixed(2)} € {transaction.detected ? "· détectée" : "· clandestine"}</strong></article>)}
++              {!data?.transactions.length && <p className="muted">Aucune transaction enregistrée.</p>}
++            </div>
++          )}
++
++          {tab === "territories" && (
++            <div className="crime-card-grid">
++              {data?.territories.map((territory) => <button className="crime-territory" key={territory.neighborhoodId} onClick={() => onSelectNeighborhood(territory.neighborhoodId)}><span><strong>{territory.neighborhoodName}</strong><small>Contesté à {Math.round(territory.contestedness)} %</small></span><div>{territory.factions.slice(0, 3).filter((row) => row.influence > 0).map((row) => <i key={row.organizationId} style={{ width: `${Math.max(4, row.influence)}%` }} title={`${row.name}: ${row.influence}%`} />)}</div></button>)}
++            </div>
++          )}
++
++          {tab === "operations" && (
++            <div className="crime-feed">
++              {data?.operations.map((operation) => <article className={operation.detected ? "detected" : ""} key={operation.id}><span><b>{label(operation.type, {})}</b><small>{operation.organizationName} · {operation.status}</small></span><strong>{operation.amount ? `${Math.round(operation.amount)} €` : operation.outcome ?? "—"}</strong>{operation.incidentId && <button onClick={() => onSelectIncident(operation.incidentId!)}>Incident #{operation.incidentId}</button>}</article>)}
++            </div>
++          )}
++        </div>
++      </section>
++    </div>
++  );
++}
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/frontend/src/monitoring/metrics.ts city-simulator-v0.13.0/frontend/src/monitoring/metrics.ts
+--- city-simulator-v0.12.0/frontend/src/monitoring/metrics.ts	2026-07-29 16:16:40.000000000 +0200
++++ city-simulator-v0.13.0/frontend/src/monitoring/metrics.ts	2026-07-29 17:46:57.000000000 +0200
+@@ -158,11 +158,11 @@
+       id: "security",
+       label: "Sécurité",
+       metrics: [
+-        card("incidents", "Incidents actifs", number.format(stats.activeIncidents), "security"),
+-        card("mafias", "Organisations criminelles", number.format(stats.organizations), "security"),
+-        card("organized", "Opérations organisées", number.format(stats.operations), "security"),
+-        card("kidnappings", "Enlèvements actifs", number.format(stats.activeKidnappings), "security"),
+-        card("response", "Réponse police", `${number.format(stats.averagePoliceResponseMinutes)} min`, "security"),
++        card("factions", "Factions criminelles", number.format(stats.organizations), "security"),
++        card("members", "Membres identifiés", number.format(stats.factionMembers), "security"),
++        card("illegal-sales", "Ventes illégales du jour", number.format(stats.illegalSalesToday), "security"),
++        card("dependent", "Citoyens dépendants", number.format(stats.dependentCitizens), "security"),
++        card("territories", "Quartiers disputés", number.format(stats.contestedNeighborhoods), "security"),
+         card("investigations", "Enquêtes ouvertes", number.format(stats.openInvestigations), "security"),
+       ],
+     },
+diff -ruN '--exclude=.git' '--exclude=.venv' '--exclude=node_modules' '--exclude=dist' '--exclude=artifacts' '--exclude=.pytest_cache' '--exclude=__pycache__' city-simulator-v0.12.0/frontend/src/types/city.ts city-simulator-v0.13.0/frontend/src/types/city.ts
+--- city-simulator-v0.12.0/frontend/src/types/city.ts	2026-07-29 16:05:08.000000000 +0200
++++ city-simulator-v0.13.0/frontend/src/types/city.ts	2026-07-29 17:34:47.000000000 +0200
+@@ -107,6 +107,10 @@
+   careStatus: string;
+   pain: number;
+   activeHealthCaseId: number | null;
++  crimeOrganizationId: number | null;
++  criminalRole: string | null;
++  addictionLevel: number;
++  substanceUseRisk: number;
+ }
+ 
+ export interface BuildingSummary {
+@@ -330,6 +334,44 @@
+   history: Array<Omit<NeighborhoodSummary, "id" | "name" | "bounds" | "lighting"> & { day: number }>;
+ }
+ 
++export interface CrimeMetrics {
++  organizations: number; factionMembers: number; criminalMarkets: number; operations: number;
++  organizedCrimesToday: number; activeKidnappings: number; ransomPaidToday: number;
++  illegalSalesToday: number; drugSalesToday: number; illegalRevenueToday: number;
++  policeSeizuresToday: number; exposedCitizens: number; dependentCitizens: number;
++  highRiskCitizens: number; contestedNeighborhoods: number; detectedTransactions: number;
++}
++export interface CrimeOrganizationSummary {
++  id:number; name:string; factionType:string; leaderId:number; leaderName:string; memberCount:number;
++  territoryId:number; territoryIds:number[]; treasury:number; revenueToday:number; expensesToday:number;
++  notoriety:number; policeHeat:number; cohesion:number; violence:number; sophistication:number;
++  recruitmentPressure:number; membersRecruited:number; specialties:string[]; inventory:Record<string,number>;
++  rivalIds:number[]; allyIds:number[]; marketCount:number; customers:number; active:boolean;
++}
++export interface CriminalMarketSummary {
++  id:number; organizationId:number; organizationName:string; neighborhoodId:number; neighborhoodName:string;
++  commodity:string; supply:number; demand:number; unitPrice:number; policePressure:number;
++  transactionsToday:number; revenueToday:number; seizedToday:number; drugMarket:boolean; active:boolean;
++}
++export interface IllegalTransactionSummary {
++  id:number; tick:number; organizationId:number; organizationName:string; marketId:number;
++  seller:{id:number;name:string}; buyer:{id:number;name:string}; commodity:string; quantity:number;
++  unitPrice:number; total:number; neighborhoodId:number; buildingId:number|null; detected:boolean; incidentId:number|null;
++}
++export interface CrimeOperationSummary {
++  id:number; organizationId:number; organizationName:string; type:string; status:string; perpetratorIds:number[];
++  victimIds:number[]; buildingId:number|null; neighborhoodId:number|null; commodity:string|null; quantity:number;
++  amount:number; detected:boolean; incidentId:number|null; startedTick:number|null; resolvedTick:number|null; outcome:string|null;
++}
++export interface CrimeOverview {
++  tick:number; metrics:CrimeMetrics; organizations:CrimeOrganizationSummary[]; markets:CriminalMarketSummary[];
++  transactions:IllegalTransactionSummary[]; operations:CrimeOperationSummary[];
++  relations:Array<{firstId:number;firstName:string;secondId:number;secondName:string;tension:number;trust:number;conflictCount:number;lastConflictTick:number|null;truceUntilTick:number|null}>;
++  territories:Array<{neighborhoodId:number;neighborhoodName:string;contestedness:number;factions:Array<{organizationId:number;name:string;influence:number}>}>;
++  commodities:Array<{commodity:string;transactions:number;revenue:number;supply:number}>;
++  history:Array<{day:number;organizedCrimes:number;illegalSales:number;drugSales:number;illegalRevenue:number;policeSeizures:number;dependentCitizens:number}>;
++}
++
+ export interface CitySnapshot {
+   type: "city_snapshot";
+   tick: number;
+@@ -378,7 +420,7 @@
+     activeMedicalCases: number; medicalEmergencies: number; patientsWaiting: number; hospitalizedPatients: number; hospitalBeds: number; medicalStaffOnDuty: number; ambulancesAvailable: number; ambulanceDispatchesToday: number; averageMedicalWaitMinutes: number;
+     medianRent: number; vacancyRate: number; overcrowdedHouseholds: number; distressedHouseholds: number; movesToday: number; averageHomeWorkDistance: number; searchingHouseholds: number; temporaryHouseholds: number; homelessCitizens: number; homelessHouseholds: number;
+     deposits: number; savings: number; citizenDebt: number; borrowers: number; loansIssuedToday: number; defaultsToday: number;
+-    organizations: number; operations: number; organizedCrimesToday: number; activeKidnappings: number; ransomPaidToday: number;
++    organizations: number; factionMembers: number; criminalMarkets: number; operations: number; organizedCrimesToday: number; activeKidnappings: number; ransomPaidToday: number; illegalSalesToday: number; drugSalesToday: number; illegalRevenueToday: number; policeSeizuresToday: number; exposedCitizens: number; dependentCitizens: number; highRiskCitizens: number; contestedNeighborhoods: number; detectedTransactions: number;
+     activityCounts: Record<string, number>;
+     transportModeCounts: Record<TransportMode, number>;
+     tripCountsToday: Record<TransportMode, number>;
+@@ -424,7 +466,7 @@
+   };
+   economy: EconomyOverview;
+   banking: { tick: number; bank: { id: number | null; name: string | null; reserves: number; outstandingLoans: number; interestIncome: number }; metrics: { deposits: number; savings: number; citizenDebt: number; borrowers: number; loansIssuedToday: number; defaultsToday: number } };
+-  crime: { tick: number; metrics: { organizations: number; operations: number; organizedCrimesToday: number; activeKidnappings: number; ransomPaidToday: number }; organizations: Array<{ id:number; name:string; leaderId:number; memberCount:number; territoryId:number; treasury:number; notoriety:number; policeHeat:number; active:boolean }>; operations: Array<{ id:number; organizationId:number; type:string; status:string; victimIds:number[]; buildingId:number|null; amount:number; incidentId:number|null; startedTick:number|null; resolvedTick:number|null; outcome:string|null }> };
++  crime: CrimeOverview;
+   health: HealthOverview;
+   housing: HousingOverview;
+   justice: JusticeOverview;

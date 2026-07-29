@@ -1,0 +1,1479 @@
+diff -ruN city-simulator-v0.10.0/CHANGELOG.md city-simulator-v0.10.1/CHANGELOG.md
+--- city-simulator-v0.10.0/CHANGELOG.md	2026-07-29 14:37:47.022580400 +0200
++++ city-simulator-v0.10.1/CHANGELOG.md	2026-07-29 15:05:26.000000000 +0200
+@@ -1,5 +1,29 @@
+ # Changelog
+ 
++## 0.10.1 — Communications interpersonnelles
++
++### Ajouté
++
++- Appels téléphoniques, SMS, e-mails et lettres persistants, avec capacités, coûts, délais, lecture et échecs propres à chaque canal.
++- Fils de discussion et réponses autonomes limitées à deux niveaux.
++- Tons de communication influençant les relations sociales et le stress organisationnel.
++- Planification événementielle et générateur pseudo-aléatoire dédié, déterministe et sérialisé.
++- API de consultation et d’envoi, domaine WebSocket, métriques et événements filtrables.
++- Monitoring global et onglet Communications complet dans la fiche citoyen.
++- Sept scénarios backend et deux tests frontend dédiés.
++
++### Modifié
++
++- Sauvegarde stricte v11 avec file de livraison/lecture exacte ; les versions v1 à v10 sont refusées.
++- Versions backend et frontend portées à 0.10.1.
++- Le groupe d’indicateurs Social présente les communications du jour sans augmenter le nombre de cartes.
++
++### Limites connues
++
++- Pas de pièces jointes, appels de groupe, répondeur, opérateur postal incarné, spam ou authentification des adresses.
++- Le contenu textuel autonome repose sur des modèles courts ; il ne s’agit pas d’un moteur conversationnel génératif.
++
++
+ ## 0.10.0 — Justice, probation et détention
+ 
+ ### Ajouté
+diff -ruN city-simulator-v0.10.0/README.md city-simulator-v0.10.1/README.md
+--- city-simulator-v0.10.0/README.md	2026-07-29 14:33:17.787234500 +0200
++++ city-simulator-v0.10.1/README.md	2026-07-29 15:05:26.000000000 +0200
+@@ -1,7 +1,22 @@
+-# City Simulator — v0.10.0 Justice, probation et détention
++# City Simulator — v0.10.1 Communications interpersonnelles
+ 
+ Prototype web d'une ville persistante simulant 100 habitants, leurs déplacements, relations, conflits, emplois, santé, blessures, maladies, secours médicalisés, finances, incidents, interventions policières et premières procédures judiciaires.
+ 
++## Nouveautés v0.10.1
++
++- Quatre canaux persistants : appel téléphonique, SMS, e-mail et lettre, avec coûts, délais de livraison et délais de lecture distincts.
++- Appels synchrones dépendant de la disponibilité réelle du destinataire et appels manqués explicitement enregistrés.
++- Conversations, réponses automatiques bornées, tons amical, pratique, excuses, invitation ou conflictuel, avec conséquences sur les relations.
++- Communications autonomes planifiées à quelques créneaux quotidiens par une file événementielle, sans balayage permanent de toute la population.
++- Générateur aléatoire dédié et sauvegardé pour préserver le déterminisme sans perturber l’économie, la santé ou la justice.
++- Commandes `GET /api/communications`, `GET /api/citizens/{id}/communications` et `POST /api/communications`, domaine WebSocket `communications`.
++- Fenêtre de monitoring globale, onglet de composition/historique dans chaque fiche citoyen, indicateurs compacts et filtre du journal.
++- Sauvegarde stricte v11 et historique global plafonné à 2 000 communications.
++
++## Migration depuis v0.10.0
++
++Le schéma de sauvegarde passe de 10 à 11 pour conserver les coordonnées, communications, fils, statuts, compteurs, file de livraison/lecture et état du générateur aléatoire dédié. Les sauvegardes v10 et antérieures sont refusées explicitement. La version applicative est v0.10.1 ; v0.11.0 reste réservée au prochain lot du manifeste.
++
+ ## Nouveautés v0.10.0
+ 
+ - Dépôt de plainte persistant, enquête, revue du parquet, classement sans suite, poursuites, audience, verdict et peines structurées.
+@@ -208,6 +223,7 @@
+ │   │   │   ├── routes.py
+ │   │   │   └── websocket.py
+ │   │   └── simulation/
++│   │       ├── communication.py
+ │   │       ├── economy.py
+ │   │       ├── snapshot.py
+ │   │       ├── health.py
+diff -ruN city-simulator-v0.10.0/VALIDATION.md city-simulator-v0.10.1/VALIDATION.md
+--- city-simulator-v0.10.0/VALIDATION.md	2026-07-29 14:37:47.022580400 +0200
++++ city-simulator-v0.10.1/VALIDATION.md	2026-07-29 15:05:26.000000000 +0200
+@@ -1,16 +1,17 @@
+-# Validation de l’archive — v0.10.0
++# Validation de l’archive — v0.10.1
+ 
+ ## Backend
+ 
+-- 63 tests automatisés sous Python 3.12, dont 9 scénarios judiciaires v0.10.0.
+-- Couverture fonctionnelle : personnel citoyen, classement sans suite, capacité du tribunal, peines structurées, interdiction de contact, détention et emploi, sauvegarde v10, API, WebSocket et 30 jours continus.
+-- Aucun dossier ne reste en audience et aucune détention expirée ne reste active après la simulation longue.
++- 70 tests automatisés sous Python 3.12, dont 7 scénarios de communication dédiés.
++- Couverture fonctionnelle : quatre canaux, disponibilité téléphonique, livraison/lecture, réponses bornées, effets relationnels, API, WebSocket et sauvegarde/reprise déterministe.
++- Les scénarios historiques d’économie sur 30 jours restent identiques grâce au générateur aléatoire isolé.
++- Historique global plafonné à 2 000 entrées terminales ; aucune réponse ne dépasse deux niveaux.
+ 
+ ## Frontend
+ 
+-- 12 tests Vitest dans 5 fichiers.
++- 14 tests Vitest dans 6 fichiers.
+ - Contrôle TypeScript strict et build Vite validés.
+-- File d’audiences, progression des peines, tri prioritaire, fenêtres tribunal/dossier, fiche citoyen et filtre Justice compilés.
++- Monitoring global, composition depuis la fiche citoyen, historique, indicateurs et filtre Communications compilés.
+ 
+ ## Commandes de validation
+ 
+@@ -42,5 +43,5 @@
+ ## Couverture et limites de l’environnement
+ 
+ - Aucun collecteur de couverture Python/Vitest n’est installé ; aucun pourcentage non mesuré n’est annoncé.
+-- La justice est volontairement simplifiée : pas d’appel, avocat, jury ou procédure juridique exhaustive.
++- Pas de pièces jointes, appels de groupe, répondeur, spam, chiffrement ni acheminement postal incarné.
+ - Le navigateur intégré reste indisponible à cause de `helper_unknown_error` ; le rendu est validé par TypeScript/Vite mais l’inspection interactive doit être refaite localement.
+diff -ruN city-simulator-v0.10.0/backend/app/api/routes.py city-simulator-v0.10.1/backend/app/api/routes.py
+--- city-simulator-v0.10.0/backend/app/api/routes.py	2026-07-29 14:17:37.804057400 +0200
++++ city-simulator-v0.10.1/backend/app/api/routes.py	2026-07-29 14:53:01.000000000 +0200
+@@ -3,6 +3,7 @@
+ from fastapi import APIRouter, HTTPException
+ from pydantic import BaseModel, Field
+ 
++from ..simulation.models import CommunicationChannel, CommunicationTone
+ from ..simulation.service import SimulationService
+ 
+ 
+@@ -18,6 +19,15 @@
+     seed: int | None = None
+ 
+ 
++class CommunicationRequest(BaseModel):
++    sender_id: int = Field(alias="senderId", gt=0)
++    recipient_id: int = Field(alias="recipientId", gt=0)
++    channel: CommunicationChannel
++    tone: CommunicationTone = CommunicationTone.FRIENDLY
++    subject: str = Field(default="", max_length=120)
++    body: str = Field(default="", max_length=800)
++
++
+ def create_api_router(service: SimulationService) -> APIRouter:
+     router = APIRouter(prefix="/api")
+ 
+@@ -49,6 +59,23 @@
+     async def social_graph() -> dict:
+         return await service.social_graph()
+ 
++    @router.get("/communications")
++    async def communications_overview() -> dict:
++        return await service.communication_overview()
++
++    @router.get("/citizens/{citizen_id}/communications")
++    async def citizen_communications(citizen_id: int) -> dict:
++        return await _detail_or_404(service.citizen_communications, citizen_id, "Habitant introuvable")
++
++    @router.post("/communications", status_code=201)
++    async def create_communication(request: CommunicationRequest) -> dict:
++        try:
++            return await service.send_communication(sender_id=request.sender_id, recipient_id=request.recipient_id, channel=request.channel, tone=request.tone, subject=request.subject, body=request.body)
++        except KeyError as exc:
++            raise HTTPException(status_code=404, detail="Expéditeur ou destinataire introuvable") from exc
++        except ValueError as exc:
++            raise HTTPException(status_code=422, detail=str(exc)) from exc
++
+     @router.get("/households/{household_id}")
+     async def household_detail(household_id: int) -> dict:
+         return await _detail_or_404(service.household_detail, household_id, "Foyer introuvable")
+diff -ruN city-simulator-v0.10.0/backend/app/main.py city-simulator-v0.10.1/backend/app/main.py
+--- city-simulator-v0.10.0/backend/app/main.py	2026-07-29 13:29:01.697616300 +0200
++++ city-simulator-v0.10.1/backend/app/main.py	2026-07-29 14:58:09.000000000 +0200
+@@ -14,7 +14,7 @@
+     yield
+     await service.stop()
+ 
+-app = FastAPI(title="City Simulator MVP", version="0.9.0", lifespan=lifespan)
++app = FastAPI(title="City Simulator MVP", version="0.10.1", lifespan=lifespan)
+ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+ app.include_router(create_api_router(service))
+ 
+diff -ruN city-simulator-v0.10.0/backend/app/simulation/communication.py city-simulator-v0.10.1/backend/app/simulation/communication.py
+--- city-simulator-v0.10.0/backend/app/simulation/communication.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.1/backend/app/simulation/communication.py	2026-07-29 15:06:04.000000000 +0200
+@@ -0,0 +1,395 @@
++from __future__ import annotations
++
++import heapq
++import random
++from typing import TYPE_CHECKING, Any
++
++from .justice import contact_forbidden
++from .models import (
++    Activity,
++    CareStatus,
++    Communication,
++    CommunicationChannel,
++    CommunicationStatus,
++    CommunicationTone,
++    TravelStage,
++)
++from .social import apply_interaction
++
++if TYPE_CHECKING:
++    from .models import Citizen
++    from .world import World
++
++MAX_COMMUNICATIONS = 2_000
++MAX_CITIZEN_HISTORY = 120
++MAX_REPLY_DEPTH = 2
++
++CHANNEL_DELAYS = {
++    CommunicationChannel.PHONE_CALL: (0, 0),
++    CommunicationChannel.SMS: (1, 5),
++    CommunicationChannel.EMAIL: (5, 30),
++    CommunicationChannel.LETTER: (24 * 60, 3 * 24 * 60),
++}
++READ_DELAYS = {
++    CommunicationChannel.SMS: (1, 20),
++    CommunicationChannel.EMAIL: (20, 240),
++    CommunicationChannel.LETTER: (30, 720),
++}
++CHANNEL_COSTS = {
++    CommunicationChannel.PHONE_CALL: 0.30,
++    CommunicationChannel.SMS: 0.05,
++    CommunicationChannel.EMAIL: 0.0,
++    CommunicationChannel.LETTER: 1.20,
++}
++
++
++def initialize_communications(world: World) -> None:
++    world.communication_rng = random.Random(world.seed ^ 0xC011CA7E)
++    world.communications: dict[int, Communication] = {}
++    world.communication_queue: list[tuple[int, int]] = []
++    world._next_communication_id = 1
++    world._last_communication_slot = -1
++    world.communications_sent_today = 0
++    world.communications_delivered_today = 0
++    world.phone_calls_today = 0
++    world.communication_replies_today = 0
++    for citizen in world.citizens.values():
++        citizen.phone_number = citizen.phone_number or f"06 {citizen.id:02d} {world.seed % 100:02d} {(citizen.id * 17) % 100:02d} {(citizen.id * 31) % 100:02d}"
++        slug = f"{citizen.first_name}.{citizen.last_name}".lower().replace("é", "e").replace("è", "e").replace("ê", "e").replace("à", "a").replace("ç", "c")
++        citizen.email_address = citizen.email_address or f"{slug}.{citizen.id}@ville.test"
++
++
++def reset_communication_day(world: World) -> None:
++    world.communications_sent_today = 0
++    world.communications_delivered_today = 0
++    world.phone_calls_today = 0
++    world.communication_replies_today = 0
++
++
++def update_communications(world: World) -> None:
++    _process_due(world)
++    daily_slot = {9: 0, 12: 1, 18: 2, 21: 3}.get(world.hour)
++    slot = (world.day - 1) * 4 + daily_slot if daily_slot is not None else -1
++    if slot >= 0 and slot != world._last_communication_slot and world.minute == 0:
++        world._last_communication_slot = slot
++        _plan_autonomous_communications(world)
++
++
++def send_communication(
++    world: World,
++    *,
++    sender_id: int,
++    recipient_id: int,
++    channel: CommunicationChannel,
++    tone: CommunicationTone,
++    subject: str,
++    body: str,
++    reply_to_id: int | None = None,
++    reply_depth: int = 0,
++) -> Communication:
++    if sender_id == recipient_id:
++        raise ValueError("Un habitant ne peut pas s’envoyer un message à lui-même.")
++    sender = world.citizens[sender_id]
++    recipient = world.citizens[recipient_id]
++    if contact_forbidden(world, sender_id, recipient_id):
++        raise ValueError("Une interdiction de contact empêche cette communication.")
++    _validate_channel(sender, recipient, channel)
++    subject = subject.strip()[:120] or _default_subject(tone)
++    body = body.strip()[:800] or _default_body(tone, sender, recipient)
++    cost = CHANNEL_COSTS[channel]
++    if sender.money + sender.overdraft_limit < cost:
++        raise ValueError("Fonds insuffisants pour utiliser ce canal.")
++    sender.money = round(sender.money - cost, 2)
++    low, high = CHANNEL_DELAYS[channel]
++    delivery_tick = world.tick + (world.communication_rng.randint(low, high) if high else 0)
++    communication = Communication(
++        id=world._next_communication_id,
++        thread_id=(world.communications[reply_to_id].thread_id if reply_to_id in world.communications else world._next_communication_id),
++        sender_id=sender_id,
++        recipient_id=recipient_id,
++        channel=channel,
++        tone=tone,
++        subject=subject,
++        body=body,
++        status=CommunicationStatus.RINGING if channel == CommunicationChannel.PHONE_CALL else CommunicationStatus.QUEUED,
++        created_tick=world.tick,
++        delivery_tick=delivery_tick,
++        reply_to_id=reply_to_id,
++        reply_depth=reply_depth,
++        cost=cost,
++    )
++    world._next_communication_id += 1
++    world.communications[communication.id] = communication
++    _record_for_citizen(sender, communication.id)
++    _record_for_citizen(recipient, communication.id)
++    heapq.heappush(world.communication_queue, (delivery_tick, communication.id))
++    world.communications_sent_today += 1
++    if channel == CommunicationChannel.PHONE_CALL:
++        world.phone_calls_today += 1
++    if reply_to_id in world.communications:
++        world.communications[reply_to_id].status = CommunicationStatus.REPLIED
++        world.communications[reply_to_id].replied_tick = world.tick
++        world.communication_replies_today += 1
++    world._emit(
++        "communication_sent",
++        f"{sender.full_name} contacte {recipient.full_name} par {_channel_label(channel)}.",
++        citizen_ids=(sender.id, recipient.id),
++        severity="warning" if tone == CommunicationTone.CONFLICT else "info",
++    )
++    _prune(world)
++    return communication
++
++
++def _process_due(world: World) -> None:
++    while world.communication_queue and world.communication_queue[0][0] <= world.tick:
++        _, communication_id = heapq.heappop(world.communication_queue)
++        communication = world.communications.get(communication_id)
++        if communication is None:
++            continue
++        if communication.status in {CommunicationStatus.QUEUED, CommunicationStatus.RINGING}:
++            _deliver(world, communication)
++        elif communication.status == CommunicationStatus.DELIVERED:
++            _read(world, communication)
++
++
++def _deliver(world: World, communication: Communication) -> None:
++    sender = world.citizens[communication.sender_id]
++    recipient = world.citizens[communication.recipient_id]
++    if contact_forbidden(world, sender.id, recipient.id):
++        communication.status = CommunicationStatus.FAILED
++        communication.failure_reason = "Interdiction de contact active au moment de la livraison."
++        return
++    if communication.channel == CommunicationChannel.PHONE_CALL:
++        if not _available_for_call(world, recipient):
++            communication.status = CommunicationStatus.FAILED
++            communication.failure_reason = "Appel manqué : destinataire indisponible."
++            world._emit("phone_call_missed", f"{recipient.full_name} manque un appel de {sender.full_name}.", citizen_ids=(sender.id, recipient.id))
++            return
++        communication.duration_minutes = world.communication_rng.randint(3, 24)
++        communication.status = CommunicationStatus.READ
++        communication.read_tick = world.tick
++        _apply_social_effect(world, communication)
++        world.communications_delivered_today += 1
++        world._emit("phone_call_completed", f"{sender.full_name} et {recipient.full_name} terminent un appel de {communication.duration_minutes} minutes.", citizen_ids=(sender.id, recipient.id))
++        return
++    communication.status = CommunicationStatus.DELIVERED
++    world.communications_delivered_today += 1
++    if communication.id not in recipient.unread_communication_ids:
++        recipient.unread_communication_ids.append(communication.id)
++    low, high = READ_DELAYS[communication.channel]
++    heapq.heappush(world.communication_queue, (world.tick + world.communication_rng.randint(low, high), communication.id))
++    world._emit("communication_delivered", f"Un {_channel_label(communication.channel)} de {sender.full_name} est livré à {recipient.full_name}.", citizen_ids=(sender.id, recipient.id))
++
++
++def _read(world: World, communication: Communication) -> None:
++    recipient = world.citizens[communication.recipient_id]
++    if not _available_to_read(world, recipient):
++        heapq.heappush(world.communication_queue, (world.tick + 30, communication.id))
++        return
++    communication.status = CommunicationStatus.READ
++    communication.read_tick = world.tick
++    if communication.id in recipient.unread_communication_ids:
++        recipient.unread_communication_ids.remove(communication.id)
++    _apply_social_effect(world, communication)
++    if communication.reply_depth < MAX_REPLY_DEPTH and _should_reply(world, communication):
++        reply_channel = communication.channel if communication.channel != CommunicationChannel.LETTER or world.communication_rng.random() < 0.72 else CommunicationChannel.SMS
++        try:
++            send_communication(
++                world,
++                sender_id=communication.recipient_id,
++                recipient_id=communication.sender_id,
++                channel=reply_channel,
++                tone=_reply_tone(communication.tone),
++                subject=f"Re: {communication.subject}",
++                body=_reply_body(communication.tone, recipient),
++                reply_to_id=communication.id,
++                reply_depth=communication.reply_depth + 1,
++            )
++        except ValueError:
++            pass
++
++
++def _apply_social_effect(world: World, communication: Communication) -> None:
++    sender = world.citizens[communication.sender_id]
++    recipient = world.citizens[communication.recipient_id]
++    positive = communication.tone != CommunicationTone.CONFLICT
++    strength = {
++        CommunicationChannel.PHONE_CALL: 1.4,
++        CommunicationChannel.SMS: 0.6,
++        CommunicationChannel.EMAIL: 0.8,
++        CommunicationChannel.LETTER: 1.2,
++    }[communication.channel]
++    if communication.tone == CommunicationTone.APOLOGY:
++        strength *= 1.35
++    apply_interaction(world, sender, recipient, recipient.home_id, positive=positive, strength=strength, emit=False)
++    if communication.tone == CommunicationTone.PRACTICAL:
++        sender.needs.stress = max(0.0, sender.needs.stress - 0.4)
++        recipient.needs.stress = max(0.0, recipient.needs.stress - 0.4)
++
++
++def _plan_autonomous_communications(world: World) -> None:
++    candidates = sorted(world.citizens.values(), key=lambda citizen: (-citizen.needs.social, citizen.id))
++    created = 0
++    for sender in candidates:
++        if created >= max(2, len(world.citizens) // 20):
++            break
++        relationships = sorted(sender.relationships.values(), key=lambda relation: (relation.familiarity, relation.affection), reverse=True)
++        recipients = [world.citizens[relation.other_id] for relation in relationships if relation.other_id in world.citizens and not contact_forbidden(world, sender.id, relation.other_id)]
++        if not recipients:
++            continue
++        recipient = recipients[world.communication_rng.randrange(min(4, len(recipients)))]
++        relation = sender.relationships[recipient.id]
++        tone = CommunicationTone.CONFLICT if relation.affection < -12 and world.communication_rng.random() < 0.25 else CommunicationTone.APOLOGY if relation.conflict_level > 0 and world.communication_rng.random() < 0.35 else CommunicationTone.INVITATION if sender.needs.social > 55 else CommunicationTone.FRIENDLY
++        channel = world.communication_rng.choices(
++            [CommunicationChannel.PHONE_CALL, CommunicationChannel.SMS, CommunicationChannel.EMAIL, CommunicationChannel.LETTER],
++            weights=[18, 48, 25, 9],
++            k=1,
++        )[0]
++        try:
++            send_communication(world, sender_id=sender.id, recipient_id=recipient.id, channel=channel, tone=tone, subject=_default_subject(tone), body=_default_body(tone, sender, recipient))
++        except ValueError:
++            continue
++        created += 1
++
++
++def communication_summary(world: World, communication: Communication) -> dict[str, Any]:
++    return {
++        "id": communication.id,
++        "threadId": communication.thread_id,
++        "sender": world._citizen_ref(communication.sender_id),
++        "recipient": world._citizen_ref(communication.recipient_id),
++        "channel": communication.channel.value,
++        "tone": communication.tone.value,
++        "subject": communication.subject,
++        "body": communication.body,
++        "status": communication.status.value,
++        "createdTick": communication.created_tick,
++        "deliveryTick": communication.delivery_tick,
++        "readTick": communication.read_tick,
++        "repliedTick": communication.replied_tick,
++        "replyToId": communication.reply_to_id,
++        "replyDepth": communication.reply_depth,
++        "durationMinutes": communication.duration_minutes,
++        "cost": communication.cost,
++        "failureReason": communication.failure_reason,
++    }
++
++
++def communication_overview(world: World) -> dict[str, Any]:
++    return {
++        "metrics": communication_metrics(world),
++        "recent": [communication_summary(world, item) for item in sorted(world.communications.values(), key=lambda row: row.created_tick, reverse=True)[:30]],
++    }
++
++
++def communication_metrics(world: World) -> dict[str, int]:
++    day_start = max(0, world.tick - (world.hour * 60 + world.minute))
++    today = [item for item in world.communications.values() if item.created_tick >= day_start]
++    return {
++        "sentToday": len(today),
++        "deliveredToday": sum(item.status in {CommunicationStatus.DELIVERED, CommunicationStatus.READ, CommunicationStatus.REPLIED} for item in today),
++        "phoneCallsToday": sum(item.channel == CommunicationChannel.PHONE_CALL for item in today),
++        "smsToday": sum(item.channel == CommunicationChannel.SMS for item in today),
++        "emailsToday": sum(item.channel == CommunicationChannel.EMAIL for item in today),
++        "lettersToday": sum(item.channel == CommunicationChannel.LETTER for item in today),
++        "unreadCommunications": sum(len(citizen.unread_communication_ids) for citizen in world.citizens.values()),
++        "communicationRepliesToday": world.communication_replies_today,
++    }
++
++
++def citizen_communications(world: World, citizen_id: int) -> dict[str, Any]:
++    citizen = world.citizens[citizen_id]
++    rows = [world.communications[item_id] for item_id in citizen.communication_ids if item_id in world.communications]
++    return {
++        "phoneNumber": citizen.phone_number,
++        "emailAddress": citizen.email_address,
++        "unreadCount": len(citizen.unread_communication_ids),
++        "messages": [communication_summary(world, item) for item in sorted(rows, key=lambda row: row.created_tick, reverse=True)[:MAX_CITIZEN_HISTORY]],
++    }
++
++
++def _available_for_call(world: World, citizen: Citizen) -> bool:
++    return (
++        citizen.detained_until_tick is None or world.tick >= citizen.detained_until_tick
++    ) and citizen.care_status in {CareStatus.NONE, CareStatus.RECOVERING} and citizen.activity not in {Activity.SLEEPING, Activity.WORKING, Activity.DRIVING, Activity.RIDING_BUS, Activity.IN_TREATMENT, Activity.HOSPITALIZED}
++
++
++def _available_to_read(world: World, citizen: Citizen) -> bool:
++    return citizen.travel_stage == TravelStage.IDLE and citizen.activity not in {Activity.SLEEPING, Activity.WORKING, Activity.DETAINED, Activity.IN_TREATMENT, Activity.HOSPITALIZED}
++
++
++def _should_reply(world: World, communication: Communication) -> bool:
++    recipient = world.citizens[communication.recipient_id]
++    relation = recipient.relationships.get(communication.sender_id)
++    base = 0.62 if communication.tone in {CommunicationTone.PRACTICAL, CommunicationTone.INVITATION, CommunicationTone.APOLOGY} else 0.48
++    if relation is not None:
++        base += relation.trust / 250.0 + relation.affection / 300.0 - relation.conflict_level * 0.08
++    return world.communication_rng.random() < max(0.08, min(0.88, base))
++
++
++def _validate_channel(sender: Citizen, recipient: Citizen, channel: CommunicationChannel) -> None:
++    if channel in {CommunicationChannel.PHONE_CALL, CommunicationChannel.SMS} and (not sender.phone_number or not recipient.phone_number):
++        raise ValueError("Les deux habitants doivent disposer d’un téléphone.")
++    if channel == CommunicationChannel.EMAIL and (not sender.email_address or not recipient.email_address):
++        raise ValueError("Les deux habitants doivent disposer d’une adresse e-mail.")
++    if channel == CommunicationChannel.LETTER and (sender.home_id <= 0 or recipient.home_id <= 0):
++        raise ValueError("Une adresse postale est nécessaire pour envoyer une lettre.")
++
++
++def _record_for_citizen(citizen: Citizen, communication_id: int) -> None:
++    citizen.communication_ids.append(communication_id)
++    citizen.communication_ids[:] = citizen.communication_ids[-MAX_CITIZEN_HISTORY:]
++
++
++def _prune(world: World) -> None:
++    if len(world.communications) <= MAX_COMMUNICATIONS:
++        return
++    pending = {CommunicationStatus.QUEUED, CommunicationStatus.RINGING, CommunicationStatus.DELIVERED}
++    for communication_id in sorted(world.communications, key=lambda item_id: world.communications[item_id].created_tick):
++        if len(world.communications) <= MAX_COMMUNICATIONS:
++            break
++        if world.communications[communication_id].status in pending:
++            continue
++        del world.communications[communication_id]
++        for citizen in world.citizens.values():
++            if communication_id in citizen.communication_ids:
++                citizen.communication_ids.remove(communication_id)
++            if communication_id in citizen.unread_communication_ids:
++                citizen.unread_communication_ids.remove(communication_id)
++
++
++def _default_subject(tone: CommunicationTone) -> str:
++    return {
++        CommunicationTone.FRIENDLY: "Prendre des nouvelles",
++        CommunicationTone.PRACTICAL: "Organisation",
++        CommunicationTone.APOLOGY: "Mes excuses",
++        CommunicationTone.INVITATION: "Une proposition de sortie",
++        CommunicationTone.CONFLICT: "À propos de notre différend",
++    }[tone]
++
++
++def _default_body(tone: CommunicationTone, sender: Citizen, recipient: Citizen) -> str:
++    return {
++        CommunicationTone.FRIENDLY: f"Bonjour {recipient.first_name}, comment vas-tu ?",
++        CommunicationTone.PRACTICAL: f"Bonjour {recipient.first_name}, pouvons-nous nous organiser aujourd’hui ?",
++        CommunicationTone.APOLOGY: f"Bonjour {recipient.first_name}, je regrette notre dernier différend.",
++        CommunicationTone.INVITATION: f"Bonjour {recipient.first_name}, aimerais-tu que nous nous retrouvions bientôt ?",
++        CommunicationTone.CONFLICT: f"{recipient.first_name}, nous devons reparler de ce qui s’est passé.",
++    }[tone]
++
++
++def _reply_tone(tone: CommunicationTone) -> CommunicationTone:
++    return CommunicationTone.PRACTICAL if tone == CommunicationTone.CONFLICT else CommunicationTone.FRIENDLY
++
++
++def _reply_body(original_tone: CommunicationTone, sender: Citizen) -> str:
++    return "Je préfère que nous en parlions calmement." if original_tone == CommunicationTone.CONFLICT else f"Merci pour ton message. À bientôt, {sender.first_name}."
++
++
++def _channel_label(channel: CommunicationChannel) -> str:
++    return {
++        CommunicationChannel.PHONE_CALL: "téléphone",
++        CommunicationChannel.SMS: "SMS",
++        CommunicationChannel.EMAIL: "e-mail",
++        CommunicationChannel.LETTER: "lettre",
++    }[channel]
+\ No newline at end of file
+diff -ruN city-simulator-v0.10.0/backend/app/simulation/metrics.py city-simulator-v0.10.1/backend/app/simulation/metrics.py
+--- city-simulator-v0.10.0/backend/app/simulation/metrics.py	2026-07-29 14:18:01.071773300 +0200
++++ city-simulator-v0.10.1/backend/app/simulation/metrics.py	2026-07-29 14:53:01.000000000 +0200
+@@ -3,6 +3,7 @@
+ from collections.abc import Iterable
+ from typing import TYPE_CHECKING
+ 
++from .communication import communication_metrics
+ from .economy import economy_metrics
+ from .health import health_metrics
+ from .housing import housing_metrics
+@@ -193,6 +194,7 @@
+         commerce_metrics(world),
+         mobility_metrics(world),
+         social_metrics(world),
++        communication_metrics(world),
+     )
+     return {key: value for section in sections for key, value in section.items()}
+ 
+diff -ruN city-simulator-v0.10.0/backend/app/simulation/models.py city-simulator-v0.10.1/backend/app/simulation/models.py
+--- city-simulator-v0.10.0/backend/app/simulation/models.py	2026-07-29 14:11:22.647709400 +0200
++++ city-simulator-v0.10.1/backend/app/simulation/models.py	2026-07-29 14:47:09.000000000 +0200
+@@ -143,6 +143,30 @@
+     VIOLATED = "violated"
+ 
+ 
++class CommunicationChannel(StrEnum):
++    PHONE_CALL = "phone_call"
++    SMS = "sms"
++    EMAIL = "email"
++    LETTER = "letter"
++
++
++class CommunicationStatus(StrEnum):
++    QUEUED = "queued"
++    RINGING = "ringing"
++    DELIVERED = "delivered"
++    READ = "read"
++    REPLIED = "replied"
++    FAILED = "failed"
++
++
++class CommunicationTone(StrEnum):
++    FRIENDLY = "friendly"
++    PRACTICAL = "practical"
++    APOLOGY = "apology"
++    INVITATION = "invitation"
++    CONFLICT = "conflict"
++
++
+ class SocialEventType(StrEnum):
+     COFFEE = "coffee"
+     PARK_MEETUP = "park_meetup"
+@@ -536,6 +560,10 @@
+     criminal_record_count: int = 0
+     probation_violations: int = 0
+     community_service_minutes: int = 0
++    phone_number: str = ""
++    email_address: str = ""
++    communication_ids: list[int] = field(default_factory=list)
++    unread_communication_ids: list[int] = field(default_factory=list)
+ 
+     @property
+     def full_name(self) -> str:
+@@ -695,6 +723,28 @@
+ 
+ 
+ @dataclass(slots=True)
++class Communication:
++    id: int
++    thread_id: int
++    sender_id: int
++    recipient_id: int
++    channel: CommunicationChannel
++    tone: CommunicationTone
++    subject: str
++    body: str
++    status: CommunicationStatus
++    created_tick: int
++    delivery_tick: int
++    read_tick: int | None = None
++    replied_tick: int | None = None
++    reply_to_id: int | None = None
++    reply_depth: int = 0
++    duration_minutes: int = 0
++    cost: float = 0.0
++    failure_reason: str | None = None
++
++
++@dataclass(slots=True)
+ class DomainEvent:
+     id: int
+     tick: int
+diff -ruN city-simulator-v0.10.0/backend/app/simulation/persistence.py city-simulator-v0.10.1/backend/app/simulation/persistence.py
+--- city-simulator-v0.10.0/backend/app/simulation/persistence.py	2026-07-29 14:15:35.102923600 +0200
++++ city-simulator-v0.10.1/backend/app/simulation/persistence.py	2026-07-29 14:53:01.000000000 +0200
+@@ -2,7 +2,7 @@
+ import json
+ from pathlib import Path
+ from typing import Any
+-SAVE_VERSION = 10
++SAVE_VERSION = 11
+ 
+ def validate_save_version(state: dict[str, Any]) -> None:
+     if int(state.get("version",0)) != SAVE_VERSION: raise ValueError("Version de sauvegarde non prise en charge.")
+diff -ruN city-simulator-v0.10.0/backend/app/simulation/service.py city-simulator-v0.10.1/backend/app/simulation/service.py
+--- city-simulator-v0.10.0/backend/app/simulation/service.py	2026-07-29 14:17:37.804057400 +0200
++++ city-simulator-v0.10.1/backend/app/simulation/service.py	2026-07-29 14:53:01.000000000 +0200
+@@ -6,6 +6,8 @@
+ from pathlib import Path
+ 
+ from .world import World
++from .communication import communication_summary, send_communication
++from .models import CommunicationChannel, CommunicationTone
+ from .persistence import read_snapshot, write_snapshot
+ 
+ 
+@@ -115,6 +117,19 @@
+         async with self._lock:
+             return self.world.get_social_graph()
+ 
++    async def communication_overview(self) -> dict:
++        async with self._lock:
++            return self.world.get_communication_overview()
++
++    async def citizen_communications(self, citizen_id: int) -> dict:
++        async with self._lock:
++            return self.world.get_citizen_communications(citizen_id)
++
++    async def send_communication(self, *, sender_id: int, recipient_id: int, channel: CommunicationChannel, tone: CommunicationTone, subject: str, body: str) -> dict:
++        async with self._lock:
++            item = send_communication(self.world, sender_id=sender_id, recipient_id=recipient_id, channel=channel, tone=tone, subject=subject, body=body)
++            return communication_summary(self.world, item)
++
+     async def investigation_detail(self, investigation_id: int) -> dict:
+         async with self._lock:
+             return self.world.get_investigation_detail(investigation_id)
+diff -ruN city-simulator-v0.10.0/backend/app/simulation/snapshot.py city-simulator-v0.10.1/backend/app/simulation/snapshot.py
+--- city-simulator-v0.10.0/backend/app/simulation/snapshot.py	2026-07-29 14:18:01.071773300 +0200
++++ city-simulator-v0.10.1/backend/app/simulation/snapshot.py	2026-07-29 14:53:01.000000000 +0200
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ from typing import TYPE_CHECKING, Any
++from .communication import communication_overview
+ from .economy import economy_overview
+ from .health import health_overview
+ from .housing import housing_overview
+@@ -22,7 +23,7 @@
+         "roads":{"congestion":world._congestion_cells()},
+         "transport":{"operating":world.bus_operating},
+         "social":{"events":[world._social_event_to_dict(event) for event in active_social_events],"households":[world._household_summary(household) for household in world.households.values()]},
+-        "economy":economy_overview(world),"health":health_overview(world),"housing":housing_overview(world),"justice":justice_overview(world),
++        "economy":economy_overview(world),"health":health_overview(world),"housing":housing_overview(world),"justice":justice_overview(world),"communications":communication_overview(world),
+         "incidents":[world._incident_summary(incident) for incident in active_incidents],
+         "events":[world._event_to_dict(event) for event in world.events[-80:]],
+     }
+diff -ruN city-simulator-v0.10.0/backend/app/simulation/world.py city-simulator-v0.10.1/backend/app/simulation/world.py
+--- city-simulator-v0.10.0/backend/app/simulation/world.py	2026-07-29 14:30:59.688397000 +0200
++++ city-simulator-v0.10.1/backend/app/simulation/world.py	2026-07-29 14:59:44.000000000 +0200
+@@ -1,9 +1,17 @@
+ from __future__ import annotations
+ 
++import heapq
+ import random
+ from collections import Counter
+ from typing import Any
+ 
++from .communication import (
++    citizen_communications,
++    communication_overview,
++    initialize_communications,
++    reset_communication_day,
++    update_communications,
++)
+ from .economy import (
+     assigned_staff_count,
+     close_economic_day,
+@@ -42,6 +50,10 @@
+     BusLine,
+     BusStop,
+     Citizen,
++    Communication,
++    CommunicationChannel,
++    CommunicationStatus,
++    CommunicationTone,
+     Complaint,
+     ComplaintStatus,
+     ConflictRecord,
+@@ -193,6 +205,7 @@
+         initialize_housing(self)
+         initialize_economy(self)
+         initialize_justice(self)
++        initialize_communications(self)
+         self._emit("simulation_started", "La ville commence une nouvelle journée.")
+ 
+     @property
+@@ -231,6 +244,7 @@
+         self._resolve_activities()
+         update_work_and_consumption(self)
+         update_health(self)
++        update_communications(self)
+         self._resolve_social_life()
+         resolve_household_life(self)
+         self._resolve_incidents()
+@@ -264,6 +278,7 @@
+         self.police_warnings_today = 0
+         self.police_detentions_today = 0
+         reset_justice_day(self)
++        reset_communication_day(self)
+         self.medical_cases_today = 0
+         self.ambulance_dispatches_today = 0
+         self.medical_wait_minutes_today = 0
+@@ -1813,6 +1828,7 @@
+                 }
+                 if household else None
+             ),
++            "communications": citizen_communications(self, citizen.id),
+             "social": {
+                 "interactionsToday": citizen.social_interactions_today,
+                 "invitationsSent": citizen.invitations_sent,
+@@ -1857,6 +1873,10 @@
+                 "criminalRecordCount": citizen.criminal_record_count,
+                 "probationViolations": citizen.probation_violations,
+                 "communityServiceMinutes": citizen.community_service_minutes,
++            "phoneNumber": citizen.phone_number,
++            "emailAddress": citizen.email_address,
++            "communicationIds": list(citizen.communication_ids),
++            "unreadCommunicationIds": list(citizen.unread_communication_ids),
+             },
+             "transport": {
+                 "mode": citizen.transport_mode.value,
+@@ -2038,6 +2058,12 @@
+     def get_case_detail(self, case_id: int) -> dict[str, Any]:
+         return {"kind": "case", **self._case_summary(self.judicial_cases[case_id])}
+ 
++    def get_communication_overview(self) -> dict[str, Any]:
++        return communication_overview(self)
++
++    def get_citizen_communications(self, citizen_id: int) -> dict[str, Any]:
++        return citizen_communications(self, citizen_id)
++
+     def get_justice_overview(self) -> dict[str, Any]:
+         return justice_overview(self)
+ 
+@@ -2104,6 +2130,7 @@
+             "nextCaseId": self._next_case_id,
+             "nextComplaintId": self._next_complaint_id,
+             "nextSentenceId": self._next_sentence_id,
++            "nextCommunicationId": self._next_communication_id,
+             "nextSocialEventId": self._next_social_event_id,
+             "nextJobApplicationId": self._next_job_application_id,
+             "nextHealthCaseId": self._next_health_case_id,
+@@ -2113,6 +2140,7 @@
+             "lastIncidentHour": self._last_incident_hour,
+             "lastTrafficEventHour": self._last_traffic_event_hour,
+             "lastJusticeHour": getattr(self, "_last_justice_hour", -1),
++            "lastCommunicationSlot": self._last_communication_slot,
+             "lastLaborMarketDay": self._last_labor_market_day,
+             "lastHousingDay": self._last_housing_day,
+             "movesToday": self.moves_today,
+@@ -2130,6 +2158,10 @@
+             "casesDismissedToday": self.cases_dismissed_today,
+             "sentencesStartedToday": self.sentences_started_today,
+             "probationViolationsToday": self.probation_violations_today,
++            "communicationsSentToday": self.communications_sent_today,
++            "communicationsDeliveredToday": self.communications_delivered_today,
++            "phoneCallsToday": self.phone_calls_today,
++            "communicationRepliesToday": self.communication_replies_today,
+             "shopSalesToday": self.shop_sales_today,
+             "shoppingTripsToday": self.shopping_trips_today,
+             "policeWarningsToday": self.police_warnings_today,
+@@ -2144,6 +2176,7 @@
+             "medicalWaitMinutesToday": self.medical_wait_minutes_today,
+             "rngState": self.rng.getstate(),
+             "healthRngState": self.health_rng.getstate(),
++            "communicationRngState": self.communication_rng.getstate(),
+             "buildings": [self._export_building(building) for building in self.buildings.values()],
+             "citizens": [self._export_citizen(citizen) for citizen in self.citizens.values()],
+             "households": [self._export_household(household) for household in self.households.values()],
+@@ -2156,6 +2189,8 @@
+             "judicialCases": [self._export_case(item) for item in self.judicial_cases.values()],
+             "complaints": [self._export_complaint(item) for item in self.complaints.values()],
+             "sentences": [self._export_sentence(item) for item in self.sentences.values()],
++            "communications": [self._export_communication(item) for item in self.communications.values()],
++            "communicationQueue": [list(item) for item in self.communication_queue],
+             "jobApplications": [self._export_job_application(item) for item in self.job_applications.values()],
+             "events": [self._export_event(event) for event in self.events],
+         }
+@@ -2171,6 +2206,8 @@
+         world.rng.setstate(cls._nested_tuple(state["rngState"]))
+         world.health_rng = random.Random()
+         world.health_rng.setstate(cls._nested_tuple(state["healthRngState"]))
++        world.communication_rng = random.Random()
++        world.communication_rng.setstate(cls._nested_tuple(state["communicationRngState"]))
+         world.tick = int(state["tick"])
+         world.day = int(state["day"])
+         world.hour = int(state["hour"])
+@@ -2182,6 +2219,7 @@
+         world._next_case_id = int(state.get("nextCaseId", 1))
+         world._next_complaint_id = int(state.get("nextComplaintId", 1))
+         world._next_sentence_id = int(state.get("nextSentenceId", 1))
++        world._next_communication_id = int(state.get("nextCommunicationId", 1))
+         world._next_social_event_id = int(state.get("nextSocialEventId", 1))
+         world._next_job_application_id = int(state.get("nextJobApplicationId", 1))
+         world._next_health_case_id = int(state.get("nextHealthCaseId", 1))
+@@ -2191,6 +2229,7 @@
+         world._last_incident_hour = int(state.get("lastIncidentHour", -1))
+         world._last_traffic_event_hour = int(state.get("lastTrafficEventHour", -1))
+         world._last_justice_hour = int(state.get("lastJusticeHour", -1))
++        world._last_communication_slot = int(state.get("lastCommunicationSlot", -1))
+         world._last_labor_market_day = int(state.get("lastLaborMarketDay", 0))
+         world._last_housing_day = int(state.get("lastHousingDay", 0))
+         world.moves_today = int(state.get("movesToday", 0))
+@@ -2210,6 +2249,10 @@
+         world.cases_dismissed_today = int(state.get("casesDismissedToday", 0))
+         world.sentences_started_today = int(state.get("sentencesStartedToday", 0))
+         world.probation_violations_today = int(state.get("probationViolationsToday", 0))
++        world.communications_sent_today = int(state.get("communicationsSentToday", 0))
++        world.communications_delivered_today = int(state.get("communicationsDeliveredToday", 0))
++        world.phone_calls_today = int(state.get("phoneCallsToday", 0))
++        world.communication_replies_today = int(state.get("communicationRepliesToday", 0))
+         world.shop_sales_today = float(state.get("shopSalesToday", 0.0))
+         world.shopping_trips_today = int(state.get("shoppingTripsToday", 0))
+         world.police_warnings_today = int(state.get("policeWarningsToday", 0))
+@@ -2453,6 +2496,10 @@
+                 criminal_record_count=int(row.get("criminalRecordCount", 0)),
+                 probation_violations=int(row.get("probationViolations", 0)),
+                 community_service_minutes=int(row.get("communityServiceMinutes", 0)),
++                phone_number=str(row.get("phoneNumber", "")),
++                email_address=str(row.get("emailAddress", "")),
++                communication_ids=[int(value) for value in row.get("communicationIds", [])],
++                unread_communication_ids=[int(value) for value in row.get("unreadCommunicationIds", [])],
+             )
+             citizen.relationships = {
+                 int(relationship_row["otherId"]): Relationship(
+@@ -2837,6 +2884,27 @@
+         }
+         world._next_complaint_id = max(world._next_complaint_id, max(world.complaints, default=0) + 1)
+         world._next_sentence_id = max(world._next_sentence_id, max(world.sentences, default=0) + 1)
++        world.communications = {
++            int(row["id"]): Communication(
++                id=int(row["id"]), thread_id=int(row["threadId"]),
++                sender_id=int(row["senderId"]), recipient_id=int(row["recipientId"]),
++                channel=CommunicationChannel(row["channel"]), tone=CommunicationTone(row["tone"]),
++                subject=str(row["subject"]), body=str(row["body"]),
++                status=CommunicationStatus(row["status"]), created_tick=int(row["createdTick"]),
++                delivery_tick=int(row["deliveryTick"]),
++                read_tick=int(row["readTick"]) if row.get("readTick") is not None else None,
++                replied_tick=int(row["repliedTick"]) if row.get("repliedTick") is not None else None,
++                reply_to_id=int(row["replyToId"]) if row.get("replyToId") is not None else None,
++                reply_depth=int(row.get("replyDepth", 0)), duration_minutes=int(row.get("durationMinutes", 0)),
++                cost=float(row.get("cost", 0.0)), failure_reason=row.get("failureReason"),
++            ) for row in state.get("communications", [])
++        }
++        world.communication_queue = [
++            (int(row[0]), int(row[1])) for row in state.get("communicationQueue", [])
++            if len(row) == 2 and int(row[1]) in world.communications
++        ]
++        heapq.heapify(world.communication_queue)
++        world._next_communication_id = max(world._next_communication_id, max(world.communications, default=0) + 1)
+ 
+         world.job_applications = {
+             int(row["id"]): JobApplication(
+@@ -3302,6 +3370,10 @@
+             "criminalRecordCount": citizen.criminal_record_count,
+             "probationViolations": citizen.probation_violations,
+             "communityServiceMinutes": citizen.community_service_minutes,
++            "phoneNumber": citizen.phone_number,
++            "emailAddress": citizen.email_address,
++            "communicationIds": list(citizen.communication_ids),
++            "unreadCommunicationIds": list(citizen.unread_communication_ids),
+         }
+ 
+     @staticmethod
+@@ -3512,6 +3584,19 @@
+         }
+ 
+     @staticmethod
++    def _export_communication(item: Communication) -> dict[str, Any]:
++        return {
++            "id": item.id, "threadId": item.thread_id, "senderId": item.sender_id,
++            "recipientId": item.recipient_id, "channel": item.channel.value, "tone": item.tone.value,
++            "subject": item.subject, "body": item.body, "status": item.status.value,
++            "createdTick": item.created_tick, "deliveryTick": item.delivery_tick,
++            "readTick": item.read_tick, "repliedTick": item.replied_tick,
++            "replyToId": item.reply_to_id, "replyDepth": item.reply_depth,
++            "durationMinutes": item.duration_minutes, "cost": item.cost,
++            "failureReason": item.failure_reason,
++        }
++
++    @staticmethod
+     def _export_job_application(item: JobApplication) -> dict[str, Any]:
+         return {
+             "id": item.id,
+diff -ruN city-simulator-v0.10.0/backend/pyproject.toml city-simulator-v0.10.1/backend/pyproject.toml
+--- city-simulator-v0.10.0/backend/pyproject.toml	2026-07-29 14:28:48.536697100 +0200
++++ city-simulator-v0.10.1/backend/pyproject.toml	2026-07-29 14:58:09.000000000 +0200
+@@ -4,7 +4,7 @@
+ 
+ [project]
+ name = "city-simulator-mvp"
+-version = "0.10.0"
++version = "0.10.1"
+ description = "Serveur de simulation urbaine observable en temps réel"
+ requires-python = ">=3.11"
+ dependencies = [
+diff -ruN city-simulator-v0.10.0/backend/tests/test_communication.py city-simulator-v0.10.1/backend/tests/test_communication.py
+--- city-simulator-v0.10.0/backend/tests/test_communication.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.1/backend/tests/test_communication.py	2026-07-29 15:04:39.000000000 +0200
+@@ -0,0 +1,99 @@
++from fastapi.testclient import TestClient
++
++from app.main import app, service
++from app.simulation.communication import MAX_REPLY_DEPTH, send_communication
++from app.simulation.models import Activity, CommunicationChannel, CommunicationStatus, CommunicationTone, JudicialSentence, SentenceStatus, SentenceType, TravelStage
++from app.simulation.world import World
++
++
++def _available(world: World, citizen_id: int) -> None:
++    citizen = world.citizens[citizen_id]
++    citizen.activity = Activity.AT_HOME
++    citizen.travel_stage = TravelStage.IDLE
++    citizen.detained_until_tick = None
++
++
++def test_phone_call_completes_immediately_and_changes_relationship() -> None:
++    world = World(seed=7101, citizen_count=20)
++    _available(world, 2)
++    before = world.citizens[2].relationships[1].affection
++    call = send_communication(world, sender_id=1, recipient_id=2, channel=CommunicationChannel.PHONE_CALL, tone=CommunicationTone.FRIENDLY, subject="Nouvelles", body="Comment vas-tu ?")
++    world.run_minutes(1)
++    assert call.status == CommunicationStatus.READ
++    assert call.duration_minutes >= 3
++    assert world.citizens[2].relationships[1].affection > before
++
++
++def test_async_channels_are_delivered_and_read_with_bounded_replies() -> None:
++    world = World(seed=7102, citizen_count=20)
++    for citizen_id in (1, 2):
++        _available(world, citizen_id)
++    sent = [
++        send_communication(world, sender_id=1, recipient_id=2, channel=channel, tone=CommunicationTone.PRACTICAL, subject="Organisation", body="Peux-tu confirmer ?")
++        for channel in (CommunicationChannel.SMS, CommunicationChannel.EMAIL, CommunicationChannel.LETTER)
++    ]
++    world.run_minutes(4 * 24 * 60)
++    assert all(item.status in {CommunicationStatus.READ, CommunicationStatus.REPLIED} for item in sent)
++    assert all(item.reply_depth <= MAX_REPLY_DEPTH for item in world.communications.values())
++    assert not [item for item in world.communications.values() if item.status == CommunicationStatus.DELIVERED and item.delivery_tick < world.tick - 24 * 60]
++
++
++def test_communication_save_resume_preserves_queue_and_determinism() -> None:
++    world = World(seed=7103, citizen_count=20)
++    send_communication(world, sender_id=1, recipient_id=2, channel=CommunicationChannel.LETTER, tone=CommunicationTone.INVITATION, subject="Invitation", body="Retrouvons-nous.")
++    world.run_minutes(120)
++    state = world.export_state()
++    restored = World.from_state(state)
++    assert restored.export_state() == state
++    world.run_minutes(3 * 24 * 60)
++    restored.run_minutes(3 * 24 * 60)
++    assert restored.snapshot() == world.snapshot()
++
++
++def test_communication_api_exposes_send_history_and_websocket_domain(tmp_path) -> None:
++    service.save_path = tmp_path / "city.json"
++    with TestClient(app) as client:
++        client.post("/api/simulation/pause")
++        client.post("/api/city/reset", json={"seed": 7104})
++        response = client.post("/api/communications", json={"senderId": 1, "recipientId": 2, "channel": "sms", "tone": "friendly", "subject": "Bonjour", "body": "Un petit message."})
++        assert response.status_code == 201
++        assert response.json()["channel"] == "sms"
++        assert client.get("/api/communications").json()["metrics"]["sentToday"] == 1
++        history = client.get("/api/citizens/2/communications").json()
++        assert history["messages"][0]["recipient"]["id"] == 2
++        with client.websocket_connect("/ws/city") as websocket:
++            payload = websocket.receive_json()
++            assert "communications" in payload
++            assert payload["stats"]["sentToday"] == 1
++
++
++def test_communication_api_rejects_self_contact_and_unknown_citizen(tmp_path) -> None:
++    service.save_path = tmp_path / "city.json"
++    with TestClient(app) as client:
++        client.post("/api/simulation/pause")
++        client.post("/api/city/reset", json={"seed": 7105})
++        payload = {"senderId": 1, "recipientId": 1, "channel": "email", "tone": "friendly"}
++        assert client.post("/api/communications", json=payload).status_code == 422
++        payload["recipientId"] = 9999
++        assert client.post("/api/communications", json=payload).status_code == 404
++
++
++def test_contact_order_blocks_all_communication_channels() -> None:
++    world = World(seed=7106, citizen_count=20)
++    world.sentences[1] = JudicialSentence(id=1, case_id=1, citizen_id=1, sentence_type=SentenceType.RESTRAINING_ORDER, label="Interdiction de contact", status=SentenceStatus.ACTIVE, start_tick=0, end_tick=world.tick + 1440, beneficiary_id=2)
++    for channel in CommunicationChannel:
++        try:
++            send_communication(world, sender_id=1, recipient_id=2, channel=channel, tone=CommunicationTone.FRIENDLY, subject="Test", body="Test")
++        except ValueError as error:
++            assert "interdiction de contact" in str(error).lower()
++        else:
++            raise AssertionError(f"Le canal {channel} aurait dû être bloqué")
++
++
++def test_thirty_days_leave_no_overdue_communication_and_keep_history_bounded() -> None:
++    world = World(seed=7107, citizen_count=20)
++    world.run_minutes(30 * 24 * 60)
++    assert len(world.communications) <= 2_000
++    queued_ids = {communication_id for due_tick, communication_id in world.communication_queue if due_tick >= world.tick}
++    assert all(item.id in queued_ids for item in world.communications.values() if item.status in {CommunicationStatus.QUEUED, CommunicationStatus.RINGING, CommunicationStatus.DELIVERED})
++    assert all(len(citizen.communication_ids) <= 120 for citizen in world.citizens.values())
+diff -ruN city-simulator-v0.10.0/backend/tests/test_health.py city-simulator-v0.10.1/backend/tests/test_health.py
+--- city-simulator-v0.10.0/backend/tests/test_health.py	2026-07-29 14:20:22.682043000 +0200
++++ city-simulator-v0.10.1/backend/tests/test_health.py	2026-07-29 14:55:04.000000000 +0200
+@@ -116,7 +116,7 @@
+     case = apply_injury(world, world.citizens[30], 72, source="agression")
+     restored = World.from_state(world.export_state())
+ 
+-    assert restored.export_state()["version"] == 10
++    assert restored.export_state()["version"] == 11
+     assert restored.health_cases[case.id].severity == case.severity
+     assert restored.citizens[30].care_status == CareStatus.WAITING_AMBULANCE
+     assert restored.citizens[30].health_history[0].source == "agression"
+diff -ruN city-simulator-v0.10.0/backend/tests/test_housing.py city-simulator-v0.10.1/backend/tests/test_housing.py
+--- city-simulator-v0.10.0/backend/tests/test_housing.py	2026-07-29 14:20:22.685709700 +0200
++++ city-simulator-v0.10.1/backend/tests/test_housing.py	2026-07-29 14:55:04.000000000 +0200
+@@ -70,7 +70,7 @@
+     restored_household = restored.households[household.id]
+     assert restored_household.home_id == destination.id
+     assert restored_household.housing_history[-1].reason == "test justifié"
+-    assert restored.export_state()["version"] == 10
++    assert restored.export_state()["version"] == 11
+ 
+ 
+ def test_housing_metrics_and_thirty_day_run_remain_coherent():
+diff -ruN city-simulator-v0.10.0/backend/tests/test_justice.py city-simulator-v0.10.1/backend/tests/test_justice.py
+--- city-simulator-v0.10.0/backend/tests/test_justice.py	2026-07-29 14:37:17.851418700 +0200
++++ city-simulator-v0.10.1/backend/tests/test_justice.py	2026-07-29 14:55:04.000000000 +0200
+@@ -192,7 +192,7 @@
+     _hold_hearing(world, case)
+ 
+     restored = World.from_state(world.export_state())
+-    assert restored.export_state()["version"] == 10
++    assert restored.export_state()["version"] == 11
+     assert restored.complaints.keys() == world.complaints.keys()
+     assert restored.sentences.keys() == world.sentences.keys()
+     assert restored.export_state() == world.export_state()
+diff -ruN city-simulator-v0.10.0/frontend/package-lock.json city-simulator-v0.10.1/frontend/package-lock.json
+--- city-simulator-v0.10.0/frontend/package-lock.json	2026-07-29 14:28:48.536697100 +0200
++++ city-simulator-v0.10.1/frontend/package-lock.json	2026-07-29 14:58:09.000000000 +0200
+@@ -1,12 +1,12 @@
+ {
+   "name": "city-simulator-frontend",
+-  "version": "0.10.0",
++  "version": "0.10.1",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "city-simulator-frontend",
+-      "version": "0.10.0",
++      "version": "0.10.1",
+       "dependencies": {
+         "pixi.js": "^7.4.2",
+         "react": "^18.3.1",
+diff -ruN city-simulator-v0.10.0/frontend/package.json city-simulator-v0.10.1/frontend/package.json
+--- city-simulator-v0.10.0/frontend/package.json	2026-07-29 14:28:48.536697100 +0200
++++ city-simulator-v0.10.1/frontend/package.json	2026-07-29 14:58:09.000000000 +0200
+@@ -1,7 +1,7 @@
+ {
+   "name": "city-simulator-frontend",
+   "private": true,
+-  "version": "0.10.0",
++  "version": "0.10.1",
+   "type": "module",
+   "scripts": {
+     "dev": "vite",
+diff -ruN city-simulator-v0.10.0/frontend/src/App.tsx city-simulator-v0.10.1/frontend/src/App.tsx
+--- city-simulator-v0.10.0/frontend/src/App.tsx	2026-07-29 14:26:34.583808400 +0200
++++ city-simulator-v0.10.1/frontend/src/App.tsx	2026-07-29 14:58:09.000000000 +0200
+@@ -14,6 +14,7 @@
+ } from "./api";
+ import { CaseModal } from "./components/CaseModal";
+ import { CitizenModal } from "./components/CitizenModal";
++import { CommunicationModal } from "./components/CommunicationModal";
+ import { EntityModal } from "./components/EntityModal";
+ import { HouseholdModal } from "./components/HouseholdModal";
+ import { JusticeModal } from "./components/JusticeModal";
+@@ -36,6 +37,7 @@
+   const [citizenModalId, setCitizenModalId] = useState<number | null>(null);
+   const [householdModalId, setHouseholdModalId] = useState<number | null>(null);
+   const [justiceModalOpen, setJusticeModalOpen] = useState(false);
++  const [communicationModalOpen, setCommunicationModalOpen] = useState(false);
+   const [caseModalId, setCaseModalId] = useState<number | null>(null);
+   const pausedRef = useRef(false);
+   const selectedEntityRef = useRef<SelectedEntity | null>(null);
+@@ -170,7 +172,7 @@
+     <main className="app-shell">
+       <header className="topbar">
+         <div>
+-          <div className="eyebrow">Monitoring urbain · v0.10</div>
++          <div className="eyebrow">Monitoring urbain · v0.10.1</div>
+           <h1>City Simulator</h1>
+         </div>
+         <div className="time-block">
+@@ -198,7 +200,7 @@
+       <MetricsPanel stats={snapshot?.stats ?? null} />
+ 
+       <section className="workspace">
+-        <ControlPanel snapshot={snapshot} layers={layers} onToggleLayer={toggleLayer} onOpenBuilding={selectBuilding} onOpenHousehold={setHouseholdModalId} onOpenSocialGraph={() => setSocialGraphOpen(true)} onOpenJustice={() => setJusticeModalOpen(true)} onOpenCitizen={selectCitizen} />
++        <ControlPanel snapshot={snapshot} layers={layers} onToggleLayer={toggleLayer} onOpenBuilding={selectBuilding} onOpenHousehold={setHouseholdModalId} onOpenSocialGraph={() => setSocialGraphOpen(true)} onOpenJustice={() => setJusticeModalOpen(true)} onOpenCommunications={() => setCommunicationModalOpen(true)} onOpenCitizen={selectCitizen} />
+ 
+         <CityMap
+           snapshot={snapshot}
+@@ -260,6 +262,7 @@
+         onSelectIncident={selectIncident}
+         onSelectHousehold={setHouseholdModalId}
+       />
++      <CommunicationModal open={communicationModalOpen} data={snapshot?.communications ?? null} onClose={() => setCommunicationModalOpen(false)} onSelectCitizen={(id) => { setCommunicationModalOpen(false); selectCitizen(id); }} />
+       <JusticeModal
+         open={justiceModalOpen}
+         data={snapshot?.justice ?? null}
+diff -ruN city-simulator-v0.10.0/frontend/src/api.ts city-simulator-v0.10.1/frontend/src/api.ts
+--- city-simulator-v0.10.0/frontend/src/api.ts	2026-07-29 14:24:34.925829000 +0200
++++ city-simulator-v0.10.1/frontend/src/api.ts	2026-07-29 14:56:39.000000000 +0200
+@@ -1,5 +1,9 @@
+ import type {
+   BuildingDetail,
++  CommunicationChannel,
++  CommunicationOverview,
++  CommunicationSummary,
++  CommunicationTone,
+   CitizenDetail,
+   EconomyOverview,
+   IncidentDetail,
+@@ -92,3 +96,11 @@
+ export function loadCity(): Promise<unknown> {
+   return request("/api/city/load", { method: "POST" });
+ }
++
++export function getCommunications(): Promise<CommunicationOverview> {
++  return request<CommunicationOverview>("/api/communications");
++}
++
++export function sendCommunication(payload: { senderId: number; recipientId: number; channel: CommunicationChannel; tone: CommunicationTone; subject: string; body: string }): Promise<CommunicationSummary> {
++  return request<CommunicationSummary>("/api/communications", { method: "POST", body: JSON.stringify(payload) });
++}
+diff -ruN city-simulator-v0.10.0/frontend/src/components/CitizenModal.tsx city-simulator-v0.10.1/frontend/src/components/CitizenModal.tsx
+--- city-simulator-v0.10.0/frontend/src/components/CitizenModal.tsx	2026-07-29 14:26:11.418687800 +0200
++++ city-simulator-v0.10.1/frontend/src/components/CitizenModal.tsx	2026-07-29 14:56:39.000000000 +0200
+@@ -1,9 +1,10 @@
+ import { useEffect, useMemo, useState } from "react";
+ import type { MouseEvent } from "react";
+ import { getCitizen } from "../api";
++import { CommunicationPanel } from "./CommunicationPanel";
+ import type { CitizenDetail, ConflictHistoryEntry, JudicialCaseSummary } from "../types/city";
+ 
+-type CitizenTab = "overview" | "health" | "work" | "social" | "conflicts" | "justice";
++type CitizenTab = "overview" | "health" | "work" | "social" | "communications" | "conflicts" | "justice";
+ 
+ interface CitizenModalProps {
+   citizenId: number | null;
+@@ -212,6 +213,7 @@
+             ["health", "Santé"],
+             ["work", "Travail et finances"],
+             ["social", "Réseau social"],
++            ["communications", `Communications${citizen?.communications.unreadCount ? ` (${citizen.communications.unreadCount})` : ""}`],
+             ["conflicts", `Conflits${citizen ? ` (${citizen.conflictHistory.length})` : ""}`],
+             ["justice", "Police & justice"],
+           ] as Array<[CitizenTab, string]>).map(([value, label]) => (
+@@ -409,6 +411,8 @@
+                 </div>
+               </section>
+             </div>
++          ) : tab === "communications" ? (
++            <CommunicationPanel citizen={citizen} onSelectCitizen={onSelectCitizen} />
+           ) : tab === "conflicts" ? (
+             <div className="conflict-tab-layout">
+               <section className="profile-section conflict-summary">
+diff -ruN city-simulator-v0.10.0/frontend/src/components/CommunicationModal.tsx city-simulator-v0.10.1/frontend/src/components/CommunicationModal.tsx
+--- city-simulator-v0.10.0/frontend/src/components/CommunicationModal.tsx	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.1/frontend/src/components/CommunicationModal.tsx	2026-07-29 14:56:39.000000000 +0200
+@@ -0,0 +1,7 @@
++import type { CommunicationOverview } from "../types/city";
++import { channelLabel, statusLabel } from "./CommunicationPanel";
++import "./Communications.css";
++export function CommunicationModal({ open, data, onClose, onSelectCitizen }: { open: boolean; data: CommunicationOverview | null; onClose: () => void; onSelectCitizen: (id: number) => void }) {
++ if (!open) return null;
++ return <div className="citizen-modal-overlay" role="dialog" aria-modal="true" aria-label="Monitoring des communications" onMouseDown={onClose}><section className="citizen-modal communication-monitor" onMouseDown={(event) => event.stopPropagation()}><header className="citizen-modal-header"><div><div className="eyebrow">Téléphone · SMS · e-mail · courrier</div><h2>Communications</h2></div><button onClick={onClose}>Fermer</button></header><div className="communication-kpis"><span><b>{data?.metrics.sentToday ?? 0}</b> envoyées</span><span><b>{data?.metrics.unreadCommunications ?? 0}</b> non lues</span><span><b>{data?.metrics.phoneCallsToday ?? 0}</b> appels</span><span><b>{data?.metrics.communicationRepliesToday ?? 0}</b> réponses</span></div><div className="communication-monitor-list">{data?.recent.length ? data.recent.map((message) => <article className={`communication-row communication-${message.status}`} key={message.id}><header><span><button onClick={() => onSelectCitizen(message.sender.id)}>{message.sender.name}</button> → <button onClick={() => onSelectCitizen(message.recipient.id)}>{message.recipient.name}</button></span><b>{channelLabel(message.channel)} · {statusLabel(message.status)}</b></header><strong>{message.subject}</strong><p>{message.body}</p></article>) : <p className="muted">Aucune communication récente.</p>}</div></section></div>;
++}
+diff -ruN city-simulator-v0.10.0/frontend/src/components/CommunicationPanel.test.ts city-simulator-v0.10.1/frontend/src/components/CommunicationPanel.test.ts
+--- city-simulator-v0.10.0/frontend/src/components/CommunicationPanel.test.ts	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.1/frontend/src/components/CommunicationPanel.test.ts	2026-07-29 14:58:09.000000000 +0200
+@@ -0,0 +1,6 @@
++import { describe, expect, it } from "vitest";
++import { channelLabel, statusLabel } from "./CommunicationPanel";
++describe("communication labels", () => {
++  it("labels every supported channel", () => { expect(["phone_call", "sms", "email", "letter"].map((value) => channelLabel(value as never))).toEqual(["Téléphone", "SMS", "E-mail", "Lettre"]); });
++  it("labels delivery states", () => { expect(statusLabel("failed")).toBe("Échec"); expect(statusLabel("replied")).toBe("Répondu"); });
++});
+diff -ruN city-simulator-v0.10.0/frontend/src/components/CommunicationPanel.tsx city-simulator-v0.10.1/frontend/src/components/CommunicationPanel.tsx
+--- city-simulator-v0.10.0/frontend/src/components/CommunicationPanel.tsx	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.1/frontend/src/components/CommunicationPanel.tsx	2026-07-29 14:56:39.000000000 +0200
+@@ -0,0 +1,43 @@
++import { useEffect, useState } from "react";
++import { sendCommunication } from "../api";
++import type { CitizenDetail, CommunicationChannel, CommunicationTone } from "../types/city";
++import "./Communications.css";
++
++const CHANNELS: Array<[CommunicationChannel, string]> = [["phone_call", "Téléphone"], ["sms", "SMS"], ["email", "E-mail"], ["letter", "Lettre"]];
++const TONES: Array<[CommunicationTone, string]> = [["friendly", "Amical"], ["practical", "Pratique"], ["apology", "Excuses"], ["invitation", "Invitation"], ["conflict", "Conflictuel"]];
++export const channelLabel = (channel: CommunicationChannel) => CHANNELS.find(([value]) => value === channel)?.[1] ?? channel;
++export const statusLabel = (status: string) => ({ queued: "En transit", ringing: "Appel en cours", delivered: "Livré", read: "Lu", replied: "Répondu", failed: "Échec" }[status] ?? status);
++
++export function CommunicationPanel({ citizen, onSelectCitizen }: { citizen: CitizenDetail; onSelectCitizen: (id: number) => void }) {
++  const contacts = citizen.relationships.filter((row) => row.citizenId !== citizen.id);
++  const [recipientId, setRecipientId] = useState(contacts[0]?.citizenId ?? 0);
++  const [channel, setChannel] = useState<CommunicationChannel>("sms");
++  const [tone, setTone] = useState<CommunicationTone>("friendly");
++  const [subject, setSubject] = useState("");
++  const [body, setBody] = useState("");
++  const [feedback, setFeedback] = useState("");
++  const [sending, setSending] = useState(false);
++  useEffect(() => { if (!contacts.some((row) => row.citizenId === recipientId)) setRecipientId(contacts[0]?.citizenId ?? 0); }, [citizen.id, contacts.length]);
++  async function submit(event: React.FormEvent) {
++    event.preventDefault(); setSending(true); setFeedback("");
++    try { await sendCommunication({ senderId: citizen.id, recipientId, channel, tone, subject, body }); setBody(""); setSubject(""); setFeedback("Communication enregistrée dans la simulation."); }
++    catch (error) { setFeedback(error instanceof Error ? error.message : "Envoi impossible."); }
++    finally { setSending(false); }
++  }
++  return <div className="communication-layout">
++    <section className="profile-section communication-compose"><h3>Nouveau contact</h3>
++      <dl className="profile-facts"><div><dt>Téléphone</dt><dd>{citizen.communications.phoneNumber}</dd></div><div><dt>E-mail</dt><dd>{citizen.communications.emailAddress}</dd></div><div><dt>Non lus</dt><dd>{citizen.communications.unreadCount}</dd></div></dl>
++      <form onSubmit={submit}>
++        <label>Destinataire<select value={recipientId} onChange={(event) => setRecipientId(Number(event.target.value))}>{contacts.map((row) => <option key={row.citizenId} value={row.citizenId}>{row.name}</option>)}</select></label>
++        <div className="communication-form-row"><label>Canal<select value={channel} onChange={(event) => setChannel(event.target.value as CommunicationChannel)}>{CHANNELS.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Ton<select value={tone} onChange={(event) => setTone(event.target.value as CommunicationTone)}>{TONES.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
++        <label>Objet<input maxLength={120} value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Objet facultatif" /></label>
++        <label>Contenu<textarea maxLength={800} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Le moteur complétera un contenu vide selon le ton." /></label>
++        <button disabled={sending || recipientId === 0}>{sending ? "Envoi…" : `Envoyer par ${channelLabel(channel)}`}</button>{feedback && <p className="communication-feedback">{feedback}</p>}
++      </form>
++    </section>
++    <section className="profile-section communication-history"><h3>Historique</h3>{citizen.communications.messages.length === 0 ? <p className="muted">Aucune communication enregistrée.</p> : citizen.communications.messages.map((message) => {
++      const incoming = message.recipient.id === citizen.id; const other = incoming ? message.sender : message.recipient;
++      return <article className={`communication-row communication-${message.status}`} key={message.id}><header><span>{incoming ? "Reçu de" : "Envoyé à"} <button onClick={() => onSelectCitizen(other.id)}>{other.name}</button></span><b>{channelLabel(message.channel)} · {statusLabel(message.status)}</b></header><strong>{message.subject}</strong><p>{message.body}</p>{message.durationMinutes > 0 && <small>Durée : {message.durationMinutes} min</small>}{message.failureReason && <small className="communication-error">{message.failureReason}</small>}</article>;
++    })}</section>
++  </div>;
++}
+diff -ruN city-simulator-v0.10.0/frontend/src/components/Communications.css city-simulator-v0.10.1/frontend/src/components/Communications.css
+--- city-simulator-v0.10.0/frontend/src/components/Communications.css	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.10.1/frontend/src/components/Communications.css	2026-07-29 14:57:02.000000000 +0200
+@@ -0,0 +1,23 @@
++.communication-layout { display:grid; grid-template-columns:minmax(270px,.72fr) minmax(360px,1.4fr); gap:12px; }
++.communication-compose form { display:grid; gap:10px; margin-top:12px; }
++.communication-compose label { display:grid; gap:5px; color:#aeb9c8; font-size:11px; font-weight:700; }
++.communication-compose select,.communication-compose input,.communication-compose textarea { width:100%; padding:9px 10px; color:#eef3f8; background:#111923; border:1px solid #354154; border-radius:7px; font:inherit; }
++.communication-compose textarea { min-height:92px; resize:vertical; }
++.communication-form-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
++.communication-feedback { margin:0; color:#8fd9aa; font-size:11px; }
++.communication-history,.communication-monitor-list { display:grid; align-content:start; gap:8px; }
++.communication-history { max-height:58vh; overflow:auto; }
++.communication-row { display:grid; gap:7px; padding:10px 12px; background:#141d29; border:1px solid #303b4d; border-left:3px solid #6388b6; border-radius:8px; }
++.communication-row header { display:flex; justify-content:space-between; gap:10px; align-items:center; color:#9aa8ba; font-size:11px; }
++.communication-row header button { padding:0; color:#8fc5ff; background:transparent; border:0; }
++.communication-row p { margin:0; color:#c4ceda; line-height:1.45; white-space:pre-wrap; }
++.communication-row small { color:#91a0b4; }
++.communication-row.communication-failed { border-left-color:#d86b62; }
++.communication-row.communication-replied { border-left-color:#65bd85; }
++.communication-error { color:#ff9e91 !important; }
++.communication-monitor { width:min(960px,94vw); height:min(760px,90vh); }
++.communication-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:12px 18px; border-bottom:1px solid #303b4d; }
++.communication-kpis span { padding:10px; background:#141d29; border-radius:8px; color:#9caabd; font-size:11px; }
++.communication-kpis b { display:block; color:#fff; font-size:20px; }
++.communication-monitor-list { padding:14px 18px 20px; overflow:auto; }
++@media (max-width:760px) { .communication-layout { grid-template-columns:1fr; } .communication-form-row,.communication-kpis { grid-template-columns:1fr 1fr; } }
+diff -ruN city-simulator-v0.10.0/frontend/src/components/ControlPanel.tsx city-simulator-v0.10.1/frontend/src/components/ControlPanel.tsx
+--- city-simulator-v0.10.0/frontend/src/components/ControlPanel.tsx	2026-07-29 14:26:11.418687800 +0200
++++ city-simulator-v0.10.1/frontend/src/components/ControlPanel.tsx	2026-07-29 14:56:39.000000000 +0200
+@@ -10,6 +10,7 @@
+   onOpenHousehold: (id: number) => void;
+   onOpenSocialGraph: () => void;
+   onOpenJustice: () => void;
++  onOpenCommunications: () => void;
+   onOpenCitizen: (id: number) => void;
+ }
+ 
+@@ -58,6 +59,7 @@
+   onOpenHousehold,
+   onOpenSocialGraph,
+   onOpenJustice,
++  onOpenCommunications,
+   onOpenCitizen,
+ }: ControlPanelProps) {
+   const trips = snapshot?.stats.tripCountsToday ?? { walk: 0, car: 0, bus: 0 };
+@@ -119,6 +121,9 @@
+       <button className="graph-open-button" onClick={onOpenSocialGraph}>
+         Ouvrir le graphe social global
+       </button>
++      <h3>Communications</h3>
++      <dl className="compact-metrics"><div><dt>Envoyées aujourd’hui</dt><dd>{snapshot?.stats.sentToday ?? 0}</dd></div><div><dt>Non lues</dt><dd>{snapshot?.stats.unreadCommunications ?? 0}</dd></div><div><dt>Réponses</dt><dd>{snapshot?.stats.communicationRepliesToday ?? 0}</dd></div></dl>
++      <button className="graph-open-button" onClick={onOpenCommunications}>Ouvrir le monitoring des communications</button>
+       <h3>Justice</h3>
+       <dl className="compact-metrics">
+         <div><dt>Audiences</dt><dd>{snapshot?.stats.hearingsToday ?? 0} / {snapshot?.stats.courtCapacityToday ?? 0}</dd></div>
+diff -ruN city-simulator-v0.10.0/frontend/src/components/EventLog.tsx city-simulator-v0.10.1/frontend/src/components/EventLog.tsx
+--- city-simulator-v0.10.0/frontend/src/components/EventLog.tsx	2026-07-29 14:27:31.311695000 +0200
++++ city-simulator-v0.10.1/frontend/src/components/EventLog.tsx	2026-07-29 14:58:09.000000000 +0200
+@@ -1,7 +1,7 @@
+ import { useMemo, useState } from "react";
+ import type { CityEvent } from "../types/city";
+ 
+-type EventFilter = "all" | "housing" | "economy" | "health" | "justice" | "social" | "mobility" | "incidents" | "alerts";
++type EventFilter = "all" | "housing" | "economy" | "health" | "justice" | "communications" | "social" | "mobility" | "incidents" | "alerts";
+ 
+ const ECONOMY_TYPES = new Set([
+   "vacancy_opened",
+@@ -28,6 +28,8 @@
+   "community_service_completed",
+ ]);
+ 
++const COMMUNICATION_TYPES = new Set(["communication_sent", "communication_delivered", "phone_call_missed", "phone_call_completed"]);
++
+ const SOCIAL_TYPES = new Set([
+   "positive_meeting",
+   "friendship_formed",
+@@ -66,6 +68,7 @@
+   if (filter === "economy") return ECONOMY_TYPES.has(event.eventType);
+   if (filter === "health") return HEALTH_TYPES.has(event.eventType);
+   if (filter === "justice") return JUSTICE_TYPES.has(event.eventType);
++  if (filter === "communications") return COMMUNICATION_TYPES.has(event.eventType);
+   if (filter === "social") return SOCIAL_TYPES.has(event.eventType);
+   if (filter === "mobility") return MOBILITY_TYPES.has(event.eventType);
+   if (filter === "incidents") return INCIDENT_TYPES.has(event.eventType) || event.incidentId !== null;
+@@ -102,6 +105,7 @@
+             ["economy", "Économie"],
+             ["health", "Santé"],
+             ["justice", "Justice"],
++            ["communications", "Communications"],
+             ["social", "Social"],
+             ["mobility", "Mobilité"],
+             ["incidents", "Incidents"],
+@@ -124,7 +128,8 @@
+           const isHousingEvent = HOUSING_TYPES.has(event.eventType);
+           const isEconomyEvent = ECONOMY_TYPES.has(event.eventType);
+           const isHealthEvent = HEALTH_TYPES.has(event.eventType);
+-          const citizenId = isEconomyEvent || isHealthEvent ? (event.citizenIds[0] ?? null) : null;
++          const isCommunicationEvent = COMMUNICATION_TYPES.has(event.eventType);
++          const citizenId = isEconomyEvent || isHealthEvent || isCommunicationEvent ? (event.citizenIds[0] ?? null) : null;
+           const buildingId = isHousingEvent || isEconomyEvent || isHealthEvent ? event.buildingId : null;
+           const actionable = event.incidentId !== null || citizenId !== null || buildingId !== null;
+           const content = (
+diff -ruN city-simulator-v0.10.0/frontend/src/monitoring/metrics.ts city-simulator-v0.10.1/frontend/src/monitoring/metrics.ts
+--- city-simulator-v0.10.0/frontend/src/monitoring/metrics.ts	2026-07-29 14:27:06.651535500 +0200
++++ city-simulator-v0.10.1/frontend/src/monitoring/metrics.ts	2026-07-29 14:56:39.000000000 +0200
+@@ -120,7 +120,7 @@
+       metrics: [
+         card("friendships", "Amitiés", number.format(stats.friendships), "social"),
+         card("rivalries", "Rivalités", number.format(stats.rivalries), "social"),
+-        card("events", "Rencontres prévues", number.format(stats.activeSocialEvents), "social"),
++        card("communications", "Communications du jour", number.format(stats.sentToday), "social"),
+         card("cohesion", "Cohésion des foyers", `${number.format(stats.averageHouseholdCohesion)} %`, "social"),
+         card("isolated", "Habitants isolés", number.format(stats.isolatedCitizens), "social"),
+         card("network", "Réseau moyen", number.format(stats.averageSocialNetwork), "social"),
+diff -ruN city-simulator-v0.10.0/frontend/src/types/city.ts city-simulator-v0.10.1/frontend/src/types/city.ts
+--- city-simulator-v0.10.0/frontend/src/types/city.ts	2026-07-29 14:24:12.401527000 +0200
++++ city-simulator-v0.10.1/frontend/src/types/city.ts	2026-07-29 15:05:26.000000000 +0200
+@@ -298,6 +298,18 @@
+   businesses: EconomyBusinessSummary[];
+ }
+ 
++export type CommunicationChannel = "phone_call" | "sms" | "email" | "letter";
++export type CommunicationTone = "friendly" | "practical" | "apology" | "invitation" | "conflict";
++export type CommunicationStatus = "queued" | "ringing" | "delivered" | "read" | "replied" | "failed";
++export interface CommunicationSummary {
++  id: number; threadId: number; sender: { id: number; name: string }; recipient: { id: number; name: string };
++  channel: CommunicationChannel; tone: CommunicationTone; subject: string; body: string; status: CommunicationStatus;
++  createdTick: number; deliveryTick: number; readTick: number | null; repliedTick: number | null; replyToId: number | null; replyDepth: number;
++  durationMinutes: number; cost: number; failureReason: string | null;
++}
++export interface CommunicationMetrics { sentToday: number; deliveredToday: number; phoneCallsToday: number; smsToday: number; emailsToday: number; lettersToday: number; unreadCommunications: number; communicationRepliesToday: number; }
++export interface CommunicationOverview { metrics: CommunicationMetrics; recent: CommunicationSummary[]; }
++
+ export interface CitySnapshot {
+   type: "city_snapshot";
+   tick: number;
+@@ -364,6 +376,7 @@
+     socialAcceptancesToday: number;
+     activeSocialEvents: number;
+     socialGatheringsCompleted: number;
++    sentToday: number; deliveredToday: number; phoneCallsToday: number; smsToday: number; emailsToday: number; lettersToday: number; unreadCommunications: number; communicationRepliesToday: number;
+   };
+   citizens: CitizenSummary[];
+   buildings: BuildingSummary[];
+@@ -390,6 +403,7 @@
+   health: HealthOverview;
+   housing: HousingOverview;
+   justice: JusticeOverview;
++  communications: CommunicationOverview;
+   incidents: IncidentSummary[];
+   events: CityEvent[];
+   simulation: {
+@@ -416,6 +430,7 @@
+   | "health"
+   | "housing"
+   | "justice"
++  | "communications"
+   | "incidents"
+   | "events"
+   | "simulation"
+@@ -528,6 +543,7 @@
+     financialHistory: HouseholdFinancialRecord[];
+     members: Array<{ id: number; name: string }>;
+   } | null;
++  communications: { phoneNumber: string; emailAddress: string; unreadCount: number; messages: CommunicationSummary[]; };
+   social: {
+     interactionsToday: number;
+     invitationsSent: number;

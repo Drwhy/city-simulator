@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import random
+import math
 
 from .models import (
     Building,
     BuildingType,
     Citizen,
     Needs,
+    Neighborhood,
     Vehicle,
     VehicleStatus,
     VehicleType,
@@ -25,16 +27,25 @@ LAST_NAMES = [
 ]
 
 
-def generate_buildings() -> dict[int, Building]:
+def generate_neighborhoods() -> dict[int, Neighborhood]:
+    return {
+        1: Neighborhood(1, "Rives Nord-Ouest", 0, 0, 19, 11, 62.0, 68.0, 60.0),
+        2: Neighborhood(2, "Centre Nord-Est", 20, 0, 39, 11, 78.0, 73.0, 72.0),
+        3: Neighborhood(3, "Faubourgs Sud-Ouest", 0, 12, 19, 23, 48.0, 57.0, 48.0),
+        4: Neighborhood(4, "Cité des Services", 20, 12, 39, 23, 72.0, 76.0, 67.0),
+    }
+
+
+def generate_buildings(citizen_count: int = 100) -> dict[int, Building]:
     buildings: dict[int, Building] = {}
     next_id = 1
 
+    # Îlots résidentiels irréguliers, accrochés aux axes et espacés des pôles de service.
     home_positions = [
-        (2, 2), (6, 2), (10, 2), (14, 2), (18, 2),
-        (2, 7), (6, 7), (10, 7), (14, 7), (18, 7),
-        (2, 17), (6, 17), (10, 17), (14, 17), (18, 17),
-        (24, 2), (28, 2), (32, 2), (36, 2),
-        (24, 17), (28, 17), (32, 17), (36, 17),
+        (1, 1), (5, 2), (9, 1), (13, 2), (17, 1), (21, 2), (27, 1), (31, 2), (35, 1),
+        (1, 6), (5, 7), (9, 6), (13, 7), (17, 6), (21, 6), (27, 6), (31, 6),
+        (1, 15), (9, 15), (13, 15), (17, 15), (21, 15), (39, 15),
+        (1, 20), (5, 20), (9, 20), (13, 20), (17, 20), (21, 20), (29, 20), (38, 20),
     ]
     for index, (x, y) in enumerate(home_positions, start=1):
         buildings[next_id] = Building(
@@ -43,7 +54,11 @@ def generate_buildings() -> dict[int, Building]:
             building_type=BuildingType.HOME,
             x=x,
             y=y,
-            capacity=6,
+            capacity=max(6, math.ceil(citizen_count / max(1, len(home_positions) - 5))) + (index % 3),
+            rent_monthly=round(330.0 + (index % 7) * 58.0 + (20 - min(20, abs(x - 20))) * 4.0, 2),
+            housing_condition=round(55.0 + (index * 17 % 40), 1),
+            comfort=round(45.0 + (index * 13 % 43), 1),
+            owner_type="municipal" if index % 6 == 0 else "private",
         )
         next_id += 1
 
@@ -56,6 +71,10 @@ def generate_buildings() -> dict[int, Building]:
         ("Mairie", BuildingType.PUBLIC, 26, 15, 12),
         ("Commissariat central", BuildingType.POLICE, 34, 15, 12),
         ("Centre médical Saint-Roch", BuildingType.HOSPITAL, 36, 7, 16),
+        ("Tribunal municipal", BuildingType.COURT, 26, 19, 12),
+        ("Centre de détention", BuildingType.DETENTION_CENTER, 34, 19, 14),
+        ("Banque des Quatre Quartiers", BuildingType.BANK, 6, 11, 18),
+        ("Accueil municipal de nuit", BuildingType.SHELTER, 6, 15, 24),
     ]
     for name, building_type, x, y, capacity in workplaces:
         building = Building(
@@ -75,10 +94,14 @@ def generate_buildings() -> dict[int, Building]:
                 BuildingType.PUBLIC: 2,
                 BuildingType.POLICE: 2,
                 BuildingType.HOSPITAL: 3,
+                BuildingType.COURT: 2,
+                BuildingType.DETENTION_CENTER: 2,
+                BuildingType.BANK: 3,
+                BuildingType.SHELTER: 2,
                 BuildingType.PARK: 0,
             }.get(building_type, 1),
-            employee_capacity=(8 if building_type == BuildingType.HOSPITAL else capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity),
-            target_employees=(8 if building_type == BuildingType.HOSPITAL else capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity),
+            employee_capacity=max(4, (capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity) * max(1, math.ceil(citizen_count / 100))) if building_type not in {BuildingType.PARK, BuildingType.SHELTER} else (max(4, math.ceil(citizen_count / 120)) if building_type == BuildingType.SHELTER else 0),
+            target_employees=max(4, (capacity - 4 if building_type in {BuildingType.OFFICE, BuildingType.FACTORY} else capacity) * max(1, math.ceil(citizen_count / 100))) if building_type not in {BuildingType.PARK, BuildingType.SHELTER} else (max(4, math.ceil(citizen_count / 120)) if building_type == BuildingType.SHELTER else 0),
             cash={
                 BuildingType.OFFICE: 14_000.0,
                 BuildingType.FACTORY: 12_000.0,
@@ -87,6 +110,10 @@ def generate_buildings() -> dict[int, Building]:
                 BuildingType.PUBLIC: 20_000.0,
                 BuildingType.POLICE: 25_000.0,
                 BuildingType.HOSPITAL: 24_000.0,
+                BuildingType.COURT: 18_000.0,
+                BuildingType.DETENTION_CENTER: 20_000.0,
+                BuildingType.BANK: 45_000.0,
+                BuildingType.SHELTER: 16_000.0,
                 BuildingType.PARK: 0.0,
             }.get(building_type, 6_000.0),
             fixed_cost_daily={
@@ -97,12 +124,19 @@ def generate_buildings() -> dict[int, Building]:
                 BuildingType.PUBLIC: 260.0,
                 BuildingType.POLICE: 340.0,
                 BuildingType.HOSPITAL: 420.0,
+                BuildingType.COURT: 300.0,
+                BuildingType.DETENTION_CENTER: 360.0,
+                BuildingType.BANK: 320.0,
+                BuildingType.SHELTER: 280.0,
                 BuildingType.PARK: 0.0,
             }.get(building_type, 160.0),
             food_stock=420.0 if building_type == BuildingType.SHOP else 0.0,
             goods_stock=220.0 if building_type == BuildingType.SHOP else 0.0,
             medical_beds=8 if building_type == BuildingType.HOSPITAL else 0,
+            bank_reserves=120_000.0 if building_type == BuildingType.BANK else 0.0,
         )
+        if building_type != BuildingType.PARK:
+            building.target_employees = max(building.employees_required, round(building.employee_capacity * 0.55))
         buildings[next_id] = building
         next_id += 1
 
@@ -117,8 +151,12 @@ def generate_citizens(
 ) -> dict[int, Citizen]:
     rng = random.Random(seed)
     homes = [b for b in buildings.values() if b.building_type == BuildingType.HOME]
+    # Réserve structurelle pour que le marché résidentiel puisse réellement fonctionner.
+    initial_homes = homes[:-5] if len(homes) > 5 and sum(home.capacity for home in homes[:-5]) >= count else homes
     police_station = next(b for b in buildings.values() if b.building_type == BuildingType.POLICE)
     medical_center = next(b for b in buildings.values() if b.building_type == BuildingType.HOSPITAL)
+    court = next(b for b in buildings.values() if b.building_type == BuildingType.COURT)
+    detention_center = next(b for b in buildings.values() if b.building_type == BuildingType.DETENTION_CENTER)
     ordinary_workplaces = [
         b for b in buildings.values()
         if b.building_type in {
@@ -127,6 +165,8 @@ def generate_citizens(
             BuildingType.SHOP,
             BuildingType.CAFE,
             BuildingType.PUBLIC,
+            BuildingType.BANK,
+            BuildingType.SHELTER,
         }
     ]
 
@@ -138,25 +178,34 @@ def generate_citizens(
         BuildingType.PUBLIC: ("Agent municipal", 92.0),
         BuildingType.POLICE: ("Policier municipal", 108.0),
         BuildingType.HOSPITAL: ("Infirmier", 118.0),
+        BuildingType.COURT: ("Greffier", 112.0),
+        BuildingType.DETENTION_CENTER: ("Surveillant", 106.0),
+        BuildingType.BANK: ("Conseiller bancaire", 116.0),
+        BuildingType.SHELTER: ("Travailleur social", 98.0),
     }
 
     citizens: dict[int, Citizen] = {}
-    home_load = {home.id: 0 for home in homes}
-    work_load = {work.id: 0 for work in [*ordinary_workplaces, police_station, medical_center]}
+    home_load = {home.id: 0 for home in initial_homes}
+    work_load = {work.id: 0 for work in [*ordinary_workplaces, police_station, medical_center, court, detention_center]}
     police_target = min(police_station.capacity, max(4, round(count * 0.08)))
     medical_target = min(8, max(4, round(count * 0.08)))
+    court_target = min(4, max(2, round(count * 0.03)))
+    detention_target = min(4, max(2, round(count * 0.03)))
 
     for citizen_id in range(1, count + 1):
-        available_homes = [h for h in homes if home_load[h.id] < h.capacity]
+        available_homes = [h for h in initial_homes if home_load[h.id] < h.capacity]
         home = rng.choice(available_homes)
         home_load[home.id] += 1
 
         if citizen_id <= police_target:
             workplace = police_station
         elif citizen_id <= police_target + medical_target:
-            # Conserve le flux aléatoire historique des affectations ordinaires.
             rng.choice(ordinary_workplaces)
             workplace = medical_center
+        elif citizen_id <= police_target + medical_target + court_target:
+            workplace = court
+        elif citizen_id <= police_target + medical_target + court_target + detention_target:
+            workplace = detention_center
         else:
             available_workplaces = [
                 w for w in ordinary_workplaces if work_load[w.id] < w.employee_capacity
@@ -165,8 +214,22 @@ def generate_citizens(
         if workplace:
             work_load[workplace.id] += 1
             job_title, salary = job_by_type[workplace.building_type]
+            variants = {
+                BuildingType.OFFICE: ["Analyste", "Comptable", "Développeur", "Assistant administratif", "Architecte"],
+                BuildingType.FACTORY: ["Ouvrier", "Technicien", "Mécanicien", "Logisticien", "Contrôleur qualité"],
+                BuildingType.SHOP: ["Vendeur", "Caissier", "Responsable de rayon", "Préparateur de commandes"],
+                BuildingType.CAFE: ["Serveur", "Cuisinier", "Barista", "Responsable de salle"],
+                BuildingType.PUBLIC: ["Agent municipal", "Urbaniste", "Bibliothécaire", "Jardinier municipal"],
+                BuildingType.BANK: ["Conseiller bancaire", "Analyste crédit", "Caissier bancaire", "Responsable conformité"],
+                BuildingType.SHELTER: ["Travailleur social", "Éducateur", "Agent d’accueil"],
+            }.get(workplace.building_type)
+            if variants:
+                job_title = variants[(work_load[workplace.id] - 1) % len(variants)]
+                salary += ((work_load[workplace.id] - 1) % len(variants)) * 3.0
             if workplace.building_type == BuildingType.HOSPITAL and work_load[workplace.id] % 3 == 1:
                 job_title, salary = "Médecin", 145.0
+            elif workplace.building_type == BuildingType.COURT and work_load[workplace.id] == 1:
+                job_title, salary = "Juge", 148.0
         else:
             job_title, salary = None, 0.0
 
@@ -181,6 +244,12 @@ def generate_citizens(
             shift = (work_load[workplace.id] - 1) % 2
             start_hour, end_hour = ((6, 14) if shift == 0 else (14, 22))
             work_days = (1, 2, 3, 4, 5, 6, 7)
+        elif workplace.building_type == BuildingType.DETENTION_CENTER:
+            shift = (work_load[workplace.id] - 1) % 2
+            start_hour, end_hour = ((6, 14) if shift == 0 else (14, 22))
+            work_days = (1, 2, 3, 4, 5, 6, 7)
+        elif workplace.building_type == BuildingType.COURT:
+            start_hour, end_hour, work_days = 8, 17, (1, 2, 3, 4, 5)
         elif workplace.building_type == BuildingType.FACTORY:
             shift = citizen_id % 2
             start_hour, end_hour = ((6, 14) if shift == 0 else (14, 22))

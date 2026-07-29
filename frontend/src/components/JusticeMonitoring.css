@@ -1,0 +1,11 @@
+.justice-window { max-width: 860px; }
+.justice-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.justice-institution-links { display: flex; gap: 8px; margin: 12px 0; }
+.justice-list, .justice-timeline { display: grid; gap: 8px; }
+.justice-list > button, .justice-list > article, .justice-timeline article { display: flex; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid #2d3748; border-radius: 8px; background: #18202c; text-align: left; }
+.justice-list span, .justice-timeline article { display: grid; gap: 4px; }
+.justice-list small, .justice-timeline small { color: #8f9bad; }
+.justice-list b { color: #f4c86d; font-size: 11px; }
+.justice-timeline article { border-left: 3px solid #779ad7; }
+.nested-entity-modal { z-index: 120; }
+@media (max-width: 900px) { .justice-metrics { grid-template-columns: 1fr 1fr; } }

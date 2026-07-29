@@ -1,0 +1,7 @@
+import type { NeighborhoodSummary } from "../types/city";
+export type ThematicLayer = "none" | "averageIncome" | "unemploymentRate" | "criminality" | "safetyPerception" | "averageResponseMinutes" | "accessibility" | "averageRent" | "healthcareAccess" | "commercialActivity";
+export const THEMATIC_OPTIONS: Array<[ThematicLayer, string]> = [["none","Aucune"],["averageIncome","Revenus"],["unemploymentRate","Chômage"],["criminality","Criminalité"],["safetyPerception","Sécurité ressentie"],["averageResponseMinutes","Temps de réponse"],["accessibility","Accessibilité"],["averageRent","Loyers"],["healthcareAccess","Accès aux soins"],["commercialActivity","Fréquentation commerciale"]];
+export function thematicValue(row: NeighborhoodSummary, layer: ThematicLayer): number { return layer === "accessibility" ? (row.healthcareAccess + row.commerceAccess) / 2 : layer === "none" ? 0 : row[layer]; }
+export function thematicRange(rows: NeighborhoodSummary[], layer: ThematicLayer): [number, number] { const values=rows.map((row)=>thematicValue(row,layer)); return values.length ? [Math.min(...values),Math.max(...values)] : [0,1]; }
+export function thematicRatio(row: NeighborhoodSummary, rows: NeighborhoodSummary[], layer: ThematicLayer): number { const [low,high]=thematicRange(rows,layer); return high===low ? .5 : Math.max(0,Math.min(1,(thematicValue(row,layer)-low)/(high-low))); }
+export const thematicLabel = (layer: ThematicLayer) => THEMATIC_OPTIONS.find(([value])=>value===layer)?.[1] ?? layer;

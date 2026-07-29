@@ -11,6 +11,7 @@ interface EntityModalProps {
   onSelectCitizen: (id: number) => void;
   onSelectVehicle: (id: number) => void;
   onSelectIncident: (id: number) => void;
+  onSelectHousehold: (id: number) => void;
 }
 
 export function EntityModal(props: EntityModalProps) {
@@ -28,6 +29,7 @@ export function EntityModal(props: EntityModalProps) {
           onSelectCitizen={props.onSelectCitizen}
           onSelectVehicle={props.onSelectVehicle}
           onSelectIncident={props.onSelectIncident}
+          onSelectHousehold={props.onSelectHousehold}
         />
       </section>
     </div>

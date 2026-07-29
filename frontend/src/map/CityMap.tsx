@@ -7,6 +7,7 @@ import type {
   SelectedEntity,
   VehicleSummary,
 } from "../types/city";
+import { thematicLabel, thematicRatio, thematicValue, type ThematicLayer } from "../monitoring/neighborhoods";
 
 interface CityMapProps {
   snapshot: CitySnapshot | null;
@@ -15,6 +16,8 @@ interface CityMapProps {
   onSelectVehicle: (vehicleId: number) => void;
   onSelectIncident: (incidentId: number) => void;
   onSelectBuilding: (buildingId: number) => void;
+  onSelectNeighborhood: (neighborhoodId: number) => void;
+  thematicLayer: ThematicLayer;
   showCitizens: boolean;
   showBuildings: boolean;
   showRoads: boolean;
@@ -47,6 +50,7 @@ interface SceneState {
   background: Graphics;
   grid: Graphics;
   roadsLayer: Container;
+  thematicLayer: Container;
   transitLayer: Container;
   trafficLayer: Container;
   buildingsLayer: Container;
@@ -79,6 +83,7 @@ const ACTIVITY_COLORS: Record<string, number> = {
   at_home: 0xb5bac7,
   detained: 0xe05f6b,
   shopping: 0xf0c45c,
+  kidnapped: 0xd93060,
 };
 
 const BUILDING_COLORS: Record<string, number> = {
@@ -91,6 +96,10 @@ const BUILDING_COLORS: Record<string, number> = {
   public: 0x8067a6,
   police: 0x315d87,
   hospital: 0xb4435d,
+  court: 0x7b6b54,
+  detention_center: 0x4f5360,
+  bank: 0xc59b3d,
+  shelter: 0x4a8b8d,
 };
 
 function destroyChildren(container: Container): void {
@@ -100,8 +109,15 @@ function destroyChildren(container: Container): void {
 
 function drawBuilding(layer: Container, building: BuildingSummary, onSelect: (id: number) => void): void {
   const graphics = new Graphics();
-  graphics.beginFill(BUILDING_COLORS[building.type] ?? 0x555b66, 0.95);
-  graphics.lineStyle(1, 0xd7dbe3, 0.3);
+  const px = building.x * CELL_SIZE;
+  const py = building.y * CELL_SIZE;
+  const width = building.width * CELL_SIZE;
+  const height = building.height * CELL_SIZE;
+  graphics.beginFill(0x070a0f, 0.35);
+  graphics.drawRoundedRect(px + 4, py + 6, width, height, 6);
+  graphics.endFill();
+  graphics.beginFill(BUILDING_COLORS[building.type] ?? 0x555b66, 0.98);
+  graphics.lineStyle(1, 0xe5e9ef, 0.34);
   graphics.drawRoundedRect(
     building.x * CELL_SIZE,
     building.y * CELL_SIZE,
@@ -110,6 +126,16 @@ function drawBuilding(layer: Container, building: BuildingSummary, onSelect: (id
     4,
   );
   graphics.endFill();
+  graphics.beginFill(0xffffff, 0.12);
+  graphics.drawRoundedRect(px + 4, py + 4, Math.max(8, width - 8), 5, 2);
+  graphics.endFill();
+  if (building.type === "park") {
+    [[0.25, 0.35], [0.55, 0.62], [0.78, 0.3]].forEach(([rx, ry]) => {
+      graphics.beginFill(0x79b66a, 0.9);
+      graphics.drawCircle(px + width * rx, py + height * ry, 5);
+      graphics.endFill();
+    });
+  }
   graphics.eventMode = "static";
   graphics.cursor = "pointer";
   graphics.on("pointertap", () => onSelect(building.id));
@@ -183,6 +209,7 @@ function createScene(app: Application): SceneState {
   const background = new Graphics();
   const grid = new Graphics();
   const roadsLayer = new Container();
+  const thematicLayer = new Container();
   const transitLayer = new Container();
   const trafficLayer = new Container();
   const buildingsLayer = new Container();
@@ -195,6 +222,7 @@ function createScene(app: Application): SceneState {
   world.addChild(
     background,
     grid,
+    thematicLayer,
     roadsLayer,
     transitLayer,
     trafficLayer,
@@ -212,6 +240,7 @@ function createScene(app: Application): SceneState {
     background,
     grid,
     roadsLayer,
+    thematicLayer,
     transitLayer,
     trafficLayer,
     buildingsLayer,
@@ -241,8 +270,13 @@ function updateMapGeometry(scene: SceneState, width: number, height: number): vo
   const worldHeight = height * CELL_SIZE;
 
   scene.background.clear();
-  scene.background.beginFill(0x171c25);
+  scene.background.beginFill(0x202b29);
   scene.background.drawRect(0, 0, worldWidth, worldHeight);
+  scene.background.endFill();
+  scene.background.beginFill(0x324039, 0.28);
+  for (let y = 0; y < height; y += 4) {
+    for (let x = (y / 4) % 2; x < width; x += 5) scene.background.drawCircle(x * CELL_SIZE + 8, y * CELL_SIZE + 9, 2);
+  }
   scene.background.endFill();
 
   scene.grid.clear();
@@ -285,19 +319,46 @@ function buildingSignature(buildings: BuildingSummary[]): string {
     .join("|");
 }
 
+function drawNeighborhoodTheme(scene: SceneState, snapshot: CitySnapshot, layer: ThematicLayer, onSelect: (id: number) => void): void {
+  destroyChildren(scene.thematicLayer);
+  if (layer === "none") { scene.thematicLayer.visible = false; return; }
+  const goodWhenHigh = new Set<ThematicLayer>(["averageIncome", "safetyPerception", "accessibility", "healthcareAccess", "commercialActivity"]);
+  snapshot.neighborhoods.neighborhoods.forEach((row) => {
+    const ratio = thematicRatio(row, snapshot.neighborhoods.neighborhoods, layer);
+    const severity = goodWhenHigh.has(layer) ? 1 - ratio : ratio;
+    const color = severity > .66 ? 0xd65353 : severity > .33 ? 0xd8a947 : 0x4eaa72;
+    const area = new Graphics(); area.beginFill(color, .30); area.lineStyle(2, color, .72);
+    area.drawRect(row.bounds.xMin * CELL_SIZE, row.bounds.yMin * CELL_SIZE, (row.bounds.xMax - row.bounds.xMin + 1) * CELL_SIZE, (row.bounds.yMax - row.bounds.yMin + 1) * CELL_SIZE); area.endFill();
+    area.eventMode = "static"; area.cursor = "pointer"; area.on("pointertap", () => onSelect(row.id)); scene.thematicLayer.addChild(area);
+    const value = thematicValue(row, layer);
+    const formatted = layer === "averageIncome" || layer === "averageRent" ? `${Math.round(value)} €` : layer === "averageResponseMinutes" ? `${value.toFixed(1)} min` : layer === "commercialActivity" ? value.toFixed(0) : `${value.toFixed(1)} %`;
+    const label = new Text(`${row.name}
+${thematicLabel(layer)} : ${formatted}`, new TextStyle({ fontFamily: "Arial", fontSize: 11, fontWeight: "bold", fill: 0xffffff, align: "center", stroke: 0x11151d, strokeThickness: 3 }));
+    label.anchor.set(.5); label.x = (row.bounds.xMin + row.bounds.xMax + 1) / 2 * CELL_SIZE; label.y = (row.bounds.yMin + row.bounds.yMax + 1) / 2 * CELL_SIZE; scene.thematicLayer.addChild(label);
+  });
+  scene.thematicLayer.visible = true;
+}
+
 function drawRoads(scene: SceneState, snapshot: CitySnapshot): void {
   const signature = `${snapshot.map.width}:${snapshot.map.height}:${snapshot.roads.cells.length}`;
   if (signature === scene.roadSignature) return;
   destroyChildren(scene.roadsLayer);
   const roads = new Graphics();
-  roads.beginFill(0x303845, 0.9);
+  roads.beginFill(0x343b42, 0.96);
   snapshot.roads.cells.forEach((cell) => {
     roads.drawRect(cell.x * CELL_SIZE, cell.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
   });
   roads.endFill();
-  roads.lineStyle(1, 0x4a5566, 0.25);
+  roads.lineStyle(1, 0x66717b, 0.22);
   snapshot.roads.cells.forEach((cell) => {
     roads.drawRect(cell.x * CELL_SIZE, cell.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+  });
+  roads.lineStyle(1, 0xd9c875, 0.34);
+  snapshot.roads.cells.forEach((cell) => {
+    if ((cell.x + cell.y) % 3 === 0) {
+      roads.moveTo(cell.x * CELL_SIZE + 8, cell.y * CELL_SIZE + CELL_SIZE / 2);
+      roads.lineTo(cell.x * CELL_SIZE + 14, cell.y * CELL_SIZE + CELL_SIZE / 2);
+    }
   });
   scene.roadsLayer.addChild(roads);
   scene.roadSignature = signature;
@@ -394,6 +455,8 @@ export function CityMap({
   onSelectVehicle,
   onSelectIncident,
   onSelectBuilding,
+  onSelectNeighborhood,
+  thematicLayer,
   showCitizens,
   showBuildings,
   showRoads,
@@ -415,11 +478,13 @@ export function CityMap({
   const onSelectVehicleRef = useRef(onSelectVehicle);
   const onSelectIncidentRef = useRef(onSelectIncident);
   const onSelectBuildingRef = useRef(onSelectBuilding);
+  const onSelectNeighborhoodRef = useRef(onSelectNeighborhood);
 
   onSelectCitizenRef.current = onSelectCitizen;
   onSelectVehicleRef.current = onSelectVehicle;
   onSelectIncidentRef.current = onSelectIncident;
   onSelectBuildingRef.current = onSelectBuilding;
+  onSelectNeighborhoodRef.current = onSelectNeighborhood;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -456,6 +521,7 @@ export function CityMap({
     if (!app || !scene || !snapshot) return;
 
     updateMapGeometry(scene, snapshot.map.width, snapshot.map.height);
+    drawNeighborhoodTheme(scene, snapshot, thematicLayer, (id) => onSelectNeighborhoodRef.current(id));
     drawRoads(scene, snapshot);
     drawTransit(scene, snapshot);
     drawTraffic(scene, snapshot);
@@ -596,6 +662,7 @@ export function CityMap({
   }, [
     snapshot,
     selectedEntity,
+    thematicLayer,
     showBuildings,
     showCitizens,
     showIncidents,

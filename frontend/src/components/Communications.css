@@ -1,0 +1,23 @@
+.communication-layout { display:grid; grid-template-columns:minmax(270px,.72fr) minmax(360px,1.4fr); gap:12px; }
+.communication-compose form { display:grid; gap:10px; margin-top:12px; }
+.communication-compose label { display:grid; gap:5px; color:#aeb9c8; font-size:11px; font-weight:700; }
+.communication-compose select,.communication-compose input,.communication-compose textarea { width:100%; padding:9px 10px; color:#eef3f8; background:#111923; border:1px solid #354154; border-radius:7px; font:inherit; }
+.communication-compose textarea { min-height:92px; resize:vertical; }
+.communication-form-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.communication-feedback { margin:0; color:#8fd9aa; font-size:11px; }
+.communication-history,.communication-monitor-list { display:grid; align-content:start; gap:8px; }
+.communication-history { max-height:58vh; overflow:auto; }
+.communication-row { display:grid; gap:7px; padding:10px 12px; background:#141d29; border:1px solid #303b4d; border-left:3px solid #6388b6; border-radius:8px; }
+.communication-row header { display:flex; justify-content:space-between; gap:10px; align-items:center; color:#9aa8ba; font-size:11px; }
+.communication-row header button { padding:0; color:#8fc5ff; background:transparent; border:0; }
+.communication-row p { margin:0; color:#c4ceda; line-height:1.45; white-space:pre-wrap; }
+.communication-row small { color:#91a0b4; }
+.communication-row.communication-failed { border-left-color:#d86b62; }
+.communication-row.communication-replied { border-left-color:#65bd85; }
+.communication-error { color:#ff9e91 !important; }
+.communication-monitor { width:min(960px,94vw); height:min(760px,90vh); }
+.communication-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:12px 18px; border-bottom:1px solid #303b4d; }
+.communication-kpis span { padding:10px; background:#141d29; border-radius:8px; color:#9caabd; font-size:11px; }
+.communication-kpis b { display:block; color:#fff; font-size:20px; }
+.communication-monitor-list { padding:14px 18px 20px; overflow:auto; }
+@media (max-width:760px) { .communication-layout { grid-template-columns:1fr; } .communication-form-row,.communication-kpis { grid-template-columns:1fr 1fr; } }

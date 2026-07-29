@@ -1,4 +1,4 @@
-# Reproducible Python 3.12 environment for City Simulator v0.7.0.
+# Reproducible Python 3.12 environment for City Simulator v0.13.0.
 # Regenerate after dependency changes with: pip freeze --exclude-editable
 annotated-doc==0.0.5
 annotated-types==0.8.0

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
 import { getCitizen } from "../api";
+import { CommunicationPanel } from "./CommunicationPanel";
 import type { CitizenDetail, ConflictHistoryEntry, JudicialCaseSummary } from "../types/city";
 
-type CitizenTab = "overview" | "health" | "work" | "social" | "conflicts" | "justice";
+type CitizenTab = "overview" | "health" | "work" | "social" | "communications" | "conflicts" | "justice";
 
 interface CitizenModalProps {
   citizenId: number | null;
@@ -14,6 +15,7 @@ interface CitizenModalProps {
   onData?: (citizen: CitizenDetail) => void;
   onSelectCitizen: (citizenId: number) => void;
   onSelectIncident: (incidentId: number) => void;
+  onSelectCase: (caseId: number) => void;
 }
 
 const ACTIVITY_LABELS: Record<string, string> = {
@@ -110,7 +112,7 @@ function ConflictRow({
   );
 }
 
-function CaseCard({ row, currentTick }: { row: JudicialCaseSummary; currentTick: number }) {
+function CaseCard({ row, currentTick, onSelectCase }: { row: JudicialCaseSummary; currentTick: number; onSelectCase: (caseId: number) => void }) {
   const untilHearing = row.hearingTick - currentTick;
   return (
     <article className="justice-card">
@@ -125,11 +127,12 @@ function CaseCard({ row, currentTick }: { row: JudicialCaseSummary; currentTick:
         {row.verdict && <div><dt>Verdict</dt><dd>{row.verdict}</dd></div>}
         {row.sentence && <div><dt>Peine</dt><dd>{row.sentence}</dd></div>}
       </dl>
+      <button onClick={() => onSelectCase(row.id)}>Ouvrir le dossier complet</button>
     </article>
   );
 }
 
-export function CitizenModal({ citizenId, graphContext = false, paused, snapshotTick, onClose, onData, onSelectCitizen, onSelectIncident }: CitizenModalProps) {
+export function CitizenModal({ citizenId, graphContext = false, paused, snapshotTick, onClose, onData, onSelectCitizen, onSelectIncident, onSelectCase }: CitizenModalProps) {
   const [citizen, setCitizen] = useState<CitizenDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -210,6 +213,7 @@ export function CitizenModal({ citizenId, graphContext = false, paused, snapshot
             ["health", "Santé"],
             ["work", "Travail et finances"],
             ["social", "Réseau social"],
+            ["communications", `Communications${citizen?.communications.unreadCount ? ` (${citizen.communications.unreadCount})` : ""}`],
             ["conflicts", `Conflits${citizen ? ` (${citizen.conflictHistory.length})` : ""}`],
             ["justice", "Police & justice"],
           ] as Array<[CitizenTab, string]>).map(([value, label]) => (
@@ -231,7 +235,12 @@ export function CitizenModal({ citizenId, graphContext = false, paused, snapshot
                   <div><dt>Emploi</dt><dd>{citizen.jobTitle ?? "Sans emploi"}</dd></div>
                   <div><dt>Lieu de travail</dt><dd>{citizen.workplace?.name ?? "—"}</dd></div>
                   <div><dt>Destination</dt><dd>{citizen.destination?.name ?? "—"}</dd></div>
-                  <div><dt>Argent</dt><dd>{moneyFormatter.format(citizen.money)}</dd></div>
+                  <div><dt>Logement</dt><dd>{citizen.housingSituation.isHomeless ? "Sans abri" : "Logé"}</dd></div>
+                  <div><dt>Liquide</dt><dd>{moneyFormatter.format(citizen.banking.cash)}</dd></div>
+                  <div><dt>Compte bancaire</dt><dd>{moneyFormatter.format(citizen.banking.balance)}</dd></div>
+                  <div><dt>Épargne</dt><dd>{moneyFormatter.format(citizen.banking.savings)}</dd></div>
+                  <div><dt>Dette bancaire</dt><dd>{moneyFormatter.format(citizen.banking.debt)}</dd></div>
+                  <div><dt>Score de crédit</dt><dd>{Math.round(citizen.banking.creditScore)} / 100</dd></div>
                   <div><dt>Santé</dt><dd>{Math.round(citizen.health)} %</dd></div>
                 </dl>
                 <h3>Décision actuelle</h3>
@@ -407,6 +416,8 @@ export function CitizenModal({ citizenId, graphContext = false, paused, snapshot
                 </div>
               </section>
             </div>
+          ) : tab === "communications" ? (
+            <CommunicationPanel citizen={citizen} onSelectCitizen={onSelectCitizen} />
           ) : tab === "conflicts" ? (
             <div className="conflict-tab-layout">
               <section className="profile-section conflict-summary">
@@ -497,7 +508,22 @@ export function CitizenModal({ citizenId, graphContext = false, paused, snapshot
                 <h3>Dossiers judiciaires</h3>
                 {citizen.justice.cases.length === 0 ? <p className="muted">Aucun dossier judiciaire.</p> : (
                   <div className="justice-list justice-list-cases">
-                    {citizen.justice.cases.map((row) => <CaseCard key={row.id} row={row} currentTick={citizen.currentTick} />)}
+                    {citizen.justice.cases.map((row) => <CaseCard key={row.id} row={row} currentTick={citizen.currentTick} onSelectCase={onSelectCase} />)}
+                  </div>
+                )}
+              </section>
+              <section className="profile-section profile-section-wide">
+                <h3>Peines et mesures en cours</h3>
+                {citizen.justice.sentences.length === 0 ? <p className="muted">Aucune peine enregistrée.</p> : (
+                  <div className="justice-list">
+                    {citizen.justice.sentences.map((sentence) => (
+                      <article className="justice-card" key={sentence.id}>
+                        <header><strong>{sentence.label}</strong><span>{sentence.status}</span></header>
+                        {sentence.requiredMinutes > 0 && <p>Progression : {sentence.completedMinutes} / {sentence.requiredMinutes} min</p>}
+                        {sentence.violationCount > 0 && <p className="conflict-outcome">Violations : {sentence.violationCount}</p>}
+                        <button onClick={() => onSelectCase(sentence.caseId)}>Dossier #{sentence.caseId}</button>
+                      </article>
+                    ))}
                   </div>
                 )}
               </section>

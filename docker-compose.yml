@@ -1,6 +1,8 @@
 services:
   backend:
     build: ./backend
+    environment:
+      CITYSIM_CITIZEN_COUNT: "${CITYSIM_CITIZEN_COUNT:-100}"
     ports:
       - "8000:8000"
     volumes:

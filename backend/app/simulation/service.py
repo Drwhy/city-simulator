@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from .world import World
+from .communication import communication_summary, send_communication
+from .models import CommunicationChannel, CommunicationTone
+from .persistence import read_snapshot, write_snapshot
 
 
 @dataclass(slots=True)
@@ -17,8 +19,13 @@ class SimulationStatus:
 
 class SimulationService:
     ALLOWED_SPEEDS = {1, 5, 20, 60}
+    MIN_CITIZENS = 20
+    MAX_CITIZENS = 5000
 
-    def __init__(self, *, seed: int = 12345, citizen_count: int = 100) -> None:
+    def __init__(self, *, seed: int = 12345, citizen_count: int | None = None) -> None:
+        citizen_count = citizen_count or int(os.getenv("CITYSIM_CITIZEN_COUNT", "100"))
+        if not self.MIN_CITIZENS <= citizen_count <= self.MAX_CITIZENS:
+            raise ValueError(f"La population doit être comprise entre {self.MIN_CITIZENS} et {self.MAX_CITIZENS}.")
         self.seed = seed
         self.citizen_count = citizen_count
         self.world = World(seed=seed, citizen_count=citizen_count)
@@ -57,6 +64,8 @@ class SimulationService:
                 "speed": self.status.speed,
                 "allowedSpeeds": sorted(self.ALLOWED_SPEEDS),
                 "hasSave": self.save_path.exists(),
+                "citizenCount": self.citizen_count,
+                "maxCitizenCount": self.MAX_CITIZENS,
             }
             return data
 
@@ -68,6 +77,8 @@ class SimulationService:
                 "speed": self.status.speed,
                 "allowedSpeeds": sorted(self.ALLOWED_SPEEDS),
                 "hasSave": self.save_path.exists(),
+                "citizenCount": self.citizen_count,
+                "maxCitizenCount": self.MAX_CITIZENS,
             }
             return data
 
@@ -95,13 +106,58 @@ class SimulationService:
         async with self._lock:
             return self.world.get_economy_overview()
 
+    async def banking_overview(self) -> dict:
+        async with self._lock:
+            return self.world.get_banking_overview()
+
     async def health_overview(self) -> dict:
         async with self._lock:
             return self.world.get_health_overview()
 
+    async def housing_overview(self) -> dict:
+        async with self._lock:
+            return self.world.get_housing_overview()
+
+    async def household_detail(self, household_id: int) -> dict:
+        async with self._lock:
+            return self.world.get_household_detail(household_id)
+
+    async def crime_overview(self) -> dict:
+        async with self._lock:
+            return self.world.get_crime_overview()
+
+    async def crime_faction_detail(self, organization_id: int) -> dict:
+        async with self._lock:
+            return self.world.get_crime_faction_detail(organization_id)
+
+    async def justice_overview(self) -> dict:
+        async with self._lock:
+            return self.world.get_justice_overview()
+
+    async def neighborhood_overview(self) -> dict:
+        async with self._lock:
+            return self.world.get_neighborhood_overview()
+
+    async def neighborhood_detail(self, neighborhood_id: int) -> dict:
+        async with self._lock:
+            return self.world.get_neighborhood_detail(neighborhood_id)
+
     async def social_graph(self) -> dict:
         async with self._lock:
             return self.world.get_social_graph()
+
+    async def communication_overview(self) -> dict:
+        async with self._lock:
+            return self.world.get_communication_overview()
+
+    async def citizen_communications(self, citizen_id: int) -> dict:
+        async with self._lock:
+            return self.world.get_citizen_communications(citizen_id)
+
+    async def send_communication(self, *, sender_id: int, recipient_id: int, channel: CommunicationChannel, tone: CommunicationTone, subject: str, body: str, attempt_order_violation: bool = False) -> dict:
+        async with self._lock:
+            item = send_communication(self.world, sender_id=sender_id, recipient_id=recipient_id, channel=channel, tone=tone, subject=subject, body=body, attempt_order_violation=attempt_order_violation)
+            return communication_summary(self.world, item)
 
     async def investigation_detail(self, investigation_id: int) -> dict:
         async with self._lock:
@@ -125,28 +181,22 @@ class SimulationService:
         async with self._lock:
             self.world.run_minutes(minutes)
 
-    async def reset(self, *, seed: int | None = None) -> None:
+    async def reset(self, *, seed: int | None = None, citizen_count: int | None = None) -> None:
         async with self._lock:
             if seed is not None:
                 self.seed = seed
+            if citizen_count is not None:
+                if not self.MIN_CITIZENS <= citizen_count <= self.MAX_CITIZENS:
+                    raise ValueError(f"La population doit être comprise entre {self.MIN_CITIZENS} et {self.MAX_CITIZENS}.")
+                self.citizen_count = citizen_count
             self.world = World(seed=self.seed, citizen_count=self.citizen_count)
 
     async def save(self) -> Path:
         async with self._lock:
-            payload = self.world.export_state()
-            self.save_path.parent.mkdir(parents=True, exist_ok=True)
-            temporary_path = self.save_path.with_suffix(self.save_path.suffix + ".tmp")
-            temporary_path.write_text(
-                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                encoding="utf-8",
-            )
-            temporary_path.replace(self.save_path)
-            return self.save_path
+            return write_snapshot(self.save_path, self.world.export_state())
 
     async def load(self) -> None:
         async with self._lock:
-            if not self.save_path.exists():
-                raise FileNotFoundError("Aucune sauvegarde n'est disponible.")
-            payload = json.loads(self.save_path.read_text(encoding="utf-8"))
-            self.world = World.from_state(payload)
+            self.world = World.from_state(read_snapshot(self.save_path))
             self.seed = self.world.seed
+            self.citizen_count = len(self.world.citizens)

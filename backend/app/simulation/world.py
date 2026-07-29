@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import heapq
 import random
 from collections import Counter
 from typing import Any
 
+from .banking import available_funds, banking_overview, initialize_banking, update_banking, withdraw
+from .communication import (
+    citizen_communications,
+    communication_overview,
+    initialize_communications,
+    reset_communication_day,
+    update_communications,
+)
+from .crime import crime_faction_detail, crime_overview, initialize_crime, reset_crime_day, update_crime
 from .economy import (
     assigned_staff_count,
     close_economic_day,
@@ -15,13 +25,27 @@ from .economy import (
 
 from .generator import generate_buildings, generate_citizens, generate_households, generate_vehicles
 from .health import apply_injury, health_overview, initialize_health, requires_medical_exam, update_health
+from .housing import common_budget, home_summary, housing_metrics, housing_overview, household_summary as housing_household_summary, initialize_housing, update_housing
+from .justice import (
+    advance_justice,
+    build_case,
+    community_service_due,
+    contact_forbidden,
+    initialize_justice,
+    justice_overview,
+    link_investigation,
+    reset_justice_day,
+    sentence_summary,
+)
 from .models import (
     Activity,
+    BankTransaction,
     Building,
     BusinessFinancialRecord,
     BusinessStatus,
     EmploymentRecord,
     HouseholdFinancialRecord,
+    HousingRecord,
     JobApplication,
     JobApplicationStatus,
     BuildingType,
@@ -29,6 +53,22 @@ from .models import (
     BusLine,
     BusStop,
     Citizen,
+    Communication,
+    CommunicationChannel,
+    CommunicationStatus,
+    CommunicationTone,
+    CrimeFactionRelation,
+    CrimeFactionType,
+    CrimeOperation,
+    CrimeOperationStatus,
+    CrimeOperationType,
+    CrimeOrganization,
+    CrimeRole,
+    CriminalMarket,
+    IllegalCommodity,
+    IllegalTransaction,
+    Complaint,
+    ComplaintStatus,
     ConflictRecord,
     DomainEvent,
     Evidence,
@@ -41,10 +81,16 @@ from .models import (
     InvestigationStatus,
     JudicialCase,
     JudicialCaseStatus,
+    JudicialSentence,
+    JudicialTimelineEntry,
     MedicalRecord,
     Needs,
+    Neighborhood,
+    NeighborhoodRecord,
     PoliceMeasure,
     Relationship,
+    SentenceStatus,
+    SentenceType,
     SocialEvent,
     SocialEventStatus,
     SocialEventType,
@@ -66,6 +112,21 @@ from .social import (
     update_social_calendar,
 )
 from .snapshot import build_dynamic_snapshot
+from .monitoring import building_detail, household_detail, social_graph
+from .neighborhood import (
+    close_neighborhood_day,
+    continue_patrol,
+    crime_opportunity,
+    initialize_neighborhoods,
+    neighborhood_at,
+    neighborhood_detail,
+    neighborhood_overview,
+    record_incident,
+    record_police_response,
+    reporting_probability,
+    update_neighborhoods,
+)
+from .persistence import SAVE_VERSION, validate_save_version
 from .work import (
     apply_police_measure,
     building_operational,
@@ -111,7 +172,7 @@ class World:
         self.bus_stops, self.bus_lines = generate_bus_network(self.road_cells)
         self._stops_by_position = {stop.position: stop for stop in self.bus_stops.values()}
 
-        self.buildings: dict[int, Building] = generate_buildings()
+        self.buildings: dict[int, Building] = generate_buildings(citizen_count)
         self.citizens: dict[int, Citizen] = generate_citizens(
             self.buildings,
             count=citizen_count,
@@ -169,7 +230,13 @@ class World:
         self.resignations_today = 0
         self.public_spending_total = 0.0
         initialize_health(self)
+        initialize_housing(self)
         initialize_economy(self)
+        initialize_banking(self)
+        initialize_justice(self)
+        initialize_communications(self)
+        initialize_neighborhoods(self)
+        initialize_crime(self)
         self._emit("simulation_started", "La ville commence une nouvelle journée.")
 
     @property
@@ -198,15 +265,20 @@ class World:
 
         self._update_needs()
         update_economy(self)
+        update_banking(self)
+        update_housing(self)
         update_social_calendar(self)
         self._plan_activities()
         self._move_walkers()
         self._move_buses()
         self._move_police_units()
+        update_neighborhoods(self)
+        update_crime(self)
         self._move_cars()
         self._resolve_activities()
         update_work_and_consumption(self)
         update_health(self)
+        update_communications(self)
         self._resolve_social_life()
         resolve_household_life(self)
         self._resolve_incidents()
@@ -224,6 +296,8 @@ class World:
         self.hires_today = 0
         self.layoffs_today = 0
         self.resignations_today = 0
+        self.moves_today = 0
+        close_neighborhood_day(self, self.day - 1)
         close_economic_day(self, self.day - 1)
         self.bus_boardings_today = 0
         self.traffic_delay_today = 0
@@ -238,6 +312,11 @@ class World:
         self.shopping_trips_today = 0
         self.police_warnings_today = 0
         self.police_detentions_today = 0
+        self.bank_loans_issued_today = 0.0
+        self.bank_defaults_today = 0.0
+        reset_justice_day(self)
+        reset_communication_day(self)
+        reset_crime_day(self)
         self.medical_cases_today = 0
         self.ambulance_dispatches_today = 0
         self.medical_wait_minutes_today = 0
@@ -331,13 +410,18 @@ class World:
             reason: str
 
             if citizen.detained_until_tick is not None and self.tick < citizen.detained_until_tick:
-                station = self._first_building(BuildingType.POLICE)
-                target_id = station.id if station is not None else citizen.home_id
+                detention_building = (
+                    self._first_building(BuildingType.DETENTION_CENTER)
+                    if citizen.current_detention_type == "judicial_detention"
+                    else self._first_building(BuildingType.POLICE)
+                )
+                target_id = detention_building.id if detention_building is not None else citizen.home_id
                 planned = Activity.DETAINED
                 detention_label = {
                     "temporary_cell": "mise en cellule",
                     "sobering_cell": "cellule de dégrisement",
                     "custody": "garde à vue",
+                    "judicial_detention": "détention judiciaire",
                 }.get(citizen.current_detention_type, "rétention")
                 reason = f"La personne fait l'objet d'une {detention_label}."
             else:
@@ -345,7 +429,12 @@ class World:
                     citizen.detained_until_tick = None
                     citizen.current_detention_type = None
 
-                if self.hour < 6 or self.hour >= 23:
+                if community_service_due(self, citizen.id) and weekday(self) <= 5 and 18 <= self.hour < 20:
+                    public_site = self._first_building(BuildingType.PUBLIC)
+                    target_id = public_site.id if public_site is not None else citizen.home_id
+                    planned = Activity.COMMUNITY_SERVICE
+                    reason = "Une plage de travail d’intérêt général est planifiée."
+                elif self.hour < 6 or self.hour >= 23:
                     target_id = citizen.home_id
                     planned = Activity.SLEEPING
                     reason = "Il est temps de dormir."
@@ -399,6 +488,15 @@ class World:
                         reason = "Aucune obligation urgente : retour au domicile."
 
             target = self.buildings[target_id]
+            forbidden_contact_present = any(
+                other_id != citizen.id and contact_forbidden(self, citizen.id, other_id)
+                for other_id in target.occupants
+            )
+            if forbidden_contact_present and 6 <= self.hour < 23 and park is not None:
+                target_id = park.id
+                target = park
+                planned = Activity.RELAXING
+                reason = "L’interdiction de contact impose une destination alternative."
             trip_is_missing = (
                 citizen.travel_stage == TravelStage.IDLE
                 and (citizen.x, citizen.y) != target.entrance
@@ -668,10 +766,10 @@ class World:
             if len(bus.passenger_ids) >= bus.capacity:
                 break
             citizen = self.citizens[citizen_id]
-            if citizen.money < line.fare:
+            if available_funds(citizen) < line.fare:
                 self._fallback_to_walking(citizen)
                 continue
-            citizen.money = round(citizen.money - line.fare, 2)
+            withdraw(self, citizen, line.fare, label=f"Ticket {line.name}", transaction_type="transport")
             citizen.active_vehicle_id = bus.id
             citizen.travel_stage = TravelStage.ON_BUS
             citizen.activity = Activity.RIDING_BUS
@@ -727,7 +825,7 @@ class World:
             if unit.vehicle_type != VehicleType.POLICE:
                 continue
 
-            if unit.status in {VehicleStatus.RESPONDING, VehicleStatus.RETURNING}:
+            if unit.status in {VehicleStatus.RESPONDING, VehicleStatus.RETURNING, VehicleStatus.IN_SERVICE}:
                 for _ in range(self.CAR_SPEED + 1):
                     if unit.route_index >= len(unit.route):
                         break
@@ -744,7 +842,10 @@ class World:
                 if unit.route_index < len(unit.route):
                     continue
 
-                if unit.status == VehicleStatus.RESPONDING and unit.incident_id is not None:
+                if unit.status == VehicleStatus.IN_SERVICE:
+                    continue_patrol(self, unit)
+                    self._sync_police_crew(unit)
+                elif unit.status == VehicleStatus.RESPONDING and unit.incident_id is not None:
                     incident = self.incidents.get(unit.incident_id)
                     if incident is None or incident.status == IncidentStatus.EXPIRED:
                         self._send_police_home(unit)
@@ -755,6 +856,7 @@ class World:
                     incident.police_arrival_tick = self.tick
                     response_minutes = max(0, self.tick - (incident.dispatched_tick or self.tick))
                     self.police_response_minutes_today += response_minutes
+                    record_police_response(self, incident, response_minutes)
                     self._emit(
                         "police_arrived",
                         f"Une unité de police arrive sur l'incident « {incident.title} ».",
@@ -791,6 +893,7 @@ class World:
             unit.incident_id = None
             return
         unit.status = VehicleStatus.RETURNING
+        unit.patrol_neighborhood_id = None
         unit.route = road_path((unit.x, unit.y), station.entrance, self.road_cells)
         unit.route_index = 0
         unit.target_building_id = station.id
@@ -947,6 +1050,7 @@ class World:
         investigation = Investigation(
             id=self._next_investigation_id,
             incident_id=incident.id,
+            complaint_id=None,
             status=InvestigationStatus.OPEN,
             opened_tick=self.tick,
             updated_tick=self.tick,
@@ -954,6 +1058,7 @@ class World:
         self._next_investigation_id += 1
         self.investigations[investigation.id] = investigation
         incident.investigation_id = investigation.id
+        link_investigation(self, investigation, incident)
 
         for witness_id in incident.witness_ids[:4]:
             witness = self.citizens.get(witness_id)
@@ -1022,10 +1127,20 @@ class World:
     def _charges_for_incident(self, incident: Incident) -> list[str]:
         mapping = {
             "theft": ["vol"],
+            "robbery": ["vol à main armée", "association de malfaiteurs"],
+            "extortion": ["extorsion en bande organisée"],
+            "kidnapping": ["enlèvement", "séquestration", "demande de rançon"],
             "fight": ["violences réciproques"],
             "assault": ["violences volontaires"],
             "serious_assault": ["violences volontaires aggravées"],
             "heated_dispute": ["trouble à l'ordre public"],
+            "drug_dealing": ["trafic de stupéfiants", "association de malfaiteurs"],
+            "arms_trafficking": ["trafic d'armes", "association de malfaiteurs"],
+            "illegal_goods_trafficking": ["recel en bande organisée"],
+            "criminal_market_raid": ["trafic en bande organisée"],
+            "turf_war": ["violences en bande organisée", "association de malfaiteurs"],
+            "money_laundering": ["blanchiment d'argent"],
+            "corruption": ["corruption active"],
         }
         return mapping.get(incident.incident_type, ["infraction liée à l'incident"])
 
@@ -1059,18 +1174,7 @@ class World:
             suspect.current_detention_type = "custody"
         self.arrests_today += 1
 
-        case = JudicialCase(
-            id=self._next_case_id,
-            investigation_id=investigation.id,
-            incident_id=incident.id,
-            defendant_id=suspect.id,
-            charges=self._charges_for_incident(incident),
-            status=JudicialCaseStatus.AWAITING_HEARING,
-            filed_tick=self.tick,
-            hearing_tick=self.tick + self.rng.randint(720, 2160),
-            evidence_score=investigation.confidence,
-        )
-        self._next_case_id += 1
+        case = build_case(self, investigation, incident, suspect)
         self.judicial_cases[case.id] = case
         investigation.case_id = case.id
         investigation.status = InvestigationStatus.REFERRED
@@ -1086,84 +1190,7 @@ class World:
         )
 
     def _advance_justice(self) -> None:
-        justice_hour = self.total_minutes // 60
-        if getattr(self, "_last_justice_hour", -1) == justice_hour:
-            return
-        self._last_justice_hour = justice_hour
-
-        for investigation in self.investigations.values():
-            if investigation.status not in {InvestigationStatus.OPEN, InvestigationStatus.SUSPECT_IDENTIFIED}:
-                continue
-            if self.tick - investigation.updated_tick < 360:
-                continue
-            incident = self.incidents.get(investigation.incident_id)
-            if incident is None:
-                continue
-            if investigation.lead_suspect_id is None and incident.offender_id is not None and self.rng.random() < 0.45:
-                investigation.lead_suspect_id = incident.offender_id
-                investigation.suspect_ids.append(incident.offender_id)
-                investigation.status = InvestigationStatus.SUSPECT_IDENTIFIED
-            reliability = self.rng.uniform(0.35, 0.72)
-            self._add_evidence(
-                investigation,
-                "follow_up",
-                "Vérification complémentaire réalisée par les enquêteurs.",
-                reliability,
-                citizen_id=investigation.lead_suspect_id,
-            )
-            investigation.confidence = self._investigation_confidence(investigation)
-            if investigation.lead_suspect_id is not None and investigation.confidence >= 72.0:
-                self._arrest_suspect(investigation, reason="recoupements de l'enquête")
-            elif self.tick - investigation.opened_tick > 5 * 24 * 60 and investigation.confidence < 45.0:
-                investigation.status = InvestigationStatus.CLOSED
-                investigation.notes.append("Enquête classée faute d'éléments suffisants.")
-
-        for case in self.judicial_cases.values():
-            if case.status != JudicialCaseStatus.AWAITING_HEARING or self.tick < case.hearing_tick:
-                continue
-            defendant = self.citizens.get(case.defendant_id)
-            incident = self.incidents.get(case.incident_id)
-            if defendant is None or incident is None:
-                case.status = JudicialCaseStatus.DISMISSED
-                case.verdict = "classé"
-                continue
-            conviction_threshold = 61.0 + self.rng.uniform(-8.0, 8.0)
-            case.decided_tick = self.tick
-            if case.evidence_score >= conviction_threshold:
-                case.status = JudicialCaseStatus.DECIDED
-                case.verdict = "coupable"
-                if incident.incident_type == "theft":
-                    fine = round(self.rng.uniform(90.0, 360.0), 2)
-                    defendant.money = round(max(0.0, defendant.money - fine), 2)
-                    case.sentence = f"amende de {fine:.0f} € et probation"
-                elif incident.incident_type == "serious_assault":
-                    detention = self.rng.randint(2, 5) * 24 * 60
-                    defendant.detained_until_tick = max(defendant.detained_until_tick or 0, self.tick + detention)
-                    case.sentence = f"détention de {detention // (24 * 60)} jours"
-                else:
-                    detention = self.rng.randint(6, 18) * 60
-                    defendant.detained_until_tick = max(defendant.detained_until_tick or 0, self.tick + detention)
-                    case.sentence = f"détention de {detention // 60} heures et probation"
-                message = f"Le dossier #{case.id} est jugé : {defendant.full_name} est déclaré coupable ({case.sentence})."
-            else:
-                case.status = JudicialCaseStatus.DISMISSED
-                case.verdict = "relaxé"
-                case.sentence = "aucune peine"
-                defendant.detained_until_tick = None
-                message = f"Le dossier #{case.id} est jugé : {defendant.full_name} est relaxé faute de preuves suffisantes."
-            self._update_conflict_outcome(incident, message)
-            investigation = self.investigations.get(case.investigation_id)
-            if investigation is not None:
-                investigation.status = InvestigationStatus.CLOSED
-                investigation.updated_tick = self.tick
-            self._emit(
-                "case_decided",
-                message,
-                citizen_ids=(defendant.id, *incident.victim_ids),
-                building_id=incident.building_id,
-                severity="warning" if case.verdict == "coupable" else "info",
-                incident_id=incident.id,
-            )
+        advance_justice(self)
 
     def _move_cars(self) -> None:
         occupancy = self._moving_vehicle_occupancy()
@@ -1235,7 +1262,7 @@ class World:
                     vehicle.target_building_id = None
                     vehicle.current_building_id = destination.id
                     fuel_cost = round(citizen.trip_distance * 0.05, 2)
-                    citizen.money = round(max(0.0, citizen.money - fuel_cost), 2)
+                    withdraw(self, citizen, fuel_cost, label="Carburant du trajet", transaction_type="transport")
 
         citizen.active_vehicle_id = None
         citizen.last_transport_mode = citizen.transport_mode
@@ -1273,8 +1300,8 @@ class World:
             citizen.activity = citizen.planned_activity
             if citizen.activity == Activity.EATING:
                 citizen.needs.hunger = max(0.0, citizen.needs.hunger - 0.8)
-                if self.minute == 0 and citizen.money >= 8:
-                    citizen.money = round(citizen.money - 8.0, 2)
+                if self.minute == 0 and available_funds(citizen) >= 8:
+                    withdraw(self, citizen, 8.0, label=f"Repas à {destination.name}", transaction_type="meal", counterparty_id=destination.id)
             elif citizen.activity == Activity.WORKING:
                 # La présence, la performance et la paie sont gérées par le système de travail.
                 citizen.needs.stress = min(100.0, citizen.needs.stress + 0.004)
@@ -1335,9 +1362,11 @@ class World:
             status=status,
             reported=reported,
             conflict_level=conflict_level,
+            neighborhood_id=neighborhood_at(self, x, y).id,
         )
         self._next_incident_id += 1
         self.incidents[incident.id] = incident
+        record_incident(self, incident)
         self._emit(
             incident_type,
             description,
@@ -1384,7 +1413,7 @@ class World:
         incident_type, title, severity, lifetime = labels[level]
         if repeat:
             title = f"{title} répétée"
-        reported_probability = {1: 0.05, 2: 0.28, 3: 0.68, 4: 0.9, 5: 0.99}[level]
+        reported_probability = reporting_probability(self, building.x, building.y, len(witnesses), {1: 0.05, 2: 0.28, 3: 0.68, 4: 0.9, 5: 0.99}[level])
         reported = bool(witnesses) and self.rng.random() < reported_probability
 
         injury_severity = {3: 28.0, 4: 58.0, 5: 86.0}.get(level, 0.0)
@@ -1488,13 +1517,16 @@ class World:
             for building in self.buildings.values()
             if building.building_type in {BuildingType.SHOP, BuildingType.CAFE}
         ]
-        if not shops or self.rng.random() >= 0.12:
+        if not shops:
             return
 
         building = self.rng.choice(shops)
+        visible_witnesses = max(0, len(building.occupants) - 1)
+        if self.rng.random() >= 0.12 * crime_opportunity(self, building, visible_witnesses):
+            return
         possible_offenders = [
             self.citizens[citizen_id]
-            for citizen_id in building.occupants
+            for citizen_id in sorted(building.occupants)
             if self.citizens[citizen_id].money < 250.0
         ]
         if not possible_offenders:
@@ -1508,7 +1540,7 @@ class World:
             citizen_id for citizen_id in sorted(building.occupants)
             if citizen_id != offender.id
         )[:8]
-        reported = bool(witnesses) and self.rng.random() < 0.7
+        reported = bool(witnesses) and self.rng.random() < reporting_probability(self, building.x, building.y, len(witnesses), 0.48)
         suffix = "Le vol est signalé." if reported else "Personne ne semble l'avoir remarqué."
         self.create_incident(
             incident_type="theft",
@@ -1531,7 +1563,7 @@ class World:
         available_units = [
             vehicle for vehicle in self.vehicles.values()
             if vehicle.vehicle_type == VehicleType.POLICE
-            and vehicle.status == VehicleStatus.PARKED
+            and vehicle.status in {VehicleStatus.PARKED, VehicleStatus.IN_SERVICE}
             and len(vehicle.crew_ids) >= min(2, vehicle.capacity)
         ]
         if not available_units:
@@ -1543,8 +1575,13 @@ class World:
             ),
             key=lambda incident: (incident.severity != "danger", incident.created_tick, incident.id),
         )
-        for incident, unit in zip(pending, available_units):
+        for incident in pending:
+            if not available_units:
+                break
+            unit = min(available_units, key=lambda row: (abs(row.x - incident.x) + abs(row.y - incident.y), row.id))
+            available_units.remove(unit)
             unit.status = VehicleStatus.RESPONDING
+            unit.patrol_neighborhood_id = None
             unit.incident_id = incident.id
             unit.service_started_tick = self.tick
             unit.current_building_id = None
@@ -1805,6 +1842,8 @@ class World:
                 "offensesCommitted": citizen.offenses_committed,
                 "victimizations": citizen.victimizations,
                 "arrests": citizen.arrests,
+                "criminalRecordCount": citizen.criminal_record_count,
+                "probationViolations": citizen.probation_violations,
             },
             "needs": {
                 "hunger": round(citizen.needs.hunger, 1),
@@ -1852,6 +1891,7 @@ class World:
                 }
                 if household else None
             ),
+            "communications": citizen_communications(self, citizen.id),
             "social": {
                 "interactionsToday": citizen.social_interactions_today,
                 "invitationsSent": citizen.invitations_sent,
@@ -1888,7 +1928,26 @@ class World:
                     for investigation in citizen_investigations[:12]
                 ],
                 "cases": [self._case_summary(case) for case in citizen_cases[:12]],
+                "sentences": [
+                    sentence_summary(self, self.sentences[sentence_id])
+                    for sentence_id in reversed(citizen.sentence_ids)
+                    if sentence_id in self.sentences
+                ][:20],
+                "criminalRecordCount": citizen.criminal_record_count,
+                "probationViolations": citizen.probation_violations,
+                "communityServiceMinutes": citizen.community_service_minutes,
+            "phoneNumber": citizen.phone_number,
+            "emailAddress": citizen.email_address,
+            "communicationIds": list(citizen.communication_ids),
+            "unreadCommunicationIds": list(citizen.unread_communication_ids),
+            "bankBalance": citizen.bank_balance, "savingsBalance": citizen.savings_balance, "bankDebt": citizen.bank_debt, "creditScore": citizen.credit_score,
+            "bankingHistory": [{"tick": item.tick, "transactionType": item.transaction_type, "amount": item.amount, "balanceAfter": item.balance_after, "label": item.label, "counterpartyId": item.counterparty_id} for item in citizen.banking_history],
+            "isHomeless": citizen.is_homeless, "homelessSinceTick": citizen.homeless_since_tick, "previousHomeId": citizen.previous_home_id, "foodInsecurityDays": citizen.food_insecurity_days,
+            "crimeOrganizationId": citizen.crime_organization_id, "kidnappedUntilTick": citizen.kidnapped_until_tick, "kidnappedByOrganizationId": citizen.kidnapped_by_organization_id,
             },
+            "banking": {"cash": citizen.money, "balance": citizen.bank_balance, "savings": citizen.savings_balance, "debt": citizen.bank_debt, "creditScore": round(citizen.credit_score, 1), "history": [{"tick": item.tick, "transactionType": item.transaction_type, "amount": item.amount, "balanceAfter": item.balance_after, "label": item.label, "counterpartyId": item.counterparty_id} for item in reversed(citizen.banking_history[-30:])]},
+            "housingSituation": {"isHomeless": citizen.is_homeless, "homelessSinceTick": citizen.homeless_since_tick, "previousHomeId": citizen.previous_home_id, "foodInsecurityDays": citizen.food_insecurity_days},
+            "organizedCrime": {"organizationId": citizen.crime_organization_id, "organizationName": self.crime_organizations[citizen.crime_organization_id].name if citizen.crime_organization_id in self.crime_organizations else None, "factionType": self.crime_organizations[citizen.crime_organization_id].faction_type.value if citizen.crime_organization_id in self.crime_organizations else None, "role": citizen.criminal_role.value if citizen.criminal_role else None, "criminalIncomeToday": round(citizen.criminal_income_today, 2), "illegalSpendingToday": round(citizen.illegal_spending_today, 2), "illegalPurchaseCount": citizen.illegal_purchase_count, "substanceUseRisk": round(citizen.substance_use_risk, 1), "addictionLevel": round(citizen.addiction_level, 1), "intimidationLevel": round(citizen.intimidation_level, 1), "criminalContacts": [self._citizen_ref(contact_id) for contact_id in citizen.criminal_contact_ids[-20:]], "kidnappedUntilTick": citizen.kidnapped_until_tick, "kidnappedByOrganizationId": citizen.kidnapped_by_organization_id},
             "transport": {
                 "mode": citizen.transport_mode.value,
                 "lastMode": citizen.last_transport_mode.value,
@@ -1973,62 +2032,7 @@ class World:
         }
 
     def get_building_detail(self, building_id: int) -> dict[str, Any]:
-        building = self.buildings[building_id]
-        employees = sorted(
-            (citizen for citizen in self.citizens.values() if citizen.workplace_id == building.id),
-            key=lambda citizen: (not is_on_duty(self, citizen), citizen.full_name),
-        )
-        occupants = [self.citizens[citizen_id] for citizen_id in sorted(building.occupants) if citizen_id in self.citizens]
-        return {
-            "kind": "building",
-            **self._building_to_dict(building),
-            "employees": [
-                {
-                    "id": employee.id,
-                    "name": employee.full_name,
-                    "jobTitle": employee.job_title,
-                    "onDuty": is_on_duty(self, employee),
-                    "shift": f"{employee.work_start_hour:02d}:00–{employee.work_end_hour:02d}:00",
-                    "performance": round(employee.job_performance, 1),
-                    "satisfaction": round(employee.job_satisfaction, 1),
-                }
-                for employee in employees
-            ],
-            "occupants": [{"id": person.id, "name": person.full_name} for person in occupants[:40]],
-            "healthcare": {
-                "beds": building.medical_beds,
-                "queue": [self._health_case_summary(case_id) for case_id in building.medical_queue if case_id in self.health_cases],
-                "hospitalized": [self._citizen_ref(citizen_id) for citizen_id in sorted(building.hospitalized_ids)],
-                "patientsTreatedToday": building.patients_treated_today,
-                "ambulances": [self._vehicle_summary(vehicle) for vehicle in self.vehicles.values() if vehicle.vehicle_type == VehicleType.AMBULANCE],
-            } if building.building_type == BuildingType.HOSPITAL else None,
-            "services": {
-                "operational": building_operational(self, building.id),
-                "staffOnDuty": staff_count(self, building.id),
-                "employeesRequired": building.employees_required,
-                "foodStock": round(building.food_stock, 1),
-                "goodsStock": round(building.goods_stock, 1),
-                "revenueToday": round(building.revenue_today, 2),
-            },
-            "finance": {
-                "status": building.business_status.value,
-                "cash": round(building.cash, 2),
-                "totalRevenue": round(building.total_revenue, 2),
-                "payrollToday": round(building.payroll_today, 2),
-                "fixedCostsToday": round(building.fixed_costs_today, 2),
-                "resultToday": round(building.result_today, 2),
-                "serviceLevel": round(building.service_level, 1),
-                "employeeCapacity": building.employee_capacity,
-                "targetEmployees": building.target_employees,
-                "openPositions": building.open_positions,
-                "financialHistory": [
-                    self._business_financial_to_dict(record) for record in reversed(building.financial_history)
-                ][:14],
-                "employmentHistory": [
-                    self._employment_record_to_dict(record) for record in reversed(building.employment_events)
-                ][:20],
-            },
-        }
+        return building_detail(self, building_id)
 
     def get_enterprise_detail(self, building_id: int) -> dict[str, Any]:
         building = self.buildings[building_id]
@@ -2039,8 +2043,17 @@ class World:
     def get_economy_overview(self) -> dict[str, object]:
         return economy_overview(self)
 
+    def get_banking_overview(self) -> dict[str, object]:
+        return banking_overview(self)
+
     def get_health_overview(self) -> dict[str, object]:
         return health_overview(self)
+
+    def get_housing_overview(self) -> dict[str, object]:
+        return housing_overview(self)
+
+    def get_household_detail(self, household_id: int) -> dict[str, Any]:
+        return household_detail(self, household_id)
 
     def _health_case_summary(self, case_id: int) -> dict[str, object]:
         from .health import case_summary
@@ -2051,6 +2064,7 @@ class World:
         return {
             "id": case.id,
             "investigationId": case.investigation_id,
+            "complaintId": case.complaint_id,
             "incidentId": case.incident_id,
             "defendant": self._citizen_ref(case.defendant_id),
             "charges": list(case.charges),
@@ -2061,6 +2075,12 @@ class World:
             "decidedTick": case.decided_tick,
             "verdict": case.verdict,
             "sentence": case.sentence,
+            "prosecutorReviewTick": case.prosecutor_review_tick,
+            "prosecutorDecision": case.prosecutor_decision,
+            "priority": case.priority,
+            "delayCount": case.delay_count,
+            "sentences": [sentence_summary(self, self.sentences[sentence_id]) for sentence_id in case.sentence_ids if sentence_id in self.sentences],
+            "timeline": [{"tick": row.tick, "eventType": row.event_type, "label": row.label, "detail": row.detail} for row in case.timeline],
             "defendantName": defendant.full_name if defendant else None,
         }
 
@@ -2071,6 +2091,11 @@ class World:
         return {
             "id": investigation.id,
             "incidentId": investigation.incident_id,
+            "complaintId": investigation.complaint_id,
+            "complaint": (
+                {"id": complaint.id, "status": complaint.status.value, "filedTick": complaint.filed_tick, "description": complaint.description, "dismissalReason": complaint.dismissal_reason}
+                if (complaint := self.complaints.get(investigation.complaint_id or -1)) is not None else None
+            ),
             "status": investigation.status.value,
             "openedTick": investigation.opened_tick,
             "updatedTick": investigation.updated_tick,
@@ -2106,48 +2131,29 @@ class World:
     def get_case_detail(self, case_id: int) -> dict[str, Any]:
         return {"kind": "case", **self._case_summary(self.judicial_cases[case_id])}
 
+    def get_communication_overview(self) -> dict[str, Any]:
+        return communication_overview(self)
+
+    def get_citizen_communications(self, citizen_id: int) -> dict[str, Any]:
+        return citizen_communications(self, citizen_id)
+
+    def get_neighborhood_overview(self) -> dict[str, Any]:
+        return neighborhood_overview(self)
+
+    def get_neighborhood_detail(self, neighborhood_id: int) -> dict[str, Any]:
+        return neighborhood_detail(self, neighborhood_id)
+
+    def get_justice_overview(self) -> dict[str, Any]:
+        return justice_overview(self)
+
+    def get_crime_overview(self) -> dict[str, Any]:
+        return crime_overview(self)
+
+    def get_crime_faction_detail(self, organization_id: int) -> dict[str, Any]:
+        return crime_faction_detail(self, organization_id)
+
     def get_social_graph(self) -> dict[str, Any]:
-        edges: list[dict[str, Any]] = []
-        seen: set[tuple[int, int]] = set()
-        for citizen in self.citizens.values():
-            for relationship in citizen.relationships.values():
-                pair = tuple(sorted((citizen.id, relationship.other_id)))
-                if pair in seen or relationship.familiarity < 8:
-                    continue
-                seen.add(pair)
-                edges.append({
-                    "source": pair[0],
-                    "target": pair[1],
-                    "status": relationship_label(relationship),
-                    "affection": round(relationship.affection, 1),
-                    "trust": round(relationship.trust, 1),
-                    "familiarity": round(relationship.familiarity, 1),
-                    "conflictLevel": relationship.conflict_level,
-                    "conflictLabel": conflict_label(relationship),
-                })
-        return {
-            "tick": self.tick,
-            "nodes": [
-                {
-                    "id": citizen.id,
-                    "name": citizen.full_name,
-                    "householdId": citizen.household_id,
-                    "workplaceId": citizen.workplace_id,
-                    "friendCount": sum(
-                        1 for relationship in citizen.relationships.values()
-                        if relationship_label(relationship) in {"friend", "close_friend"}
-                    ),
-                    "rivalCount": sum(
-                        1 for relationship in citizen.relationships.values()
-                        if relationship_label(relationship) == "rival"
-                    ),
-                    "conflictPropensity": round(conflict_propensity(citizen) * 100.0, 1),
-                    "temperament": temperament_label(citizen),
-                }
-                for citizen in self.citizens.values()
-            ],
-            "edges": edges,
-        }
+        return social_graph(self)
 
     def _citizen_ref(self, citizen_id: int | None) -> dict[str, Any] | None:
         if citizen_id is None or citizen_id not in self.citizens:
@@ -2196,7 +2202,7 @@ class World:
 
     def export_state(self) -> dict[str, Any]:
         return {
-            "version": 8,
+            "version": SAVE_VERSION,
             "seed": self.seed,
             "tick": self.tick,
             "day": self.day,
@@ -2207,6 +2213,9 @@ class World:
             "nextEvidenceId": self._next_evidence_id,
             "nextInvestigationId": self._next_investigation_id,
             "nextCaseId": self._next_case_id,
+            "nextComplaintId": self._next_complaint_id,
+            "nextSentenceId": self._next_sentence_id,
+            "nextCommunicationId": self._next_communication_id,
             "nextSocialEventId": self._next_social_event_id,
             "nextJobApplicationId": self._next_job_application_id,
             "nextHealthCaseId": self._next_health_case_id,
@@ -2216,7 +2225,12 @@ class World:
             "lastIncidentHour": self._last_incident_hour,
             "lastTrafficEventHour": self._last_traffic_event_hour,
             "lastJusticeHour": getattr(self, "_last_justice_hour", -1),
+            "lastCommunicationSlot": self._last_communication_slot,
+            "lastNeighborhoodHour": self._last_neighborhood_hour,
             "lastLaborMarketDay": self._last_labor_market_day,
+            "lastHousingDay": self._last_housing_day,
+            "lastBankingDay": self._last_banking_day,
+            "movesToday": self.moves_today,
             "tripCountsToday": dict(self.trip_counts_today),
             "busBoardingsToday": self.bus_boardings_today,
             "trafficDelayToday": self.traffic_delay_today,
@@ -2227,6 +2241,14 @@ class World:
             "policeResponseMinutesToday": self.police_response_minutes_today,
             "arrestsToday": self.arrests_today,
             "casesFiledToday": self.cases_filed_today,
+            "hearingsToday": self.hearings_today,
+            "casesDismissedToday": self.cases_dismissed_today,
+            "sentencesStartedToday": self.sentences_started_today,
+            "probationViolationsToday": self.probation_violations_today,
+            "communicationsSentToday": self.communications_sent_today,
+            "communicationsDeliveredToday": self.communications_delivered_today,
+            "phoneCallsToday": self.phone_calls_today,
+            "communicationRepliesToday": self.communication_replies_today,
             "shopSalesToday": self.shop_sales_today,
             "shoppingTripsToday": self.shopping_trips_today,
             "policeWarningsToday": self.police_warnings_today,
@@ -2235,12 +2257,33 @@ class World:
             "layoffsToday": self.layoffs_today,
             "resignationsToday": self.resignations_today,
             "publicSpendingTotal": self.public_spending_total,
+            "bankLoansIssuedToday": self.bank_loans_issued_today,
+            "bankDefaultsToday": self.bank_defaults_today,
             "lastHealthHour": self._last_health_hour,
             "medicalCasesToday": self.medical_cases_today,
             "ambulanceDispatchesToday": self.ambulance_dispatches_today,
             "medicalWaitMinutesToday": self.medical_wait_minutes_today,
             "rngState": self.rng.getstate(),
             "healthRngState": self.health_rng.getstate(),
+            "communicationRngState": self.communication_rng.getstate(),
+            "neighborhoodRngState": self.neighborhood_rng.getstate(),
+            "bankingRngState": self.banking_rng.getstate(),
+            "crimeRngState": self.crime_rng.getstate(),
+            "nextCrimeOperationId": self._next_crime_operation_id,
+            "lastCrimeHour": self._last_crime_hour,
+            "lastCrimeFactionDay": self._last_crime_faction_day,
+            "nextCriminalMarketId": self._next_criminal_market_id,
+            "nextIllegalTransactionId": self._next_illegal_transaction_id,
+            "lastIllegalMarketSlot": self._last_illegal_market_slot,
+            "lastIllegalMarketDay": self._last_illegal_market_day,
+            "organizedCrimesToday": self.organized_crimes_today,
+            "ransomPaidToday": self.ransom_paid_today,
+            "illegalSalesToday": self.illegal_sales_today,
+            "illegalRevenueToday": self.illegal_revenue_today,
+            "drugSalesToday": self.drug_sales_today,
+            "policeSeizuresToday": self.police_seizures_today,
+            "crimeHistory": self.crime_history,
+            "neighborhoods": [self._export_neighborhood(item) for item in self.neighborhoods.values()],
             "buildings": [self._export_building(building) for building in self.buildings.values()],
             "citizens": [self._export_citizen(citizen) for citizen in self.citizens.values()],
             "households": [self._export_household(household) for household in self.households.values()],
@@ -2251,15 +2294,23 @@ class World:
             "evidence": [self._export_evidence(item) for item in self.evidence.values()],
             "investigations": [self._export_investigation(item) for item in self.investigations.values()],
             "judicialCases": [self._export_case(item) for item in self.judicial_cases.values()],
+            "complaints": [self._export_complaint(item) for item in self.complaints.values()],
+            "sentences": [self._export_sentence(item) for item in self.sentences.values()],
+            "communications": [self._export_communication(item) for item in self.communications.values()],
+            "communicationQueue": [list(item) for item in self.communication_queue],
             "jobApplications": [self._export_job_application(item) for item in self.job_applications.values()],
+            "crimeOrganizations": [{"id": item.id, "name": item.name, "leaderId": item.leader_id, "memberIds": item.member_ids, "territoryId": item.territory_id, "territoryIds": item.territory_ids, "treasury": item.treasury, "notoriety": item.notoriety, "policeHeat": item.police_heat, "active": item.active, "operationIds": item.operation_ids, "factionType": item.faction_type.value, "roleByMember": {str(key): value.value for key,value in item.role_by_member.items()}, "rivalIds": item.rival_ids, "allyIds": item.ally_ids, "specialties": [value.value for value in item.specialties], "inventory": item.inventory, "influenceByNeighborhood": {str(key): value for key,value in item.influence_by_neighborhood.items()}, "cohesion": item.cohesion, "violence": item.violence, "sophistication": item.sophistication, "recruitmentPressure": item.recruitment_pressure, "launderingCapacity": item.laundering_capacity, "revenueToday": item.revenue_today, "expensesToday": item.expenses_today, "membersRecruited": item.members_recruited} for item in self.crime_organizations.values()],
+            "crimeOperations": [{"id": item.id, "organizationId": item.organization_id, "operationType": item.operation_type.value, "status": item.status.value, "plannedTick": item.planned_tick, "perpetratorIds": item.perpetrator_ids, "victimIds": item.victim_ids, "buildingId": item.building_id, "amount": item.amount, "incidentId": item.incident_id, "startedTick": item.started_tick, "resolvedTick": item.resolved_tick, "ransomDueTick": item.ransom_due_tick, "outcome": item.outcome, "commodity": item.commodity.value if item.commodity else None, "quantity": item.quantity, "neighborhoodId": item.neighborhood_id, "detected": item.detected} for item in self.crime_operations.values()],
+            "criminalMarkets": [{"id": item.id, "organizationId": item.organization_id, "neighborhoodId": item.neighborhood_id, "commodity": item.commodity.value, "supply": item.supply, "demand": item.demand, "unitPrice": item.unit_price, "policePressure": item.police_pressure, "transactionsToday": item.transactions_today, "revenueToday": item.revenue_today, "seizedToday": item.seized_today, "active": item.active} for item in self.criminal_markets.values()],
+            "illegalTransactions": [{"id": item.id, "tick": item.tick, "organizationId": item.organization_id, "marketId": item.market_id, "sellerId": item.seller_id, "buyerId": item.buyer_id, "commodity": item.commodity.value, "quantity": item.quantity, "unitPrice": item.unit_price, "total": item.total, "neighborhoodId": item.neighborhood_id, "buildingId": item.building_id, "detected": item.detected, "incidentId": item.incident_id} for item in self.illegal_transactions.values()],
+            "crimeRelations": [{"firstId": item.first_id, "secondId": item.second_id, "tension": item.tension, "trust": item.trust, "conflictCount": item.conflict_count, "lastConflictTick": item.last_conflict_tick, "truceUntilTick": item.truce_until_tick} for item in self.crime_relations.values()],
             "events": [self._export_event(event) for event in self.events],
         }
 
     @classmethod
     def from_state(cls, state: dict[str, Any]) -> "World":
-        version = int(state.get("version", 0))
-        if version != 8:
-            raise ValueError("Version de sauvegarde non prise en charge.")
+        validate_save_version(state)
+        version = SAVE_VERSION
 
         world = cls.__new__(cls)
         world.seed = int(state["seed"])
@@ -2267,6 +2318,14 @@ class World:
         world.rng.setstate(cls._nested_tuple(state["rngState"]))
         world.health_rng = random.Random()
         world.health_rng.setstate(cls._nested_tuple(state["healthRngState"]))
+        world.communication_rng = random.Random()
+        world.communication_rng.setstate(cls._nested_tuple(state["communicationRngState"]))
+        world.neighborhood_rng = random.Random()
+        world.neighborhood_rng.setstate(cls._nested_tuple(state["neighborhoodRngState"]))
+        world.banking_rng = random.Random()
+        world.banking_rng.setstate(cls._nested_tuple(state["bankingRngState"]))
+        world.crime_rng = random.Random()
+        world.crime_rng.setstate(cls._nested_tuple(state["crimeRngState"]))
         world.tick = int(state["tick"])
         world.day = int(state["day"])
         world.hour = int(state["hour"])
@@ -2276,6 +2335,9 @@ class World:
         world._next_evidence_id = int(state.get("nextEvidenceId", 1))
         world._next_investigation_id = int(state.get("nextInvestigationId", 1))
         world._next_case_id = int(state.get("nextCaseId", 1))
+        world._next_complaint_id = int(state.get("nextComplaintId", 1))
+        world._next_sentence_id = int(state.get("nextSentenceId", 1))
+        world._next_communication_id = int(state.get("nextCommunicationId", 1))
         world._next_social_event_id = int(state.get("nextSocialEventId", 1))
         world._next_job_application_id = int(state.get("nextJobApplicationId", 1))
         world._next_health_case_id = int(state.get("nextHealthCaseId", 1))
@@ -2285,7 +2347,12 @@ class World:
         world._last_incident_hour = int(state.get("lastIncidentHour", -1))
         world._last_traffic_event_hour = int(state.get("lastTrafficEventHour", -1))
         world._last_justice_hour = int(state.get("lastJusticeHour", -1))
+        world._last_communication_slot = int(state.get("lastCommunicationSlot", -1))
+        world._last_neighborhood_hour = int(state.get("lastNeighborhoodHour", -1))
         world._last_labor_market_day = int(state.get("lastLaborMarketDay", 0))
+        world._last_housing_day = int(state.get("lastHousingDay", 0))
+        world._last_banking_day = int(state.get("lastBankingDay", 0))
+        world.moves_today = int(state.get("movesToday", 0))
         world.trip_counts_today = Counter(
             {mode.value: int(state.get("tripCountsToday", {}).get(mode.value, 0)) for mode in TransportMode}
         )
@@ -2298,6 +2365,14 @@ class World:
         world.police_response_minutes_today = int(state.get("policeResponseMinutesToday", 0))
         world.arrests_today = int(state.get("arrestsToday", 0))
         world.cases_filed_today = int(state.get("casesFiledToday", 0))
+        world.hearings_today = int(state.get("hearingsToday", 0))
+        world.cases_dismissed_today = int(state.get("casesDismissedToday", 0))
+        world.sentences_started_today = int(state.get("sentencesStartedToday", 0))
+        world.probation_violations_today = int(state.get("probationViolationsToday", 0))
+        world.communications_sent_today = int(state.get("communicationsSentToday", 0))
+        world.communications_delivered_today = int(state.get("communicationsDeliveredToday", 0))
+        world.phone_calls_today = int(state.get("phoneCallsToday", 0))
+        world.communication_replies_today = int(state.get("communicationRepliesToday", 0))
         world.shop_sales_today = float(state.get("shopSalesToday", 0.0))
         world.shopping_trips_today = int(state.get("shoppingTripsToday", 0))
         world.police_warnings_today = int(state.get("policeWarningsToday", 0))
@@ -2306,6 +2381,22 @@ class World:
         world.layoffs_today = int(state.get("layoffsToday", 0))
         world.resignations_today = int(state.get("resignationsToday", 0))
         world.public_spending_total = float(state.get("publicSpendingTotal", 0.0))
+        world.bank_loans_issued_today = float(state.get("bankLoansIssuedToday", 0.0))
+        world.bank_defaults_today = float(state.get("bankDefaultsToday", 0.0))
+        world._next_crime_operation_id = int(state.get("nextCrimeOperationId", 1))
+        world._last_crime_hour = int(state.get("lastCrimeHour", -1))
+        world._last_crime_faction_day = int(state.get("lastCrimeFactionDay", 0))
+        world._next_criminal_market_id = int(state.get("nextCriminalMarketId", 1))
+        world._next_illegal_transaction_id = int(state.get("nextIllegalTransactionId", 1))
+        world._last_illegal_market_slot = int(state.get("lastIllegalMarketSlot", -1))
+        world._last_illegal_market_day = int(state.get("lastIllegalMarketDay", 0))
+        world.organized_crimes_today = int(state.get("organizedCrimesToday", 0))
+        world.ransom_paid_today = float(state.get("ransomPaidToday", 0.0))
+        world.illegal_sales_today = int(state.get("illegalSalesToday", 0))
+        world.illegal_revenue_today = float(state.get("illegalRevenueToday", 0.0))
+        world.drug_sales_today = int(state.get("drugSalesToday", 0))
+        world.police_seizures_today = float(state.get("policeSeizuresToday", 0.0))
+        world.crime_history = [dict(row) for row in state.get("crimeHistory", [])][-120:]
         world._last_health_hour = int(state.get("lastHealthHour", -1))
         world.medical_cases_today = int(state.get("medicalCasesToday", 0))
         world.ambulance_dispatches_today = int(state.get("ambulanceDispatchesToday", 0))
@@ -2349,6 +2440,15 @@ class World:
                 hospitalized_ids={int(value) for value in row.get("hospitalizedIds", [])},
                 patients_treated_today=int(row.get("patientsTreatedToday", 0)),
                 medical_wait_minutes_today=int(row.get("medicalWaitMinutesToday", 0)),
+                rent_monthly=float(row.get("rentMonthly", 0.0)),
+                housing_condition=float(row.get("housingCondition", 100.0)),
+                comfort=float(row.get("comfort", 50.0)),
+                owner_type=str(row.get("ownerType", "private")),
+                neighborhood_id=int(row.get("neighborhoodId", 0)),
+                bank_reserves=float(row.get("bankReserves", 0.0)),
+                outstanding_loans=float(row.get("outstandingLoans", 0.0)),
+                interest_income=float(row.get("interestIncome", 0.0)),
+                housing_history=[HousingRecord(tick=int(item["tick"]), event_type=str(item["eventType"]), label=str(item["label"]), from_home_id=int(item["fromHomeId"]) if item.get("fromHomeId") is not None else None, to_home_id=int(item["toHomeId"]), reason=str(item["reason"]), rent_before=float(item["rentBefore"]), rent_after=float(item["rentAfter"]), member_ids=[int(value) for value in item.get("memberIds", [])]) for item in row.get("housingHistory", [])],
                 financial_history=[
                     BusinessFinancialRecord(
                         day=int(item["day"]),
@@ -2376,6 +2476,16 @@ class World:
                 ],
             )
             world.buildings[building.id] = building
+
+        world.neighborhoods = {
+            int(row["id"]): Neighborhood(
+                id=int(row["id"]), name=str(row["name"]), x_min=int(row["xMin"]), y_min=int(row["yMin"]), x_max=int(row["xMax"]), y_max=int(row["yMax"]),
+                lighting=float(row["lighting"]), safety_perception=float(row["safetyPerception"]), attractiveness=float(row["attractiveness"]),
+                incidents_today=int(row.get("incidentsToday", 0)), incident_score_today=float(row.get("incidentScoreToday", 0.0)), cumulative_incidents=int(row.get("cumulativeIncidents", 0)),
+                patrol_minutes_today=int(row.get("patrolMinutesToday", 0)), police_responses_today=int(row.get("policeResponsesToday", 0)), police_response_minutes_today=int(row.get("policeResponseMinutesToday", 0)),
+                history=[NeighborhoodRecord(day=int(item["day"]), population=int(item["population"]), average_income=float(item["averageIncome"]), unemployment_rate=float(item["unemploymentRate"]), average_rent=float(item["averageRent"]), commercial_activity=float(item["commercialActivity"]), criminality=float(item["criminality"]), safety_perception=float(item["safetyPerception"]), police_coverage=float(item["policeCoverage"]), average_response_minutes=float(item["averageResponseMinutes"]), healthcare_access=float(item["healthcareAccess"]), commerce_access=float(item["commerceAccess"]), average_transport_minutes=float(item["averageTransportMinutes"]), attractiveness=float(item["attractiveness"]), service_pressure=float(item["servicePressure"])) for item in row.get("history", [])],
+            ) for row in state.get("neighborhoods", [])
+        }
 
         if not any(building.building_type == BuildingType.POLICE for building in world.buildings.values()):
             police_id = max(world.buildings, default=0) + 1
@@ -2532,6 +2642,19 @@ class World:
                     for item in row.get("policeHistory", [])
                 ],
                 current_detention_type=row.get("currentDetentionType"),
+                sentence_ids=[int(value) for value in row.get("sentenceIds", [])],
+                criminal_record_count=int(row.get("criminalRecordCount", 0)),
+                probation_violations=int(row.get("probationViolations", 0)),
+                community_service_minutes=int(row.get("communityServiceMinutes", 0)),
+                phone_number=str(row.get("phoneNumber", "")),
+                email_address=str(row.get("emailAddress", "")),
+                communication_ids=[int(value) for value in row.get("communicationIds", [])],
+                unread_communication_ids=[int(value) for value in row.get("unreadCommunicationIds", [])],
+                bank_balance=float(row.get("bankBalance", 0.0)), savings_balance=float(row.get("savingsBalance", 0.0)), bank_debt=float(row.get("bankDebt", 0.0)), credit_score=float(row.get("creditScore", 60.0)),
+                banking_history=[BankTransaction(tick=int(item["tick"]), transaction_type=str(item["transactionType"]), amount=float(item["amount"]), balance_after=float(item["balanceAfter"]), label=str(item["label"]), counterparty_id=int(item["counterpartyId"]) if item.get("counterpartyId") is not None else None) for item in row.get("bankingHistory", [])],
+                is_homeless=bool(row.get("isHomeless", False)), homeless_since_tick=int(row["homelessSinceTick"]) if row.get("homelessSinceTick") is not None else None, previous_home_id=int(row["previousHomeId"]) if row.get("previousHomeId") is not None else None, food_insecurity_days=int(row.get("foodInsecurityDays", 0)),
+                crime_organization_id=int(row["crimeOrganizationId"]) if row.get("crimeOrganizationId") is not None else None, kidnapped_until_tick=int(row["kidnappedUntilTick"]) if row.get("kidnappedUntilTick") is not None else None, kidnapped_by_organization_id=int(row["kidnappedByOrganizationId"]) if row.get("kidnappedByOrganizationId") is not None else None,
+                criminal_role=CrimeRole(row["criminalRole"]) if row.get("criminalRole") else None, criminal_income_today=float(row.get("criminalIncomeToday",0.0)), illegal_spending_today=float(row.get("illegalSpendingToday",0.0)), illegal_purchase_count=int(row.get("illegalPurchaseCount",0)), last_illegal_purchase_tick=int(row["lastIllegalPurchaseTick"]) if row.get("lastIllegalPurchaseTick") is not None else None, substance_use_risk=float(row.get("substanceUseRisk",5.0)), addiction_level=float(row.get("addictionLevel",0.0)), intimidation_level=float(row.get("intimidationLevel",0.0)), recruited_tick=int(row["recruitedTick"]) if row.get("recruitedTick") is not None else None, criminal_contact_ids=[int(value) for value in row.get("criminalContactIds",[])],
             )
             citizen.relationships = {
                 int(relationship_row["otherId"]): Relationship(
@@ -2608,6 +2731,7 @@ class World:
                     ),
                     crew_ids={int(value) for value in row.get("crewIds", [])},
                     health_case_id=int(row["healthCaseId"]) if row.get("healthCaseId") is not None else None,
+                    patrol_neighborhood_id=int(row["patrolNeighborhoodId"]) if row.get("patrolNeighborhoodId") is not None else None,
                 )
                 world.vehicles[vehicle.id] = vehicle
         else:
@@ -2673,6 +2797,17 @@ class World:
                         )
                         for item in row.get("financialHistory", [])
                     ],
+                    housing_status=str(row.get("housingStatus", "stable")),
+                    housing_search_since_tick=int(row["housingSearchSinceTick"]) if row.get("housingSearchSinceTick") is not None else None,
+                    housing_search_reason=row.get("housingSearchReason"),
+                    rent_due_today=float(row.get("rentDueToday", 0.0)),
+                    rent_paid_today=float(row.get("rentPaidToday", 0.0)),
+                    rent_arrears=float(row.get("rentArrears", 0.0)),
+                    missed_rent_days=int(row.get("missedRentDays", 0)),
+                    moves=int(row.get("moves", 0)),
+                    last_move_tick=int(row.get("lastMoveTick", -10080)),
+                    temporary_host_household_id=int(row["temporaryHostHouseholdId"]) if row.get("temporaryHostHouseholdId") is not None else None,
+                    housing_history=[HousingRecord(tick=int(item["tick"]), event_type=str(item["eventType"]), label=str(item["label"]), from_home_id=int(item["fromHomeId"]) if item.get("fromHomeId") is not None else None, to_home_id=int(item["toHomeId"]), reason=str(item["reason"]), rent_before=float(item["rentBefore"]), rent_after=float(item["rentAfter"]), member_ids=[int(value) for value in item.get("memberIds", [])]) for item in row.get("housingHistory", [])],
                 )
                 for row in state.get("households", [])
             }
@@ -2747,6 +2882,8 @@ class World:
                     police_officer_ids=tuple(int(value) for value in row.get("policeOfficerIds", [])),
                     detained_ids=tuple(int(value) for value in row.get("detainedIds", [])),
                     health_case_ids=tuple(int(value) for value in row.get("healthCaseIds", [])),
+                    complaint_id=int(row["complaintId"]) if row.get("complaintId") is not None else None,
+                    neighborhood_id=int(row.get("neighborhoodId", 0)),
                 )
                 for row in state.get("incidents", [])
             }
@@ -2833,6 +2970,7 @@ class World:
                 int(row["id"]): Investigation(
                     id=int(row["id"]),
                     incident_id=int(row["incidentId"]),
+                    complaint_id=int(row["complaintId"]) if row.get("complaintId") is not None else None,
                     status=InvestigationStatus(row["status"]),
                     opened_tick=int(row["openedTick"]),
                     updated_tick=int(row["updatedTick"]),
@@ -2863,6 +3001,13 @@ class World:
                     decided_tick=(int(row["decidedTick"]) if row.get("decidedTick") is not None else None),
                     verdict=row.get("verdict"),
                     sentence=row.get("sentence"),
+                    complaint_id=int(row["complaintId"]) if row.get("complaintId") is not None else None,
+                    prosecutor_review_tick=int(row["prosecutorReviewTick"]) if row.get("prosecutorReviewTick") is not None else None,
+                    prosecutor_decision=row.get("prosecutorDecision"),
+                    priority=int(row.get("priority", 1)),
+                    delay_count=int(row.get("delayCount", 0)),
+                    sentence_ids=[int(value) for value in row.get("sentenceIds", [])],
+                    timeline=[JudicialTimelineEntry(tick=int(item["tick"]), event_type=str(item["eventType"]), label=str(item["label"]), detail=str(item["detail"])) for item in row.get("timeline", [])],
                 )
                 for row in state.get("judicialCases", [])
             }
@@ -2871,6 +3016,52 @@ class World:
             world._next_investigation_id, max(world.investigations, default=0) + 1
         )
         world._next_case_id = max(world._next_case_id, max(world.judicial_cases, default=0) + 1)
+        world.complaints = {
+            int(row["id"]): Complaint(
+                id=int(row["id"]), incident_id=int(row["incidentId"]),
+                complainant_id=int(row["complainantId"]) if row.get("complainantId") is not None else None,
+                accused_id=int(row["accusedId"]) if row.get("accusedId") is not None else None,
+                status=ComplaintStatus(row["status"]), filed_tick=int(row["filedTick"]),
+                updated_tick=int(row["updatedTick"]), description=str(row["description"]),
+                dismissal_reason=row.get("dismissalReason"),
+            ) for row in state.get("complaints", [])
+        }
+        world.sentences = {
+            int(row["id"]): JudicialSentence(
+                id=int(row["id"]), case_id=int(row["caseId"]), citizen_id=int(row["citizenId"]),
+                sentence_type=SentenceType(row["sentenceType"]), label=str(row["label"]),
+                status=SentenceStatus(row["status"]), start_tick=int(row["startTick"]),
+                end_tick=int(row["endTick"]) if row.get("endTick") is not None else None,
+                amount=float(row.get("amount", 0.0)),
+                beneficiary_id=int(row["beneficiaryId"]) if row.get("beneficiaryId") is not None else None,
+                required_minutes=int(row.get("requiredMinutes", 0)),
+                completed_minutes=int(row.get("completedMinutes", 0)),
+                violation_count=int(row.get("violationCount", 0)),
+            ) for row in state.get("sentences", [])
+        }
+        world._next_complaint_id = max(world._next_complaint_id, max(world.complaints, default=0) + 1)
+        world._next_sentence_id = max(world._next_sentence_id, max(world.sentences, default=0) + 1)
+        world.communications = {
+            int(row["id"]): Communication(
+                id=int(row["id"]), thread_id=int(row["threadId"]),
+                sender_id=int(row["senderId"]), recipient_id=int(row["recipientId"]),
+                channel=CommunicationChannel(row["channel"]), tone=CommunicationTone(row["tone"]),
+                subject=str(row["subject"]), body=str(row["body"]),
+                status=CommunicationStatus(row["status"]), created_tick=int(row["createdTick"]),
+                delivery_tick=int(row["deliveryTick"]),
+                read_tick=int(row["readTick"]) if row.get("readTick") is not None else None,
+                replied_tick=int(row["repliedTick"]) if row.get("repliedTick") is not None else None,
+                reply_to_id=int(row["replyToId"]) if row.get("replyToId") is not None else None,
+                reply_depth=int(row.get("replyDepth", 0)), duration_minutes=int(row.get("durationMinutes", 0)),
+                cost=float(row.get("cost", 0.0)), failure_reason=row.get("failureReason"), violates_order=bool(row.get("violatesOrder", False)),
+            ) for row in state.get("communications", [])
+        }
+        world.communication_queue = [
+            (int(row[0]), int(row[1])) for row in state.get("communicationQueue", [])
+            if len(row) == 2 and int(row[1]) in world.communications
+        ]
+        heapq.heapify(world.communication_queue)
+        world._next_communication_id = max(world._next_communication_id, max(world.communications, default=0) + 1)
 
         world.job_applications = {
             int(row["id"]): JobApplication(
@@ -2890,6 +3081,15 @@ class World:
         world._next_job_application_id = max(
             world._next_job_application_id, max(world.job_applications, default=0) + 1
         )
+
+        world.crime_organizations = {int(row["id"]): CrimeOrganization(id=int(row["id"]), name=str(row["name"]), leader_id=int(row["leaderId"]), member_ids=[int(value) for value in row.get("memberIds", [])], territory_id=int(row.get("territoryId", 1)), treasury=float(row.get("treasury", 0.0)), notoriety=float(row.get("notoriety", 10.0)), police_heat=float(row.get("policeHeat", 0.0)), active=bool(row.get("active", True)), operation_ids=[int(value) for value in row.get("operationIds", [])], faction_type=CrimeFactionType(row.get("factionType","organized_gang")), territory_ids=[int(value) for value in row.get("territoryIds",[row.get("territoryId",1)])], role_by_member={int(key): CrimeRole(value) for key,value in row.get("roleByMember",{}).items()}, rival_ids=[int(value) for value in row.get("rivalIds",[])], ally_ids=[int(value) for value in row.get("allyIds",[])], specialties=[IllegalCommodity(value) for value in row.get("specialties",[])], inventory={str(key):float(value) for key,value in row.get("inventory",{}).items()}, influence_by_neighborhood={int(key):float(value) for key,value in row.get("influenceByNeighborhood",{}).items()}, cohesion=float(row.get("cohesion",60.0)), violence=float(row.get("violence",40.0)), sophistication=float(row.get("sophistication",40.0)), recruitment_pressure=float(row.get("recruitmentPressure",25.0)), laundering_capacity=float(row.get("launderingCapacity",100.0)), revenue_today=float(row.get("revenueToday",0.0)), expenses_today=float(row.get("expensesToday",0.0)), members_recruited=int(row.get("membersRecruited",0))) for row in state.get("crimeOrganizations", [])}
+        world.crime_operations = {int(row["id"]): CrimeOperation(id=int(row["id"]), organization_id=int(row["organizationId"]), operation_type=CrimeOperationType(row["operationType"]), status=CrimeOperationStatus(row["status"]), planned_tick=int(row["plannedTick"]), perpetrator_ids=[int(value) for value in row.get("perpetratorIds", [])], victim_ids=[int(value) for value in row.get("victimIds", [])], building_id=int(row["buildingId"]) if row.get("buildingId") is not None else None, amount=float(row.get("amount", 0.0)), incident_id=int(row["incidentId"]) if row.get("incidentId") is not None else None, started_tick=int(row["startedTick"]) if row.get("startedTick") is not None else None, resolved_tick=int(row["resolvedTick"]) if row.get("resolvedTick") is not None else None, ransom_due_tick=int(row["ransomDueTick"]) if row.get("ransomDueTick") is not None else None, outcome=row.get("outcome"), commodity=IllegalCommodity(row["commodity"]) if row.get("commodity") else None, quantity=float(row.get("quantity",0.0)), neighborhood_id=int(row["neighborhoodId"]) if row.get("neighborhoodId") is not None else None, detected=bool(row.get("detected",False))) for row in state.get("crimeOperations", [])}
+        world.criminal_markets = {int(row["id"]): CriminalMarket(id=int(row["id"]), organization_id=int(row["organizationId"]), neighborhood_id=int(row["neighborhoodId"]), commodity=IllegalCommodity(row["commodity"]), supply=float(row["supply"]), demand=float(row["demand"]), unit_price=float(row["unitPrice"]), police_pressure=float(row.get("policePressure",0.0)), transactions_today=int(row.get("transactionsToday",0)), revenue_today=float(row.get("revenueToday",0.0)), seized_today=float(row.get("seizedToday",0.0)), active=bool(row.get("active",True))) for row in state.get("criminalMarkets",[])}
+        world.illegal_transactions = {int(row["id"]): IllegalTransaction(id=int(row["id"]), tick=int(row["tick"]), organization_id=int(row["organizationId"]), market_id=int(row["marketId"]), seller_id=int(row["sellerId"]), buyer_id=int(row["buyerId"]), commodity=IllegalCommodity(row["commodity"]), quantity=float(row["quantity"]), unit_price=float(row["unitPrice"]), total=float(row["total"]), neighborhood_id=int(row["neighborhoodId"]), building_id=int(row["buildingId"]) if row.get("buildingId") is not None else None, detected=bool(row.get("detected",False)), incident_id=int(row["incidentId"]) if row.get("incidentId") is not None else None) for row in state.get("illegalTransactions",[])}
+        world.crime_relations = {(min(int(row["firstId"]),int(row["secondId"])),max(int(row["firstId"]),int(row["secondId"]))): CrimeFactionRelation(first_id=int(row["firstId"]),second_id=int(row["secondId"]),tension=float(row.get("tension",35.0)),trust=float(row.get("trust",0.0)),conflict_count=int(row.get("conflictCount",0)),last_conflict_tick=int(row["lastConflictTick"]) if row.get("lastConflictTick") is not None else None,truce_until_tick=int(row["truceUntilTick"]) if row.get("truceUntilTick") is not None else None) for row in state.get("crimeRelations",[])}
+        world._next_crime_operation_id = max(world._next_crime_operation_id, max(world.crime_operations, default=0) + 1)
+        world._next_criminal_market_id = max(world._next_criminal_market_id, max(world.criminal_markets,default=0)+1)
+        world._next_illegal_transaction_id = max(world._next_illegal_transaction_id,max(world.illegal_transactions,default=0)+1)
 
         world.events = [
             DomainEvent(
@@ -2939,6 +3139,10 @@ class World:
             "careStatus": citizen.care_status.value,
             "pain": round(citizen.pain, 1),
             "activeHealthCaseId": citizen.active_health_case_id,
+            "crimeOrganizationId": citizen.crime_organization_id,
+            "criminalRole": citizen.criminal_role.value if citizen.criminal_role else None,
+            "addictionLevel": round(citizen.addiction_level, 1),
+            "substanceUseRisk": round(citizen.substance_use_risk, 1),
         }
 
     def _building_to_dict(self, building: Building) -> dict[str, Any]:
@@ -2972,6 +3176,9 @@ class World:
             "patientsWaiting": len(building.medical_queue),
             "hospitalizedPatients": len(building.hospitalized_ids),
             "patientsTreatedToday": building.patients_treated_today,
+            "housing": home_summary(self, building) if building.building_type == BuildingType.HOME else None,
+            "neighborhoodId": building.neighborhood_id,
+            "bankReserves": building.bank_reserves, "outstandingLoans": building.outstanding_loans, "interestIncome": building.interest_income,
         }
 
     @staticmethod
@@ -2988,6 +3195,7 @@ class World:
             "lineId": vehicle.line_id,
             "crewIds": sorted(vehicle.crew_ids),
             "healthCaseId": vehicle.health_case_id,
+            "patrolNeighborhoodId": vehicle.patrol_neighborhood_id,
         }
 
     @staticmethod
@@ -3042,6 +3250,7 @@ class World:
             "expensesToday": round(household.recurring_expenses_today + household.food_expenses_today + household.goods_expenses_today, 2),
             "debt": round(household.debt, 2),
             "financialStress": round(household.financial_stress, 1),
+            **housing_household_summary(self, household),
         }
 
     def _incident_summary(self, incident: Incident) -> dict[str, Any]:
@@ -3065,6 +3274,7 @@ class World:
             "policeAction": incident.police_action,
             "policeOfficerIds": list(incident.police_officer_ids),
             "detainedIds": list(incident.detained_ids),
+            "neighborhoodId": incident.neighborhood_id,
         }
 
     def _job_application_to_dict(self, application: JobApplication) -> dict[str, Any]:
@@ -3108,6 +3318,10 @@ class World:
         }
 
     @staticmethod
+    def _housing_record_to_dict(record: HousingRecord) -> dict[str, Any]:
+        return {"tick": record.tick, "eventType": record.event_type, "label": record.label, "fromHomeId": record.from_home_id, "toHomeId": record.to_home_id, "reason": record.reason, "rentBefore": round(record.rent_before, 2), "rentAfter": round(record.rent_after, 2), "memberIds": list(record.member_ids)}
+
+    @staticmethod
     def _household_financial_to_dict(record: HouseholdFinancialRecord) -> dict[str, Any]:
         return {
             "day": record.day,
@@ -3135,6 +3349,16 @@ class World:
             "vehicleId": event.vehicle_id,
             "severity": event.severity,
             "incidentId": event.incident_id,
+        }
+
+    @staticmethod
+    def _export_neighborhood(neighborhood: Neighborhood) -> dict[str, Any]:
+        return {
+            "id": neighborhood.id, "name": neighborhood.name, "xMin": neighborhood.x_min, "yMin": neighborhood.y_min, "xMax": neighborhood.x_max, "yMax": neighborhood.y_max,
+            "lighting": neighborhood.lighting, "safetyPerception": neighborhood.safety_perception, "attractiveness": neighborhood.attractiveness,
+            "incidentsToday": neighborhood.incidents_today, "incidentScoreToday": neighborhood.incident_score_today, "cumulativeIncidents": neighborhood.cumulative_incidents,
+            "patrolMinutesToday": neighborhood.patrol_minutes_today, "policeResponsesToday": neighborhood.police_responses_today, "policeResponseMinutesToday": neighborhood.police_response_minutes_today,
+            "history": [{"day": item.day, "population": item.population, "averageIncome": item.average_income, "unemploymentRate": item.unemployment_rate, "averageRent": item.average_rent, "commercialActivity": item.commercial_activity, "criminality": item.criminality, "safetyPerception": item.safety_perception, "policeCoverage": item.police_coverage, "averageResponseMinutes": item.average_response_minutes, "healthcareAccess": item.healthcare_access, "commerceAccess": item.commerce_access, "averageTransportMinutes": item.average_transport_minutes, "attractiveness": item.attractiveness, "servicePressure": item.service_pressure} for item in neighborhood.history],
         }
 
     @staticmethod
@@ -3183,6 +3407,13 @@ class World:
             "medicalBeds": building.medical_beds, "medicalQueue": list(building.medical_queue),
             "hospitalizedIds": sorted(building.hospitalized_ids), "patientsTreatedToday": building.patients_treated_today,
             "medicalWaitMinutesToday": building.medical_wait_minutes_today,
+            "rentMonthly": building.rent_monthly,
+            "housingCondition": building.housing_condition,
+            "comfort": building.comfort,
+            "ownerType": building.owner_type,
+            "housingHistory": [World._export_housing_record(item) for item in building.housing_history],
+            "neighborhoodId": building.neighborhood_id,
+            "bankReserves": building.bank_reserves, "outstandingLoans": building.outstanding_loans, "interestIncome": building.interest_income,
         }
 
     @staticmethod
@@ -3321,7 +3552,24 @@ class World:
                 for item in citizen.police_history
             ],
             "currentDetentionType": citizen.current_detention_type,
+            "sentenceIds": list(citizen.sentence_ids),
+            "criminalRecordCount": citizen.criminal_record_count,
+            "probationViolations": citizen.probation_violations,
+            "communityServiceMinutes": citizen.community_service_minutes,
+            "phoneNumber": citizen.phone_number,
+            "emailAddress": citizen.email_address,
+            "communicationIds": list(citizen.communication_ids),
+            "unreadCommunicationIds": list(citizen.unread_communication_ids),
+            "bankBalance": citizen.bank_balance, "savingsBalance": citizen.savings_balance, "bankDebt": citizen.bank_debt, "creditScore": citizen.credit_score,
+            "bankingHistory": [{"tick": item.tick, "transactionType": item.transaction_type, "amount": item.amount, "balanceAfter": item.balance_after, "label": item.label, "counterpartyId": item.counterparty_id} for item in citizen.banking_history],
+            "isHomeless": citizen.is_homeless, "homelessSinceTick": citizen.homeless_since_tick, "previousHomeId": citizen.previous_home_id, "foodInsecurityDays": citizen.food_insecurity_days,
+            "crimeOrganizationId": citizen.crime_organization_id, "kidnappedUntilTick": citizen.kidnapped_until_tick, "kidnappedByOrganizationId": citizen.kidnapped_by_organization_id,
+            "criminalRole": citizen.criminal_role.value if citizen.criminal_role else None, "criminalIncomeToday": citizen.criminal_income_today, "illegalSpendingToday": citizen.illegal_spending_today, "illegalPurchaseCount": citizen.illegal_purchase_count, "lastIllegalPurchaseTick": citizen.last_illegal_purchase_tick, "substanceUseRisk": citizen.substance_use_risk, "addictionLevel": citizen.addiction_level, "intimidationLevel": citizen.intimidation_level, "recruitedTick": citizen.recruited_tick, "criminalContactIds": citizen.criminal_contact_ids,
         }
+
+    @staticmethod
+    def _export_housing_record(record: HousingRecord) -> dict[str, Any]:
+        return {"tick": record.tick, "eventType": record.event_type, "label": record.label, "fromHomeId": record.from_home_id, "toHomeId": record.to_home_id, "reason": record.reason, "rentBefore": record.rent_before, "rentAfter": record.rent_after, "memberIds": list(record.member_ids)}
 
     @staticmethod
     def _export_household(household: Household) -> dict[str, Any]:
@@ -3343,6 +3591,17 @@ class World:
             "financialStress": household.financial_stress,
             "foodBudgetDaily": household.food_budget_daily,
             "goodsBudgetDaily": household.goods_budget_daily,
+            "housingStatus": household.housing_status,
+            "housingSearchSinceTick": household.housing_search_since_tick,
+            "housingSearchReason": household.housing_search_reason,
+            "rentDueToday": household.rent_due_today,
+            "rentPaidToday": household.rent_paid_today,
+            "rentArrears": household.rent_arrears,
+            "missedRentDays": household.missed_rent_days,
+            "moves": household.moves,
+            "lastMoveTick": household.last_move_tick,
+            "temporaryHostHouseholdId": household.temporary_host_household_id,
+            "housingHistory": [World._export_housing_record(item) for item in household.housing_history],
             "financialHistory": [
                 {
                     "day": item.day,
@@ -3396,6 +3655,7 @@ class World:
             "serviceStartedTick": vehicle.service_started_tick,
             "crewIds": sorted(vehicle.crew_ids),
             "healthCaseId": vehicle.health_case_id,
+            "patrolNeighborhoodId": vehicle.patrol_neighborhood_id,
         }
 
     @staticmethod
@@ -3429,6 +3689,8 @@ class World:
             "policeOfficerIds": list(incident.police_officer_ids),
             "detainedIds": list(incident.detained_ids),
             "healthCaseIds": list(incident.health_case_ids),
+            "complaintId": incident.complaint_id,
+            "neighborhoodId": incident.neighborhood_id,
         }
 
     @staticmethod
@@ -3456,6 +3718,7 @@ class World:
         return {
             "id": item.id,
             "incidentId": item.incident_id,
+            "complaintId": item.complaint_id,
             "status": item.status.value,
             "openedTick": item.opened_tick,
             "updatedTick": item.updated_tick,
@@ -3483,6 +3746,48 @@ class World:
             "decidedTick": item.decided_tick,
             "verdict": item.verdict,
             "sentence": item.sentence,
+            "complaintId": item.complaint_id,
+            "prosecutorReviewTick": item.prosecutor_review_tick,
+            "prosecutorDecision": item.prosecutor_decision,
+            "priority": item.priority,
+            "delayCount": item.delay_count,
+            "sentenceIds": list(item.sentence_ids),
+            "timeline": [{"tick": row.tick, "eventType": row.event_type, "label": row.label, "detail": row.detail} for row in item.timeline],
+        }
+
+    @staticmethod
+    def _export_complaint(item: Complaint) -> dict[str, Any]:
+        return {
+            "id": item.id, "incidentId": item.incident_id,
+            "complainantId": item.complainant_id, "accusedId": item.accused_id,
+            "status": item.status.value, "filedTick": item.filed_tick,
+            "updatedTick": item.updated_tick, "description": item.description,
+            "dismissalReason": item.dismissal_reason,
+        }
+
+    @staticmethod
+    def _export_sentence(item: JudicialSentence) -> dict[str, Any]:
+        return {
+            "id": item.id, "caseId": item.case_id, "citizenId": item.citizen_id,
+            "sentenceType": item.sentence_type.value, "label": item.label,
+            "status": item.status.value, "startTick": item.start_tick, "endTick": item.end_tick,
+            "amount": item.amount, "beneficiaryId": item.beneficiary_id,
+            "requiredMinutes": item.required_minutes, "completedMinutes": item.completed_minutes,
+            "violationCount": item.violation_count,
+        }
+
+    @staticmethod
+    def _export_communication(item: Communication) -> dict[str, Any]:
+        return {
+            "id": item.id, "threadId": item.thread_id, "senderId": item.sender_id,
+            "recipientId": item.recipient_id, "channel": item.channel.value, "tone": item.tone.value,
+            "subject": item.subject, "body": item.body, "status": item.status.value,
+            "createdTick": item.created_tick, "deliveryTick": item.delivery_tick,
+            "readTick": item.read_tick, "repliedTick": item.replied_tick,
+            "replyToId": item.reply_to_id, "replyDepth": item.reply_depth,
+            "durationMinutes": item.duration_minutes, "cost": item.cost,
+            "failureReason": item.failure_reason,
+            "violatesOrder": item.violates_order,
         }
 
     @staticmethod

@@ -1,0 +1,1498 @@
+diff -ruN city-simulator-v0.10.1/CHANGELOG.md city-simulator-v0.11.0/CHANGELOG.md
+--- city-simulator-v0.10.1/CHANGELOG.md	2026-07-29 15:05:26.000000000 +0200
++++ city-simulator-v0.11.0/CHANGELOG.md	2026-07-29 15:34:24.000000000 +0200
+@@ -1,5 +1,31 @@
+ # Changelog
+ 
++## 0.11.0 — Quartiers, sécurité et services publics
++
++### Ajouté
++
++- Quatre quartiers générés et persistants, avec treize métriques territoriales issues de la simulation.
++- Historique journalier, sécurité ressentie et attractivité évolutives.
++- Patrouilles mobiles par zone, affectées à des unités et policiers citoyens réellement en service.
++- Dispatch de l’unité disponible la plus proche et temps de réponse agrégé par quartier.
++- Influence de l’éclairage, de l’activité, des témoins et de la présence policière sur les opportunités criminelles.
++- API, domaine WebSocket, six indicateurs globaux, filtre Quartiers et huit scénarios backend.
++- Neuf cartes thématiques interactives et fenêtre quartier complète.
++- Deux tests frontend dédiés aux données thématiques.
++
++### Modifié
++
++- Sauvegarde stricte v12 ; les versions v1 à v11 sont refusées.
++- Versions backend et frontend portées à 0.11.0.
++- Les unités en patrouille restent disponibles pour un dispatch et sont comptées comme telles.
++
++### Limites connues
++
++- Quatre zones fixes, sans redécoupage administratif, construction ou budget municipal propre.
++- L’éclairage est une caractéristique persistante mais n’est pas encore améliorable par une décision publique.
++- Deux véhicules ne peuvent couvrir simultanément les quatre quartiers.
++
++
+ ## 0.10.1 — Communications interpersonnelles
+ 
+ ### Ajouté
+diff -ruN city-simulator-v0.10.1/README.md city-simulator-v0.11.0/README.md
+--- city-simulator-v0.10.1/README.md	2026-07-29 15:05:26.000000000 +0200
++++ city-simulator-v0.11.0/README.md	2026-07-29 15:34:24.000000000 +0200
+@@ -1,7 +1,23 @@
+-# City Simulator — v0.10.1 Communications interpersonnelles
++# City Simulator — v0.11.0 Quartiers, sécurité et services publics
+ 
+ Prototype web d'une ville persistante simulant 100 habitants, leurs déplacements, relations, conflits, emplois, santé, blessures, maladies, secours médicalisés, finances, incidents, interventions policières et premières procédures judiciaires.
+ 
++## Nouveautés v0.11.0
++
++- Quatre quartiers persistants avec population, revenus, chômage, loyers, activité commerciale, criminalité, sécurité ressentie, couverture policière, accès aux soins et commerces, transport, pression des services et attractivité.
++- Historique journalier borné à 90 jours et évolution différenciée de la sécurité et de l’attractivité.
++- Patrouilles territoriales réellement conduites par des policiers citoyens ; l’unité disponible la plus proche est choisie lors d’un signalement.
++- Les incidents répétés dégradent la sécurité locale. Éclairage, fréquentation, témoins et patrouilles modulent les opportunités criminelles sans jamais les supprimer.
++- Les distances au commissariat, au centre médical et aux commerces influencent réellement réponse et accessibilité.
++- Neuf cartes thématiques : revenus, chômage, criminalité, sécurité ressentie, réponse policière, accessibilité, loyers, santé et fréquentation commerciale.
++- Fenêtre quartier avec tendances, incidents, population, entreprises, services, patrouilles et attractivité.
++- Endpoints `GET /api/neighborhoods` et `GET /api/neighborhoods/{id}`, domaine WebSocket `neighborhoods` et filtre Quartiers.
++- Sauvegarde stricte v12 incluant quartiers, historiques, affectations et générateur aléatoire territorial.
++
++## Migration depuis v0.10.1
++
++Le format de sauvegarde passe de 11 à 12. Les sauvegardes v11 et antérieures sont refusées explicitement, car elles ne contiennent ni découpage spatial, ni historiques locaux, ni file d’affectation des patrouilles.
++
+ ## Nouveautés v0.10.1
+ 
+ - Quatre canaux persistants : appel téléphonique, SMS, e-mail et lettre, avec coûts, délais de livraison et délais de lecture distincts.
+@@ -233,6 +249,7 @@
+ │   │       ├── models.py
+ │   │       ├── metrics.py
+ │   │       ├── monitoring.py
++│   │       ├── neighborhood.py
+ │   │       ├── persistence.py
+ │   │       ├── service.py
+ │   │       ├── social.py
+diff -ruN city-simulator-v0.10.1/VALIDATION.md city-simulator-v0.11.0/VALIDATION.md
+--- city-simulator-v0.10.1/VALIDATION.md	2026-07-29 15:05:26.000000000 +0200
++++ city-simulator-v0.11.0/VALIDATION.md	2026-07-29 15:34:24.000000000 +0200
+@@ -1,17 +1,17 @@
+-# Validation de l’archive — v0.10.1
++# Validation de l’archive — v0.11.0
+ 
+ ## Backend
+ 
+-- 70 tests automatisés sous Python 3.12, dont 7 scénarios de communication dédiés.
+-- Couverture fonctionnelle : quatre canaux, disponibilité téléphonique, livraison/lecture, réponses bornées, effets relationnels, API, WebSocket et sauvegarde/reprise déterministe.
+-- Les scénarios historiques d’économie sur 30 jours restent identiques grâce au générateur aléatoire isolé.
+-- Historique global plafonné à 2 000 entrées terminales ; aucune réponse ne dépasse deux niveaux.
++- 78 tests automatisés sous Python 3.12, dont 8 scénarios territoriaux v0.11.0.
++- Couverture fonctionnelle : divergence des quartiers, distance aux services, incidents répétés, sécurité ressentie, opportunités criminelles, patrouilles citoyennes, API, WebSocket et sauvegarde/reprise déterministe.
++- Simulation de 30 jours : historiques bornés, zones distinctes et aucune unité bloquée sans route dans un état transitoire.
++- Les scénarios historiques d’économie, santé, logement, justice et communications restent verts.
+ 
+ ## Frontend
+ 
+-- 14 tests Vitest dans 6 fichiers.
++- 16 tests Vitest dans 7 fichiers.
+ - Contrôle TypeScript strict et build Vite validés.
+-- Monitoring global, composition depuis la fiche citoyen, historique, indicateurs et filtre Communications compilés.
++- Neuf cartes thématiques, sélection de quartier, fenêtre complète, tendances, indicateurs et filtre Quartiers compilés.
+ 
+ ## Commandes de validation
+ 
+@@ -43,5 +43,5 @@
+ ## Couverture et limites de l’environnement
+ 
+ - Aucun collecteur de couverture Python/Vitest n’est installé ; aucun pourcentage non mesuré n’est annoncé.
+-- Pas de pièces jointes, appels de groupe, répondeur, spam, chiffrement ni acheminement postal incarné.
+-- Le navigateur intégré reste indisponible à cause de `helper_unknown_error` ; le rendu est validé par TypeScript/Vite mais l’inspection interactive doit être refaite localement.
++- Quatre quartiers fixes, éclairage non administrable et deux patrouilles simultanées au maximum.
++- Le navigateur intégré est bloqué par `helper_unknown_error` ; TypeScript/Vite valident le rendu, mais l’inspection interactive doit être refaite localement.
+diff -ruN city-simulator-v0.10.1/backend/app/api/routes.py city-simulator-v0.11.0/backend/app/api/routes.py
+--- city-simulator-v0.10.1/backend/app/api/routes.py	2026-07-29 14:53:01.000000000 +0200
++++ city-simulator-v0.11.0/backend/app/api/routes.py	2026-07-29 15:20:30.000000000 +0200
+@@ -55,6 +55,14 @@
+     async def justice_overview() -> dict:
+         return await service.justice_overview()
+ 
++    @router.get("/neighborhoods")
++    async def neighborhoods_overview() -> dict:
++        return await service.neighborhood_overview()
++
++    @router.get("/neighborhoods/{neighborhood_id}")
++    async def neighborhood_detail(neighborhood_id: int) -> dict:
++        return await _detail_or_404(service.neighborhood_detail, neighborhood_id, "Quartier introuvable")
++
+     @router.get("/social/graph")
+     async def social_graph() -> dict:
+         return await service.social_graph()
+diff -ruN city-simulator-v0.10.1/backend/app/main.py city-simulator-v0.11.0/backend/app/main.py
+--- city-simulator-v0.10.1/backend/app/main.py	2026-07-29 14:58:09.000000000 +0200
++++ city-simulator-v0.11.0/backend/app/main.py	2026-07-29 15:34:24.000000000 +0200
+@@ -14,7 +14,7 @@
+     yield
+     await service.stop()
+ 
+-app = FastAPI(title="City Simulator MVP", version="0.10.1", lifespan=lifespan)
++app = FastAPI(title="City Simulator MVP", version="0.11.0", lifespan=lifespan)
+ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+ app.include_router(create_api_router(service))
+ 
+diff -ruN city-simulator-v0.10.1/backend/app/simulation/generator.py city-simulator-v0.11.0/backend/app/simulation/generator.py
+--- city-simulator-v0.10.1/backend/app/simulation/generator.py	2026-07-29 14:14:32.000000000 +0200
++++ city-simulator-v0.11.0/backend/app/simulation/generator.py	2026-07-29 15:33:34.000000000 +0200
+@@ -7,6 +7,7 @@
+     BuildingType,
+     Citizen,
+     Needs,
++    Neighborhood,
+     Vehicle,
+     VehicleStatus,
+     VehicleType,
+@@ -25,6 +26,15 @@
+ ]
+ 
+ 
++def generate_neighborhoods() -> dict[int, Neighborhood]:
++    return {
++        1: Neighborhood(1, "Rives Nord-Ouest", 0, 0, 19, 11, 62.0, 68.0, 60.0),
++        2: Neighborhood(2, "Centre Nord-Est", 20, 0, 39, 11, 78.0, 73.0, 72.0),
++        3: Neighborhood(3, "Faubourgs Sud-Ouest", 0, 12, 19, 23, 48.0, 57.0, 48.0),
++        4: Neighborhood(4, "Cité des Services", 20, 12, 39, 23, 72.0, 76.0, 67.0),
++    }
++
++
+ def generate_buildings() -> dict[int, Building]:
+     buildings: dict[int, Building] = {}
+     next_id = 1
+diff -ruN city-simulator-v0.10.1/backend/app/simulation/metrics.py city-simulator-v0.11.0/backend/app/simulation/metrics.py
+--- city-simulator-v0.10.1/backend/app/simulation/metrics.py	2026-07-29 14:53:01.000000000 +0200
++++ city-simulator-v0.11.0/backend/app/simulation/metrics.py	2026-07-29 15:33:34.000000000 +0200
+@@ -8,6 +8,7 @@
+ from .health import health_metrics
+ from .housing import housing_metrics
+ from .justice import justice_metrics
++from .neighborhood import neighborhood_city_metrics
+ from .models import (
+     BuildingType,
+     IncidentStatus,
+@@ -86,7 +87,7 @@
+         "reportedIncidents": sum(incident.reported for incident in world.incidents.values()),
+         "activeIncidents": len(active_incidents),
+         "seriousIncidents": sum(incident.severity == "danger" for incident in active_incidents),
+-        "policeUnitsAvailable": sum(unit.status == VehicleStatus.PARKED for unit in staffed_units),
++        "policeUnitsAvailable": sum(unit.status in {VehicleStatus.PARKED, VehicleStatus.IN_SERVICE} for unit in staffed_units),
+         "policeOfficersOnDuty": sum(is_on_duty(world, officer) for officer in officers),
+         "staffedPatrols": len(staffed_units),
+         "policeWarningsToday": world.police_warnings_today,
+@@ -195,6 +196,7 @@
+         mobility_metrics(world),
+         social_metrics(world),
+         communication_metrics(world),
++        neighborhood_city_metrics(world),
+     )
+     return {key: value for section in sections for key, value in section.items()}
+ 
+diff -ruN city-simulator-v0.10.1/backend/app/simulation/models.py city-simulator-v0.11.0/backend/app/simulation/models.py
+--- city-simulator-v0.10.1/backend/app/simulation/models.py	2026-07-29 14:47:09.000000000 +0200
++++ city-simulator-v0.11.0/backend/app/simulation/models.py	2026-07-29 15:21:39.000000000 +0200
+@@ -318,6 +318,49 @@
+ 
+ 
+ @dataclass(slots=True)
++class NeighborhoodRecord:
++    day: int
++    population: int
++    average_income: float
++    unemployment_rate: float
++    average_rent: float
++    commercial_activity: float
++    criminality: float
++    safety_perception: float
++    police_coverage: float
++    average_response_minutes: float
++    healthcare_access: float
++    commerce_access: float
++    average_transport_minutes: float
++    attractiveness: float
++    service_pressure: float
++
++
++@dataclass(slots=True)
++class Neighborhood:
++    id: int
++    name: str
++    x_min: int
++    y_min: int
++    x_max: int
++    y_max: int
++    lighting: float
++    safety_perception: float
++    attractiveness: float
++    incidents_today: int = 0
++    incident_score_today: float = 0.0
++    cumulative_incidents: int = 0
++    patrol_minutes_today: int = 0
++    police_responses_today: int = 0
++    police_response_minutes_today: int = 0
++    history: list[NeighborhoodRecord] = field(default_factory=list)
++
++    @property
++    def center(self) -> tuple[int, int]:
++        return (self.x_min + self.x_max) // 2, (self.y_min + self.y_max) // 2
++
++
++@dataclass(slots=True)
+ class Building:
+     id: int
+     name: str
+@@ -357,6 +400,7 @@
+     comfort: float = 50.0
+     owner_type: str = "private"
+     housing_history: list[HousingRecord] = field(default_factory=list)
++    neighborhood_id: int = 0
+ 
+     @property
+     def entrance(self) -> tuple[int, int]:
+@@ -442,6 +486,7 @@
+     service_started_tick: int | None = None
+     crew_ids: set[int] = field(default_factory=set)
+     health_case_id: int | None = None
++    patrol_neighborhood_id: int | None = None
+ 
+ 
+ @dataclass(slots=True)
+@@ -601,6 +646,7 @@
+     detained_ids: tuple[int, ...] = ()
+     health_case_ids: tuple[int, ...] = ()
+     complaint_id: int | None = None
++    neighborhood_id: int = 0
+ 
+ 
+ @dataclass(slots=True)
+diff -ruN city-simulator-v0.10.1/backend/app/simulation/neighborhood.py city-simulator-v0.11.0/backend/app/simulation/neighborhood.py
+--- city-simulator-v0.10.1/backend/app/simulation/neighborhood.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.11.0/backend/app/simulation/neighborhood.py	2026-07-29 15:33:34.000000000 +0200
+@@ -0,0 +1,208 @@
++from __future__ import annotations
++
++import random
++import statistics
++from typing import TYPE_CHECKING, Any
++
++from .generator import generate_neighborhoods
++from .models import Building, BuildingType, Incident, Neighborhood, NeighborhoodRecord, VehicleStatus, VehicleType
++from .transport import road_path
++from .work import refresh_police_crews, shift_active
++
++if TYPE_CHECKING:
++    from .world import World
++
++MAX_HISTORY_DAYS = 90
++
++
++def initialize_neighborhoods(world: World) -> None:
++    world.neighborhood_rng = random.Random(world.seed ^ 0xB017E7)
++    world.neighborhoods = generate_neighborhoods()
++    world._last_neighborhood_hour = -1
++    for building in world.buildings.values():
++        building.neighborhood_id = neighborhood_at(world, building.x, building.y).id
++
++
++def neighborhood_at(world: World, x: int, y: int) -> Neighborhood:
++    for neighborhood in world.neighborhoods.values():
++        if neighborhood.x_min <= x <= neighborhood.x_max and neighborhood.y_min <= y <= neighborhood.y_max:
++            return neighborhood
++    return world.neighborhoods[min(world.neighborhoods)]
++
++
++def update_neighborhoods(world: World) -> None:
++    for unit in world.vehicles.values():
++        if unit.vehicle_type == VehicleType.POLICE and unit.status == VehicleStatus.IN_SERVICE and unit.patrol_neighborhood_id in world.neighborhoods:
++            world.neighborhoods[unit.patrol_neighborhood_id].patrol_minutes_today += 1
++    hour_key = world.total_minutes // 60
++    if hour_key == world._last_neighborhood_hour:
++        return
++    world._last_neighborhood_hour = hour_key
++    _manage_patrols(world)
++
++
++def close_neighborhood_day(world: World, day: int) -> None:
++    for neighborhood in world.neighborhoods.values():
++        metrics = neighborhood_metrics(world, neighborhood)
++        neighborhood.history.append(NeighborhoodRecord(day=day, **metrics))
++        neighborhood.history[:] = neighborhood.history[-MAX_HISTORY_DAYS:]
++        target_safety = max(8.0, min(96.0, 72.0 - metrics["criminality"] * 0.42 + metrics["police_coverage"] * 0.12 + neighborhood.lighting * 0.10))
++        neighborhood.safety_perception = round(neighborhood.safety_perception * 0.76 + target_safety * 0.24, 2)
++        target_attractiveness = 0.30 * neighborhood.safety_perception + 0.18 * metrics["healthcare_access"] + 0.16 * metrics["commerce_access"] + 0.16 * (100.0 - metrics["unemployment_rate"]) + 0.12 * min(100.0, metrics["commercial_activity"] / 8.0) + 0.08 * max(0.0, 100.0 - metrics["average_transport_minutes"] * 3.0)
++        neighborhood.attractiveness = round(max(5.0, min(95.0, neighborhood.attractiveness * 0.72 + target_attractiveness * 0.28)), 2)
++        neighborhood.incidents_today = 0
++        neighborhood.incident_score_today = 0.0
++        neighborhood.patrol_minutes_today = 0
++        neighborhood.police_responses_today = 0
++        neighborhood.police_response_minutes_today = 0
++
++
++def record_incident(world: World, incident: Incident) -> None:
++    neighborhood = world.neighborhoods.get(incident.neighborhood_id)
++    if neighborhood is None:
++        return
++    weight = 3.0 if incident.severity == "danger" else 1.4
++    weight += max(0, incident.conflict_level - 1) * 0.45
++    neighborhood.incidents_today += 1
++    neighborhood.incident_score_today += weight
++    neighborhood.cumulative_incidents += 1
++    neighborhood.safety_perception = round(max(5.0, neighborhood.safety_perception - weight * 0.32), 2)
++
++
++def record_police_response(world: World, incident: Incident, response_minutes: int) -> None:
++    neighborhood = world.neighborhoods.get(incident.neighborhood_id)
++    if neighborhood is None:
++        return
++    neighborhood.police_responses_today += 1
++    neighborhood.police_response_minutes_today += response_minutes
++
++
++def crime_opportunity(world: World, building: Building, witnesses: int) -> float:
++    neighborhood = world.neighborhoods[building.neighborhood_id]
++    hour_darkness = 1.0 if world.hour >= 21 or world.hour < 6 else 0.25
++    lighting_risk = (100.0 - neighborhood.lighting) / 100.0 * hour_darkness
++    activity_protection = min(0.38, len(building.occupants) * 0.045)
++    witness_protection = min(0.32, witnesses * 0.055)
++    patrol_protection = min(0.38, neighborhood_metrics(world, neighborhood)["police_coverage"] / 220.0)
++    pressure = (100.0 - neighborhood.safety_perception) / 180.0
++    return max(0.35, min(1.8, 0.82 + lighting_risk + pressure - activity_protection - witness_protection - patrol_protection))
++
++
++def reporting_probability(world: World, x: int, y: int, witness_count: int, base: float) -> float:
++    neighborhood = neighborhood_at(world, x, y)
++    witness_factor = min(0.22, witness_count * 0.035)
++    visibility = neighborhood.lighting / 500.0 if world.hour >= 20 or world.hour < 7 else 0.14
++    return max(0.03, min(0.99, base + witness_factor + visibility))
++
++
++def neighborhood_metrics(world: World, neighborhood: Neighborhood) -> dict[str, Any]:
++    residents = [citizen for citizen in world.citizens.values() if world.buildings[citizen.home_id].neighborhood_id == neighborhood.id]
++    homes = [building for building in world.buildings.values() if building.neighborhood_id == neighborhood.id and building.building_type == BuildingType.HOME]
++    businesses = [building for building in world.buildings.values() if building.neighborhood_id == neighborhood.id and building.building_type in {BuildingType.OFFICE, BuildingType.FACTORY, BuildingType.SHOP, BuildingType.CAFE}]
++    shops = [building for building in world.buildings.values() if building.building_type in {BuildingType.SHOP, BuildingType.CAFE}]
++    hospitals = [building for building in world.buildings.values() if building.building_type == BuildingType.HOSPITAL]
++    center = neighborhood.center
++    healthcare_distance = min((_distance(center, building.entrance) for building in hospitals), default=30)
++    commerce_distance = min((_distance(center, building.entrance) for building in shops), default=30)
++    hospital_level = statistics.fmean(building.service_level for building in hospitals) if hospitals else 0.0
++    commerce_level = statistics.fmean(building.service_level for building in shops) if shops else 0.0
++    healthcare_access = max(0.0, min(100.0, 100.0 - healthcare_distance * 3.2)) * hospital_level / 100.0
++    commerce_access = max(0.0, min(100.0, 100.0 - commerce_distance * 3.0)) * commerce_level / 100.0
++    elapsed = max(1, world.hour * 60 + world.minute)
++    coverage = min(100.0, neighborhood.patrol_minutes_today / elapsed * 190.0)
++    recent_scores = [record.criminality for record in neighborhood.history[-6:]]
++    crime = (sum(recent_scores) + neighborhood.incident_score_today / max(1, len(residents)) * 100.0) / (len(recent_scores) + 1)
++    response = neighborhood.police_response_minutes_today / max(1, neighborhood.police_responses_today)
++    if not neighborhood.police_responses_today:
++        past = [record.average_response_minutes for record in neighborhood.history[-7:] if record.average_response_minutes > 0]
++        response = statistics.fmean(past) if past else _distance(center, _police_position(world)) / max(1, world.CAR_SPEED)
++    transport_samples = [citizen.last_trip_minutes for citizen in residents if citizen.last_trip_minutes > 0]
++    commute_distances = [_distance(world.buildings[citizen.home_id].entrance, world.buildings[citizen.workplace_id].entrance) for citizen in residents if citizen.workplace_id in world.buildings]
++    transport = statistics.fmean(transport_samples) if transport_samples else (statistics.fmean(commute_distances) / 1.6 if commute_distances else 0.0)
++    commercial_activity = sum(building.revenue_today + len(building.occupants) * 2.5 for building in businesses)
++    unemployment = sum(citizen.workplace_id is None for citizen in residents) / max(1, len(residents)) * 100.0
++    average_income = statistics.fmean([citizen.salary_daily * 22 for citizen in residents]) if residents else 0.0
++    average_rent = statistics.fmean([home.rent_monthly for home in homes]) if homes else 0.0
++    service_pressure = max(0.0, min(100.0, (200.0 - healthcare_access - commerce_access) / 2.0 + unemployment * 0.18))
++    return {
++        "population": len(residents), "average_income": round(average_income, 2), "unemployment_rate": round(unemployment, 2),
++        "average_rent": round(average_rent, 2), "commercial_activity": round(commercial_activity, 2), "criminality": round(crime, 2),
++        "safety_perception": round(neighborhood.safety_perception, 2), "police_coverage": round(coverage, 2), "average_response_minutes": round(response, 2),
++        "healthcare_access": round(healthcare_access, 2), "commerce_access": round(commerce_access, 2), "average_transport_minutes": round(transport, 2),
++        "attractiveness": round(neighborhood.attractiveness, 2), "service_pressure": round(service_pressure, 2),
++    }
++
++
++def neighborhood_summary(world: World, neighborhood: Neighborhood) -> dict[str, Any]:
++    metrics = neighborhood_metrics(world, neighborhood)
++    return {"id": neighborhood.id, "name": neighborhood.name, "bounds": {"xMin": neighborhood.x_min, "yMin": neighborhood.y_min, "xMax": neighborhood.x_max, "yMax": neighborhood.y_max}, "lighting": neighborhood.lighting, **_camel_metrics(metrics)}
++
++
++def neighborhood_detail(world: World, neighborhood_id: int) -> dict[str, Any]:
++    neighborhood = world.neighborhoods[neighborhood_id]
++    buildings = [building for building in world.buildings.values() if building.neighborhood_id == neighborhood_id]
++    incidents = [incident for incident in world.incidents.values() if incident.neighborhood_id == neighborhood_id]
++    patrols = [unit for unit in world.vehicles.values() if unit.vehicle_type == VehicleType.POLICE and unit.patrol_neighborhood_id == neighborhood_id]
++    return {"kind": "neighborhood", **neighborhood_summary(world, neighborhood), "buildings": [{"id": row.id, "name": row.name, "type": row.building_type.value, "serviceLevel": round(row.service_level, 1)} for row in buildings], "businesses": [{"id": row.id, "name": row.name, "type": row.building_type.value, "revenueToday": round(row.revenue_today, 2), "serviceLevel": round(row.service_level, 1)} for row in buildings if row.building_type in {BuildingType.OFFICE, BuildingType.FACTORY, BuildingType.SHOP, BuildingType.CAFE}], "services": [{"id": row.id, "name": row.name, "type": row.building_type.value, "serviceLevel": round(row.service_level, 1)} for row in buildings if row.building_type in {BuildingType.PUBLIC, BuildingType.POLICE, BuildingType.HOSPITAL, BuildingType.COURT}], "incidents": [world._incident_summary(row) for row in sorted(incidents, key=lambda item: item.created_tick, reverse=True)[:30]], "patrols": [world._vehicle_summary(row) for row in patrols], "history": [{"day": row.day, **_camel_metrics(row.__dict__ if hasattr(row, "__dict__") else {field: getattr(row, field) for field in row.__dataclass_fields__ if field != "day"})} for row in neighborhood.history]}
++
++
++def neighborhood_overview(world: World) -> dict[str, Any]:
++    rows = [neighborhood_summary(world, row) for row in world.neighborhoods.values()]
++    safety_values = [row["safetyPerception"] for row in rows]
++    attractiveness_values = [row["attractiveness"] for row in rows]
++    return {"tick": world.tick, "neighborhoods": rows, "metrics": {"averageSafety": round(statistics.fmean(safety_values), 2), "averageAttractiveness": round(statistics.fmean(attractiveness_values), 2), "highestServicePressure": round(max(row["servicePressure"] for row in rows), 2), "slowestResponseMinutes": round(max(row["averageResponseMinutes"] for row in rows), 2), "lowestHealthcareAccess": round(min(row["healthcareAccess"] for row in rows), 2), "safetyGap": round(max(safety_values) - min(safety_values), 2)}}
++
++
++def neighborhood_city_metrics(world: World) -> dict[str, float]:
++    metrics = neighborhood_overview(world)["metrics"]
++    return {"averageNeighborhoodSafety": metrics["averageSafety"], "averageNeighborhoodAttractiveness": metrics["averageAttractiveness"], "highestServicePressure": metrics["highestServicePressure"], "slowestNeighborhoodResponseMinutes": metrics["slowestResponseMinutes"], "lowestHealthcareAccess": metrics["lowestHealthcareAccess"], "neighborhoodSafetyGap": metrics["safetyGap"]}
++
++
++def _manage_patrols(world: World) -> None:
++    refresh_police_crews(world)
++    units = [unit for unit in world.vehicles.values() if unit.vehicle_type == VehicleType.POLICE]
++    for unit in units:
++        if unit.status == VehicleStatus.IN_SERVICE and (not unit.crew_ids or any(not shift_active(world, world.citizens[officer_id]) for officer_id in unit.crew_ids)):
++            world._send_police_home(unit)
++            unit.patrol_neighborhood_id = None
++    candidates = [unit for unit in units if unit.status == VehicleStatus.PARKED and len(unit.crew_ids) >= min(2, unit.capacity)]
++    ordered = sorted(world.neighborhoods.values(), key=lambda row: (neighborhood_metrics(world, row)["police_coverage"], row.safety_perception, row.id))
++    for unit, neighborhood in zip(candidates, ordered):
++        target = _patrol_target(world, neighborhood)
++        unit.status = VehicleStatus.IN_SERVICE
++        unit.patrol_neighborhood_id = neighborhood.id
++        unit.current_building_id = None
++        unit.target_building_id = None
++        unit.route = road_path((unit.x, unit.y), target, world.road_cells)
++        unit.route_index = 0
++        unit.passenger_ids = set(unit.crew_ids)
++        unit.service_started_tick = world.tick
++        world._sync_police_crew(unit)
++        world._emit("neighborhood_patrol_started", f"L’unité #{unit.id} commence une patrouille dans {neighborhood.name}.", citizen_ids=tuple(sorted(unit.crew_ids)), vehicle_id=unit.id)
++
++
++def continue_patrol(world: World, unit: Any) -> None:
++    if unit.patrol_neighborhood_id not in world.neighborhoods:
++        return
++    neighborhood = world.neighborhoods[unit.patrol_neighborhood_id]
++    unit.route = road_path((unit.x, unit.y), _patrol_target(world, neighborhood), world.road_cells)
++    unit.route_index = 0
++
++
++def _patrol_target(world: World, neighborhood: Neighborhood) -> tuple[int, int]:
++    cells = [cell for cell in world.road_cells if neighborhood.x_min <= cell[0] <= neighborhood.x_max and neighborhood.y_min <= cell[1] <= neighborhood.y_max]
++    return cells[world.neighborhood_rng.randrange(len(cells))] if cells else neighborhood.center
++
++
++def _police_position(world: World) -> tuple[int, int]:
++    station = next((building for building in world.buildings.values() if building.building_type == BuildingType.POLICE), None)
++    return station.entrance if station else (world.MAP_WIDTH // 2, world.MAP_HEIGHT // 2)
++
++
++def _distance(first: tuple[int, int], second: tuple[int, int]) -> int:
++    return abs(first[0] - second[0]) + abs(first[1] - second[1])
++
++
++def _camel_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
++    names = {"average_income": "averageIncome", "unemployment_rate": "unemploymentRate", "average_rent": "averageRent", "commercial_activity": "commercialActivity", "safety_perception": "safetyPerception", "police_coverage": "policeCoverage", "average_response_minutes": "averageResponseMinutes", "healthcare_access": "healthcareAccess", "commerce_access": "commerceAccess", "average_transport_minutes": "averageTransportMinutes", "service_pressure": "servicePressure"}
++    return {names.get(key, key): value for key, value in metrics.items()}
+diff -ruN city-simulator-v0.10.1/backend/app/simulation/persistence.py city-simulator-v0.11.0/backend/app/simulation/persistence.py
+--- city-simulator-v0.10.1/backend/app/simulation/persistence.py	2026-07-29 14:53:01.000000000 +0200
++++ city-simulator-v0.11.0/backend/app/simulation/persistence.py	2026-07-29 15:19:47.000000000 +0200
+@@ -2,7 +2,7 @@
+ import json
+ from pathlib import Path
+ from typing import Any
+-SAVE_VERSION = 11
++SAVE_VERSION = 12
+ 
+ def validate_save_version(state: dict[str, Any]) -> None:
+     if int(state.get("version",0)) != SAVE_VERSION: raise ValueError("Version de sauvegarde non prise en charge.")
+diff -ruN city-simulator-v0.10.1/backend/app/simulation/service.py city-simulator-v0.11.0/backend/app/simulation/service.py
+--- city-simulator-v0.10.1/backend/app/simulation/service.py	2026-07-29 14:53:01.000000000 +0200
++++ city-simulator-v0.11.0/backend/app/simulation/service.py	2026-07-29 15:20:30.000000000 +0200
+@@ -113,6 +113,14 @@
+         async with self._lock:
+             return self.world.get_justice_overview()
+ 
++    async def neighborhood_overview(self) -> dict:
++        async with self._lock:
++            return self.world.get_neighborhood_overview()
++
++    async def neighborhood_detail(self, neighborhood_id: int) -> dict:
++        async with self._lock:
++            return self.world.get_neighborhood_detail(neighborhood_id)
++
+     async def social_graph(self) -> dict:
+         async with self._lock:
+             return self.world.get_social_graph()
+diff -ruN city-simulator-v0.10.1/backend/app/simulation/snapshot.py city-simulator-v0.11.0/backend/app/simulation/snapshot.py
+--- city-simulator-v0.10.1/backend/app/simulation/snapshot.py	2026-07-29 14:53:01.000000000 +0200
++++ city-simulator-v0.11.0/backend/app/simulation/snapshot.py	2026-07-29 15:20:30.000000000 +0200
+@@ -6,6 +6,7 @@
+ from .housing import housing_overview
+ from .justice import justice_overview
+ from .metrics import city_metrics
++from .neighborhood import neighborhood_overview
+ from .models import IncidentStatus, SocialEventStatus
+ if TYPE_CHECKING:
+     from .world import World
+@@ -23,7 +24,7 @@
+         "roads":{"congestion":world._congestion_cells()},
+         "transport":{"operating":world.bus_operating},
+         "social":{"events":[world._social_event_to_dict(event) for event in active_social_events],"households":[world._household_summary(household) for household in world.households.values()]},
+-        "economy":economy_overview(world),"health":health_overview(world),"housing":housing_overview(world),"justice":justice_overview(world),"communications":communication_overview(world),
++        "economy":economy_overview(world),"health":health_overview(world),"housing":housing_overview(world),"justice":justice_overview(world),"communications":communication_overview(world),"neighborhoods":neighborhood_overview(world),
+         "incidents":[world._incident_summary(incident) for incident in active_incidents],
+         "events":[world._event_to_dict(event) for event in world.events[-80:]],
+     }
+diff -ruN city-simulator-v0.10.1/backend/app/simulation/world.py city-simulator-v0.11.0/backend/app/simulation/world.py
+--- city-simulator-v0.10.1/backend/app/simulation/world.py	2026-07-29 14:59:44.000000000 +0200
++++ city-simulator-v0.11.0/backend/app/simulation/world.py	2026-07-29 15:21:39.000000000 +0200
+@@ -72,6 +72,8 @@
+     JudicialTimelineEntry,
+     MedicalRecord,
+     Needs,
++    Neighborhood,
++    NeighborhoodRecord,
+     PoliceMeasure,
+     Relationship,
+     SentenceStatus,
+@@ -98,6 +100,19 @@
+ )
+ from .snapshot import build_dynamic_snapshot
+ from .monitoring import building_detail, household_detail, social_graph
++from .neighborhood import (
++    close_neighborhood_day,
++    continue_patrol,
++    crime_opportunity,
++    initialize_neighborhoods,
++    neighborhood_at,
++    neighborhood_detail,
++    neighborhood_overview,
++    record_incident,
++    record_police_response,
++    reporting_probability,
++    update_neighborhoods,
++)
+ from .persistence import SAVE_VERSION, validate_save_version
+ from .work import (
+     apply_police_measure,
+@@ -206,6 +221,7 @@
+         initialize_economy(self)
+         initialize_justice(self)
+         initialize_communications(self)
++        initialize_neighborhoods(self)
+         self._emit("simulation_started", "La ville commence une nouvelle journée.")
+ 
+     @property
+@@ -240,6 +256,7 @@
+         self._move_walkers()
+         self._move_buses()
+         self._move_police_units()
++        update_neighborhoods(self)
+         self._move_cars()
+         self._resolve_activities()
+         update_work_and_consumption(self)
+@@ -263,6 +280,7 @@
+         self.layoffs_today = 0
+         self.resignations_today = 0
+         self.moves_today = 0
++        close_neighborhood_day(self, self.day - 1)
+         close_economic_day(self, self.day - 1)
+         self.bus_boardings_today = 0
+         self.traffic_delay_today = 0
+@@ -787,7 +805,7 @@
+             if unit.vehicle_type != VehicleType.POLICE:
+                 continue
+ 
+-            if unit.status in {VehicleStatus.RESPONDING, VehicleStatus.RETURNING}:
++            if unit.status in {VehicleStatus.RESPONDING, VehicleStatus.RETURNING, VehicleStatus.IN_SERVICE}:
+                 for _ in range(self.CAR_SPEED + 1):
+                     if unit.route_index >= len(unit.route):
+                         break
+@@ -804,7 +822,10 @@
+                 if unit.route_index < len(unit.route):
+                     continue
+ 
+-                if unit.status == VehicleStatus.RESPONDING and unit.incident_id is not None:
++                if unit.status == VehicleStatus.IN_SERVICE:
++                    continue_patrol(self, unit)
++                    self._sync_police_crew(unit)
++                elif unit.status == VehicleStatus.RESPONDING and unit.incident_id is not None:
+                     incident = self.incidents.get(unit.incident_id)
+                     if incident is None or incident.status == IncidentStatus.EXPIRED:
+                         self._send_police_home(unit)
+@@ -815,6 +836,7 @@
+                     incident.police_arrival_tick = self.tick
+                     response_minutes = max(0, self.tick - (incident.dispatched_tick or self.tick))
+                     self.police_response_minutes_today += response_minutes
++                    record_police_response(self, incident, response_minutes)
+                     self._emit(
+                         "police_arrived",
+                         f"Une unité de police arrive sur l'incident « {incident.title} ».",
+@@ -851,6 +873,7 @@
+             unit.incident_id = None
+             return
+         unit.status = VehicleStatus.RETURNING
++        unit.patrol_neighborhood_id = None
+         unit.route = road_path((unit.x, unit.y), station.entrance, self.road_cells)
+         unit.route_index = 0
+         unit.target_building_id = station.id
+@@ -1309,9 +1332,11 @@
+             status=status,
+             reported=reported,
+             conflict_level=conflict_level,
++            neighborhood_id=neighborhood_at(self, x, y).id,
+         )
+         self._next_incident_id += 1
+         self.incidents[incident.id] = incident
++        record_incident(self, incident)
+         self._emit(
+             incident_type,
+             description,
+@@ -1358,7 +1383,7 @@
+         incident_type, title, severity, lifetime = labels[level]
+         if repeat:
+             title = f"{title} répétée"
+-        reported_probability = {1: 0.05, 2: 0.28, 3: 0.68, 4: 0.9, 5: 0.99}[level]
++        reported_probability = reporting_probability(self, building.x, building.y, len(witnesses), {1: 0.05, 2: 0.28, 3: 0.68, 4: 0.9, 5: 0.99}[level])
+         reported = bool(witnesses) and self.rng.random() < reported_probability
+ 
+         injury_severity = {3: 28.0, 4: 58.0, 5: 86.0}.get(level, 0.0)
+@@ -1462,10 +1487,13 @@
+             for building in self.buildings.values()
+             if building.building_type in {BuildingType.SHOP, BuildingType.CAFE}
+         ]
+-        if not shops or self.rng.random() >= 0.12:
++        if not shops:
+             return
+ 
+         building = self.rng.choice(shops)
++        visible_witnesses = max(0, len(building.occupants) - 1)
++        if self.rng.random() >= 0.12 * crime_opportunity(self, building, visible_witnesses):
++            return
+         possible_offenders = [
+             self.citizens[citizen_id]
+             for citizen_id in building.occupants
+@@ -1482,7 +1510,7 @@
+             citizen_id for citizen_id in sorted(building.occupants)
+             if citizen_id != offender.id
+         )[:8]
+-        reported = bool(witnesses) and self.rng.random() < 0.7
++        reported = bool(witnesses) and self.rng.random() < reporting_probability(self, building.x, building.y, len(witnesses), 0.48)
+         suffix = "Le vol est signalé." if reported else "Personne ne semble l'avoir remarqué."
+         self.create_incident(
+             incident_type="theft",
+@@ -1505,7 +1533,7 @@
+         available_units = [
+             vehicle for vehicle in self.vehicles.values()
+             if vehicle.vehicle_type == VehicleType.POLICE
+-            and vehicle.status == VehicleStatus.PARKED
++            and vehicle.status in {VehicleStatus.PARKED, VehicleStatus.IN_SERVICE}
+             and len(vehicle.crew_ids) >= min(2, vehicle.capacity)
+         ]
+         if not available_units:
+@@ -1517,8 +1545,13 @@
+             ),
+             key=lambda incident: (incident.severity != "danger", incident.created_tick, incident.id),
+         )
+-        for incident, unit in zip(pending, available_units):
++        for incident in pending:
++            if not available_units:
++                break
++            unit = min(available_units, key=lambda row: (abs(row.x - incident.x) + abs(row.y - incident.y), row.id))
++            available_units.remove(unit)
+             unit.status = VehicleStatus.RESPONDING
++            unit.patrol_neighborhood_id = None
+             unit.incident_id = incident.id
+             unit.service_started_tick = self.tick
+             unit.current_building_id = None
+@@ -2064,6 +2097,12 @@
+     def get_citizen_communications(self, citizen_id: int) -> dict[str, Any]:
+         return citizen_communications(self, citizen_id)
+ 
++    def get_neighborhood_overview(self) -> dict[str, Any]:
++        return neighborhood_overview(self)
++
++    def get_neighborhood_detail(self, neighborhood_id: int) -> dict[str, Any]:
++        return neighborhood_detail(self, neighborhood_id)
++
+     def get_justice_overview(self) -> dict[str, Any]:
+         return justice_overview(self)
+ 
+@@ -2141,6 +2180,7 @@
+             "lastTrafficEventHour": self._last_traffic_event_hour,
+             "lastJusticeHour": getattr(self, "_last_justice_hour", -1),
+             "lastCommunicationSlot": self._last_communication_slot,
++            "lastNeighborhoodHour": self._last_neighborhood_hour,
+             "lastLaborMarketDay": self._last_labor_market_day,
+             "lastHousingDay": self._last_housing_day,
+             "movesToday": self.moves_today,
+@@ -2177,6 +2217,8 @@
+             "rngState": self.rng.getstate(),
+             "healthRngState": self.health_rng.getstate(),
+             "communicationRngState": self.communication_rng.getstate(),
++            "neighborhoodRngState": self.neighborhood_rng.getstate(),
++            "neighborhoods": [self._export_neighborhood(item) for item in self.neighborhoods.values()],
+             "buildings": [self._export_building(building) for building in self.buildings.values()],
+             "citizens": [self._export_citizen(citizen) for citizen in self.citizens.values()],
+             "households": [self._export_household(household) for household in self.households.values()],
+@@ -2208,6 +2250,8 @@
+         world.health_rng.setstate(cls._nested_tuple(state["healthRngState"]))
+         world.communication_rng = random.Random()
+         world.communication_rng.setstate(cls._nested_tuple(state["communicationRngState"]))
++        world.neighborhood_rng = random.Random()
++        world.neighborhood_rng.setstate(cls._nested_tuple(state["neighborhoodRngState"]))
+         world.tick = int(state["tick"])
+         world.day = int(state["day"])
+         world.hour = int(state["hour"])
+@@ -2230,6 +2274,7 @@
+         world._last_traffic_event_hour = int(state.get("lastTrafficEventHour", -1))
+         world._last_justice_hour = int(state.get("lastJusticeHour", -1))
+         world._last_communication_slot = int(state.get("lastCommunicationSlot", -1))
++        world._last_neighborhood_hour = int(state.get("lastNeighborhoodHour", -1))
+         world._last_labor_market_day = int(state.get("lastLaborMarketDay", 0))
+         world._last_housing_day = int(state.get("lastHousingDay", 0))
+         world.moves_today = int(state.get("movesToday", 0))
+@@ -2308,6 +2353,7 @@
+                 housing_condition=float(row.get("housingCondition", 100.0)),
+                 comfort=float(row.get("comfort", 50.0)),
+                 owner_type=str(row.get("ownerType", "private")),
++                neighborhood_id=int(row.get("neighborhoodId", 0)),
+                 housing_history=[HousingRecord(tick=int(item["tick"]), event_type=str(item["eventType"]), label=str(item["label"]), from_home_id=int(item["fromHomeId"]) if item.get("fromHomeId") is not None else None, to_home_id=int(item["toHomeId"]), reason=str(item["reason"]), rent_before=float(item["rentBefore"]), rent_after=float(item["rentAfter"]), member_ids=[int(value) for value in item.get("memberIds", [])]) for item in row.get("housingHistory", [])],
+                 financial_history=[
+                     BusinessFinancialRecord(
+@@ -2337,6 +2383,16 @@
+             )
+             world.buildings[building.id] = building
+ 
++        world.neighborhoods = {
++            int(row["id"]): Neighborhood(
++                id=int(row["id"]), name=str(row["name"]), x_min=int(row["xMin"]), y_min=int(row["yMin"]), x_max=int(row["xMax"]), y_max=int(row["yMax"]),
++                lighting=float(row["lighting"]), safety_perception=float(row["safetyPerception"]), attractiveness=float(row["attractiveness"]),
++                incidents_today=int(row.get("incidentsToday", 0)), incident_score_today=float(row.get("incidentScoreToday", 0.0)), cumulative_incidents=int(row.get("cumulativeIncidents", 0)),
++                patrol_minutes_today=int(row.get("patrolMinutesToday", 0)), police_responses_today=int(row.get("policeResponsesToday", 0)), police_response_minutes_today=int(row.get("policeResponseMinutesToday", 0)),
++                history=[NeighborhoodRecord(day=int(item["day"]), population=int(item["population"]), average_income=float(item["averageIncome"]), unemployment_rate=float(item["unemploymentRate"]), average_rent=float(item["averageRent"]), commercial_activity=float(item["commercialActivity"]), criminality=float(item["criminality"]), safety_perception=float(item["safetyPerception"]), police_coverage=float(item["policeCoverage"]), average_response_minutes=float(item["averageResponseMinutes"]), healthcare_access=float(item["healthcareAccess"]), commerce_access=float(item["commerceAccess"]), average_transport_minutes=float(item["averageTransportMinutes"]), attractiveness=float(item["attractiveness"]), service_pressure=float(item["servicePressure"])) for item in row.get("history", [])],
++            ) for row in state.get("neighborhoods", [])
++        }
++
+         if not any(building.building_type == BuildingType.POLICE for building in world.buildings.values()):
+             police_id = max(world.buildings, default=0) + 1
+             world.buildings[police_id] = Building(
+@@ -2576,6 +2632,7 @@
+                     ),
+                     crew_ids={int(value) for value in row.get("crewIds", [])},
+                     health_case_id=int(row["healthCaseId"]) if row.get("healthCaseId") is not None else None,
++                    patrol_neighborhood_id=int(row["patrolNeighborhoodId"]) if row.get("patrolNeighborhoodId") is not None else None,
+                 )
+                 world.vehicles[vehicle.id] = vehicle
+         else:
+@@ -2727,6 +2784,7 @@
+                     detained_ids=tuple(int(value) for value in row.get("detainedIds", [])),
+                     health_case_ids=tuple(int(value) for value in row.get("healthCaseIds", [])),
+                     complaint_id=int(row["complaintId"]) if row.get("complaintId") is not None else None,
++                    neighborhood_id=int(row.get("neighborhoodId", 0)),
+                 )
+                 for row in state.get("incidents", [])
+             }
+@@ -3007,6 +3065,7 @@
+             "hospitalizedPatients": len(building.hospitalized_ids),
+             "patientsTreatedToday": building.patients_treated_today,
+             "housing": home_summary(self, building) if building.building_type == BuildingType.HOME else None,
++            "neighborhoodId": building.neighborhood_id,
+         }
+ 
+     @staticmethod
+@@ -3023,6 +3082,7 @@
+             "lineId": vehicle.line_id,
+             "crewIds": sorted(vehicle.crew_ids),
+             "healthCaseId": vehicle.health_case_id,
++            "patrolNeighborhoodId": vehicle.patrol_neighborhood_id,
+         }
+ 
+     @staticmethod
+@@ -3101,6 +3161,7 @@
+             "policeAction": incident.police_action,
+             "policeOfficerIds": list(incident.police_officer_ids),
+             "detainedIds": list(incident.detained_ids),
++            "neighborhoodId": incident.neighborhood_id,
+         }
+ 
+     def _job_application_to_dict(self, application: JobApplication) -> dict[str, Any]:
+@@ -3178,6 +3239,16 @@
+         }
+ 
+     @staticmethod
++    def _export_neighborhood(neighborhood: Neighborhood) -> dict[str, Any]:
++        return {
++            "id": neighborhood.id, "name": neighborhood.name, "xMin": neighborhood.x_min, "yMin": neighborhood.y_min, "xMax": neighborhood.x_max, "yMax": neighborhood.y_max,
++            "lighting": neighborhood.lighting, "safetyPerception": neighborhood.safety_perception, "attractiveness": neighborhood.attractiveness,
++            "incidentsToday": neighborhood.incidents_today, "incidentScoreToday": neighborhood.incident_score_today, "cumulativeIncidents": neighborhood.cumulative_incidents,
++            "patrolMinutesToday": neighborhood.patrol_minutes_today, "policeResponsesToday": neighborhood.police_responses_today, "policeResponseMinutesToday": neighborhood.police_response_minutes_today,
++            "history": [{"day": item.day, "population": item.population, "averageIncome": item.average_income, "unemploymentRate": item.unemployment_rate, "averageRent": item.average_rent, "commercialActivity": item.commercial_activity, "criminality": item.criminality, "safetyPerception": item.safety_perception, "policeCoverage": item.police_coverage, "averageResponseMinutes": item.average_response_minutes, "healthcareAccess": item.healthcare_access, "commerceAccess": item.commerce_access, "averageTransportMinutes": item.average_transport_minutes, "attractiveness": item.attractiveness, "servicePressure": item.service_pressure} for item in neighborhood.history],
++        }
++
++    @staticmethod
+     def _export_building(building: Building) -> dict[str, Any]:
+         return {
+             "id": building.id,
+@@ -3228,6 +3299,7 @@
+             "comfort": building.comfort,
+             "ownerType": building.owner_type,
+             "housingHistory": [World._export_housing_record(item) for item in building.housing_history],
++            "neighborhoodId": building.neighborhood_id,
+         }
+ 
+     @staticmethod
+@@ -3464,6 +3536,7 @@
+             "serviceStartedTick": vehicle.service_started_tick,
+             "crewIds": sorted(vehicle.crew_ids),
+             "healthCaseId": vehicle.health_case_id,
++            "patrolNeighborhoodId": vehicle.patrol_neighborhood_id,
+         }
+ 
+     @staticmethod
+@@ -3498,6 +3571,7 @@
+             "detainedIds": list(incident.detained_ids),
+             "healthCaseIds": list(incident.health_case_ids),
+             "complaintId": incident.complaint_id,
++            "neighborhoodId": incident.neighborhood_id,
+         }
+ 
+     @staticmethod
+diff -ruN city-simulator-v0.10.1/backend/pyproject.toml city-simulator-v0.11.0/backend/pyproject.toml
+--- city-simulator-v0.10.1/backend/pyproject.toml	2026-07-29 14:58:09.000000000 +0200
++++ city-simulator-v0.11.0/backend/pyproject.toml	2026-07-29 15:34:24.000000000 +0200
+@@ -4,7 +4,7 @@
+ 
+ [project]
+ name = "city-simulator-mvp"
+-version = "0.10.1"
++version = "0.11.0"
+ description = "Serveur de simulation urbaine observable en temps réel"
+ requires-python = ">=3.11"
+ dependencies = [
+diff -ruN city-simulator-v0.10.1/backend/tests/test_health.py city-simulator-v0.11.0/backend/tests/test_health.py
+--- city-simulator-v0.10.1/backend/tests/test_health.py	2026-07-29 14:55:04.000000000 +0200
++++ city-simulator-v0.11.0/backend/tests/test_health.py	2026-07-29 15:21:39.000000000 +0200
+@@ -116,7 +116,7 @@
+     case = apply_injury(world, world.citizens[30], 72, source="agression")
+     restored = World.from_state(world.export_state())
+ 
+-    assert restored.export_state()["version"] == 11
++    assert restored.export_state()["version"] == 12
+     assert restored.health_cases[case.id].severity == case.severity
+     assert restored.citizens[30].care_status == CareStatus.WAITING_AMBULANCE
+     assert restored.citizens[30].health_history[0].source == "agression"
+diff -ruN city-simulator-v0.10.1/backend/tests/test_housing.py city-simulator-v0.11.0/backend/tests/test_housing.py
+--- city-simulator-v0.10.1/backend/tests/test_housing.py	2026-07-29 14:55:04.000000000 +0200
++++ city-simulator-v0.11.0/backend/tests/test_housing.py	2026-07-29 15:21:39.000000000 +0200
+@@ -70,7 +70,7 @@
+     restored_household = restored.households[household.id]
+     assert restored_household.home_id == destination.id
+     assert restored_household.housing_history[-1].reason == "test justifié"
+-    assert restored.export_state()["version"] == 11
++    assert restored.export_state()["version"] == 12
+ 
+ 
+ def test_housing_metrics_and_thirty_day_run_remain_coherent():
+diff -ruN city-simulator-v0.10.1/backend/tests/test_justice.py city-simulator-v0.11.0/backend/tests/test_justice.py
+--- city-simulator-v0.10.1/backend/tests/test_justice.py	2026-07-29 14:55:04.000000000 +0200
++++ city-simulator-v0.11.0/backend/tests/test_justice.py	2026-07-29 15:21:39.000000000 +0200
+@@ -192,7 +192,7 @@
+     _hold_hearing(world, case)
+ 
+     restored = World.from_state(world.export_state())
+-    assert restored.export_state()["version"] == 11
++    assert restored.export_state()["version"] == 12
+     assert restored.complaints.keys() == world.complaints.keys()
+     assert restored.sentences.keys() == world.sentences.keys()
+     assert restored.export_state() == world.export_state()
+diff -ruN city-simulator-v0.10.1/backend/tests/test_neighborhood.py city-simulator-v0.11.0/backend/tests/test_neighborhood.py
+--- city-simulator-v0.10.1/backend/tests/test_neighborhood.py	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.11.0/backend/tests/test_neighborhood.py	2026-07-29 15:23:54.000000000 +0200
+@@ -0,0 +1,107 @@
++from fastapi.testclient import TestClient
++
++from app.main import app, service
++from app.simulation.models import BuildingType, VehicleStatus, VehicleType
++from app.simulation.neighborhood import crime_opportunity, neighborhood_at
++from app.simulation.world import World
++
++
++def test_four_neighborhoods_have_real_and_different_metrics() -> None:
++    world = World(seed=11001, citizen_count=100)
++    rows = world.get_neighborhood_overview()["neighborhoods"]
++    assert len(rows) == 4
++    assert sum(row["population"] for row in rows) == 100
++    assert len({row["averageRent"] for row in rows}) > 1
++    assert len({row["healthcareAccess"] for row in rows}) > 1
++    assert len({row["averageResponseMinutes"] for row in rows}) > 1
++
++
++def test_repeated_incidents_reduce_local_safety_without_affecting_every_zone() -> None:
++    world = World(seed=11002, citizen_count=20)
++    building = next(row for row in world.buildings.values() if row.neighborhood_id == 3)
++    affected = world.neighborhoods[3]
++    other = world.neighborhoods[2]
++    before, other_before = affected.safety_perception, other.safety_perception
++    for index in range(5):
++        world.create_incident(incident_type="theft", title=f"Vol répété {index}", description="Incident territorial de test.", severity="danger", building_id=building.id, reported=True)
++    assert affected.safety_perception < before - 4
++    assert other.safety_perception == other_before
++    assert affected.incidents_today == 5
++
++
++def test_distance_to_services_changes_access_and_estimated_response() -> None:
++    world = World(seed=11003, citizen_count=100)
++    rows = {row["id"]: row for row in world.get_neighborhood_overview()["neighborhoods"]}
++    assert rows[1]["healthcareAccess"] < rows[2]["healthcareAccess"]
++    assert rows[1]["averageResponseMinutes"] > rows[4]["averageResponseMinutes"]
++    assert rows[1]["servicePressure"] > rows[2]["servicePressure"]
++
++
++def test_lighting_activity_witnesses_and_police_reduce_but_never_remove_crime() -> None:
++    world = World(seed=11004, citizen_count=100)
++    shop = next(row for row in world.buildings.values() if row.building_type == BuildingType.SHOP)
++    neighborhood = world.neighborhoods[shop.neighborhood_id]
++    world.hour = 23
++    neighborhood.lighting = 20
++    neighborhood.safety_perception = 30
++    shop.occupants.clear()
++    high_risk = crime_opportunity(world, shop, 0)
++    neighborhood.lighting = 100
++    neighborhood.safety_perception = 95
++    neighborhood.patrol_minutes_today = 23 * 60
++    shop.occupants.update(range(1, 10))
++    protected_risk = crime_opportunity(world, shop, 8)
++    assert protected_risk < high_risk
++    assert protected_risk >= 0.35
++
++
++def test_patrols_use_real_staffed_units_and_cover_zones() -> None:
++    world = World(seed=11005, citizen_count=100)
++    world.run_minutes(180)
++    patrols = [unit for unit in world.vehicles.values() if unit.vehicle_type == VehicleType.POLICE and unit.status == VehicleStatus.IN_SERVICE]
++    assert patrols
++    assert all(len(unit.crew_ids) == 2 and unit.patrol_neighborhood_id in world.neighborhoods for unit in patrols)
++    assert any(neighborhood.patrol_minutes_today > 0 for neighborhood in world.neighborhoods.values())
++    assert all(world.citizens[officer_id].active_vehicle_id == unit.id for unit in patrols for officer_id in unit.crew_ids)
++
++
++def test_neighborhood_save_resume_is_exact_and_deterministic() -> None:
++    world = World(seed=11006, citizen_count=40)
++    world.run_minutes(26 * 60)
++    state = world.export_state()
++    restored = World.from_state(state)
++    assert state["version"] == 12
++    assert restored.export_state() == state
++    world.run_minutes(6 * 60)
++    restored.run_minutes(6 * 60)
++    assert restored.snapshot() == world.snapshot()
++
++
++def test_neighborhood_api_and_websocket_domain(tmp_path) -> None:
++    service.save_path = tmp_path / "city.json"
++    with TestClient(app) as client:
++        client.post("/api/simulation/pause")
++        client.post("/api/city/reset", json={"seed": 11007})
++        overview = client.get("/api/neighborhoods")
++        assert overview.status_code == 200
++        assert len(overview.json()["neighborhoods"]) == 4
++        detail = client.get("/api/neighborhoods/1")
++        assert detail.status_code == 200
++        assert detail.json()["kind"] == "neighborhood"
++        assert detail.json()["buildings"]
++        assert client.get("/api/neighborhoods/999").status_code == 404
++        with client.websocket_connect("/ws/city") as websocket:
++            payload = websocket.receive_json()
++            assert "neighborhoods" in payload
++            assert "highestServicePressure" in payload["stats"]
++
++
++def test_thirty_days_keep_histories_bounded_and_zones_distinct() -> None:
++    world = World(seed=11008, citizen_count=20)
++    world.run_minutes(30 * 24 * 60)
++    rows = world.get_neighborhood_overview()["neighborhoods"]
++    assert all(len(neighborhood.history) == 30 for neighborhood in world.neighborhoods.values())
++    assert len({round(row["safetyPerception"], 1) for row in rows}) > 1
++    assert len({round(row["attractiveness"], 1) for row in rows}) > 1
++    assert all(0 <= row["servicePressure"] <= 100 for row in rows)
++    assert all(unit.status not in {VehicleStatus.RESPONDING, VehicleStatus.RETURNING} or unit.route for unit in world.vehicles.values() if unit.vehicle_type == VehicleType.POLICE)
+diff -ruN city-simulator-v0.10.1/frontend/package-lock.json city-simulator-v0.11.0/frontend/package-lock.json
+--- city-simulator-v0.10.1/frontend/package-lock.json	2026-07-29 14:58:09.000000000 +0200
++++ city-simulator-v0.11.0/frontend/package-lock.json	2026-07-29 15:34:24.000000000 +0200
+@@ -1,12 +1,12 @@
+ {
+   "name": "city-simulator-frontend",
+-  "version": "0.10.1",
++  "version": "0.11.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "city-simulator-frontend",
+-      "version": "0.10.1",
++      "version": "0.11.0",
+       "dependencies": {
+         "pixi.js": "^7.4.2",
+         "react": "^18.3.1",
+diff -ruN city-simulator-v0.10.1/frontend/package.json city-simulator-v0.11.0/frontend/package.json
+--- city-simulator-v0.10.1/frontend/package.json	2026-07-29 14:58:09.000000000 +0200
++++ city-simulator-v0.11.0/frontend/package.json	2026-07-29 15:34:24.000000000 +0200
+@@ -1,7 +1,7 @@
+ {
+   "name": "city-simulator-frontend",
+   "private": true,
+-  "version": "0.10.1",
++  "version": "0.11.0",
+   "type": "module",
+   "scripts": {
+     "dev": "vite",
+diff -ruN city-simulator-v0.10.1/frontend/src/App.tsx city-simulator-v0.11.0/frontend/src/App.tsx
+--- city-simulator-v0.10.1/frontend/src/App.tsx	2026-07-29 14:58:09.000000000 +0200
++++ city-simulator-v0.11.0/frontend/src/App.tsx	2026-07-29 15:34:24.000000000 +0200
+@@ -19,6 +19,7 @@
+ import { HouseholdModal } from "./components/HouseholdModal";
+ import { JusticeModal } from "./components/JusticeModal";
+ import { MetricsPanel } from "./components/MetricsPanel";
++import { NeighborhoodModal } from "./components/NeighborhoodModal";
+ import { ControlPanel } from "./components/ControlPanel";
+ import { EventLog } from "./components/EventLog";
+ import { SocialGraph } from "./components/SocialGraph";
+@@ -26,6 +27,7 @@
+ import { useCityStream } from "./hooks/useCityStream";
+ import { useMapLayers } from "./hooks/useMapLayers";
+ import type { InspectorEntity, SelectedEntity } from "./types/city";
++import type { ThematicLayer } from "./monitoring/neighborhoods";
+ 
+ export default function App() {
+   const { snapshot, connectionState } = useCityStream();
+@@ -38,6 +40,8 @@
+   const [householdModalId, setHouseholdModalId] = useState<number | null>(null);
+   const [justiceModalOpen, setJusticeModalOpen] = useState(false);
+   const [communicationModalOpen, setCommunicationModalOpen] = useState(false);
++  const [neighborhoodModalId, setNeighborhoodModalId] = useState<number | null>(null);
++  const [thematicLayer, setThematicLayer] = useState<ThematicLayer>("none");
+   const [caseModalId, setCaseModalId] = useState<number | null>(null);
+   const pausedRef = useRef(false);
+   const selectedEntityRef = useRef<SelectedEntity | null>(null);
+@@ -172,7 +176,7 @@
+     <main className="app-shell">
+       <header className="topbar">
+         <div>
+-          <div className="eyebrow">Monitoring urbain · v0.10.1</div>
++          <div className="eyebrow">Monitoring urbain · v0.11</div>
+           <h1>City Simulator</h1>
+         </div>
+         <div className="time-block">
+@@ -200,7 +204,7 @@
+       <MetricsPanel stats={snapshot?.stats ?? null} />
+ 
+       <section className="workspace">
+-        <ControlPanel snapshot={snapshot} layers={layers} onToggleLayer={toggleLayer} onOpenBuilding={selectBuilding} onOpenHousehold={setHouseholdModalId} onOpenSocialGraph={() => setSocialGraphOpen(true)} onOpenJustice={() => setJusticeModalOpen(true)} onOpenCommunications={() => setCommunicationModalOpen(true)} onOpenCitizen={selectCitizen} />
++        <ControlPanel snapshot={snapshot} layers={layers} onToggleLayer={toggleLayer} onOpenBuilding={selectBuilding} onOpenHousehold={setHouseholdModalId} onOpenSocialGraph={() => setSocialGraphOpen(true)} onOpenJustice={() => setJusticeModalOpen(true)} onOpenCommunications={() => setCommunicationModalOpen(true)} thematicLayer={thematicLayer} onThematicLayerChange={setThematicLayer} onOpenNeighborhood={setNeighborhoodModalId} onOpenCitizen={selectCitizen} />
+ 
+         <CityMap
+           snapshot={snapshot}
+@@ -209,6 +213,8 @@
+           onSelectVehicle={selectVehicle}
+           onSelectIncident={selectIncident}
+           onSelectBuilding={selectBuilding}
++          onSelectNeighborhood={setNeighborhoodModalId}
++          thematicLayer={thematicLayer}
+           showCitizens={layers.citizens}
+           showBuildings={layers.buildings}
+           showRoads={layers.roads}
+@@ -262,6 +268,7 @@
+         onSelectIncident={selectIncident}
+         onSelectHousehold={setHouseholdModalId}
+       />
++      <NeighborhoodModal neighborhoodId={neighborhoodModalId} paused={snapshot?.simulation.paused ?? false} snapshotTick={snapshot?.tick ?? 0} onClose={() => setNeighborhoodModalId(null)} onSelectBuilding={(id) => { setNeighborhoodModalId(null); selectBuilding(id); }} onSelectIncident={(id) => { setNeighborhoodModalId(null); selectIncident(id); }} onSelectVehicle={(id) => { setNeighborhoodModalId(null); selectVehicle(id); }} />
+       <CommunicationModal open={communicationModalOpen} data={snapshot?.communications ?? null} onClose={() => setCommunicationModalOpen(false)} onSelectCitizen={(id) => { setCommunicationModalOpen(false); selectCitizen(id); }} />
+       <JusticeModal
+         open={justiceModalOpen}
+diff -ruN city-simulator-v0.10.1/frontend/src/api.ts city-simulator-v0.11.0/frontend/src/api.ts
+--- city-simulator-v0.10.1/frontend/src/api.ts	2026-07-29 14:56:39.000000000 +0200
++++ city-simulator-v0.11.0/frontend/src/api.ts	2026-07-29 15:25:17.000000000 +0200
+@@ -10,6 +10,7 @@
+   HouseholdDetail,
+   JudicialCaseDetail,
+   JusticeOverview,
++  NeighborhoodDetail,
+   SocialGraphData,
+   VehicleDetail,
+ } from "./types/city";
+@@ -104,3 +105,7 @@
+ export function sendCommunication(payload: { senderId: number; recipientId: number; channel: CommunicationChannel; tone: CommunicationTone; subject: string; body: string }): Promise<CommunicationSummary> {
+   return request<CommunicationSummary>("/api/communications", { method: "POST", body: JSON.stringify(payload) });
+ }
++
++export function getNeighborhood(id: number): Promise<NeighborhoodDetail> {
++  return request<NeighborhoodDetail>(`/api/neighborhoods/${id}`);
++}
+diff -ruN city-simulator-v0.10.1/frontend/src/components/ControlPanel.tsx city-simulator-v0.11.0/frontend/src/components/ControlPanel.tsx
+--- city-simulator-v0.10.1/frontend/src/components/ControlPanel.tsx	2026-07-29 14:56:39.000000000 +0200
++++ city-simulator-v0.11.0/frontend/src/components/ControlPanel.tsx	2026-07-29 15:27:26.000000000 +0200
+@@ -1,6 +1,7 @@
+ import type { ChangeEvent } from "react";
+ import type { MapLayers } from "../hooks/useMapLayers";
+ import type { CitySnapshot } from "../types/city";
++import { THEMATIC_OPTIONS, type ThematicLayer } from "../monitoring/neighborhoods";
+ 
+ interface ControlPanelProps {
+   snapshot: CitySnapshot | null;
+@@ -11,6 +12,9 @@
+   onOpenSocialGraph: () => void;
+   onOpenJustice: () => void;
+   onOpenCommunications: () => void;
++  thematicLayer: ThematicLayer;
++  onThematicLayerChange: (layer: ThematicLayer) => void;
++  onOpenNeighborhood: (id: number) => void;
+   onOpenCitizen: (id: number) => void;
+ }
+ 
+@@ -60,6 +64,9 @@
+   onOpenSocialGraph,
+   onOpenJustice,
+   onOpenCommunications,
++  thematicLayer,
++  onThematicLayerChange,
++  onOpenNeighborhood,
+   onOpenCitizen,
+ }: ControlPanelProps) {
+   const trips = snapshot?.stats.tripCountsToday ?? { walk: 0, car: 0, bus: 0 };
+@@ -87,6 +94,10 @@
+         ))}
+       </div>
+ 
++      <h3>Cartes thématiques</h3>
++      <label className="thematic-select">Indicateur territorial<select value={thematicLayer} onChange={(event) => onThematicLayerChange(event.target.value as ThematicLayer)}>{THEMATIC_OPTIONS.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
++      <div className="neighborhood-shortcuts">{snapshot?.neighborhoods.neighborhoods.map((row) => <button key={row.id} onClick={() => onOpenNeighborhood(row.id)}><span>{row.name}</span><b>{Math.round(row.safetyPerception)} % sûr</b></button>)}</div>
++
+       {snapshot?.health.hospital && (
+         <button
+           className="graph-open-button"
+diff -ruN city-simulator-v0.10.1/frontend/src/components/EventLog.tsx city-simulator-v0.11.0/frontend/src/components/EventLog.tsx
+--- city-simulator-v0.10.1/frontend/src/components/EventLog.tsx	2026-07-29 14:58:09.000000000 +0200
++++ city-simulator-v0.11.0/frontend/src/components/EventLog.tsx	2026-07-29 15:27:26.000000000 +0200
+@@ -1,7 +1,7 @@
+ import { useMemo, useState } from "react";
+ import type { CityEvent } from "../types/city";
+ 
+-type EventFilter = "all" | "housing" | "economy" | "health" | "justice" | "communications" | "social" | "mobility" | "incidents" | "alerts";
++type EventFilter = "all" | "housing" | "economy" | "health" | "justice" | "communications" | "neighborhoods" | "social" | "mobility" | "incidents" | "alerts";
+ 
+ const ECONOMY_TYPES = new Set([
+   "vacancy_opened",
+@@ -28,6 +28,8 @@
+   "community_service_completed",
+ ]);
+ 
++const NEIGHBORHOOD_TYPES = new Set(["neighborhood_patrol_started"]);
++
+ const COMMUNICATION_TYPES = new Set(["communication_sent", "communication_delivered", "phone_call_missed", "phone_call_completed"]);
+ 
+ const SOCIAL_TYPES = new Set([
+@@ -69,6 +71,7 @@
+   if (filter === "health") return HEALTH_TYPES.has(event.eventType);
+   if (filter === "justice") return JUSTICE_TYPES.has(event.eventType);
+   if (filter === "communications") return COMMUNICATION_TYPES.has(event.eventType);
++  if (filter === "neighborhoods") return NEIGHBORHOOD_TYPES.has(event.eventType);
+   if (filter === "social") return SOCIAL_TYPES.has(event.eventType);
+   if (filter === "mobility") return MOBILITY_TYPES.has(event.eventType);
+   if (filter === "incidents") return INCIDENT_TYPES.has(event.eventType) || event.incidentId !== null;
+@@ -106,6 +109,7 @@
+             ["health", "Santé"],
+             ["justice", "Justice"],
+             ["communications", "Communications"],
++            ["neighborhoods", "Quartiers"],
+             ["social", "Social"],
+             ["mobility", "Mobilité"],
+             ["incidents", "Incidents"],
+diff -ruN city-simulator-v0.10.1/frontend/src/components/NeighborhoodModal.tsx city-simulator-v0.11.0/frontend/src/components/NeighborhoodModal.tsx
+--- city-simulator-v0.10.1/frontend/src/components/NeighborhoodModal.tsx	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.11.0/frontend/src/components/NeighborhoodModal.tsx	2026-07-29 15:26:42.000000000 +0200
+@@ -0,0 +1,20 @@
++import { useEffect, useState } from "react";
++import { getNeighborhood } from "../api";
++import type { NeighborhoodDetail } from "../types/city";
++import "./NeighborhoodMonitoring.css";
++const number = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
++const euro = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
++function Gauge({ label, value, danger=false }: { label:string; value:number; danger?:boolean }) { return <div className="neighborhood-gauge"><span>{label}<b>{number.format(value)} %</b></span><i><em className={danger?"danger":""} style={{width:`${Math.max(0,Math.min(100,value))}%`}} /></i></div>; }
++export function NeighborhoodModal({ neighborhoodId, paused, snapshotTick, onClose, onSelectBuilding, onSelectIncident, onSelectVehicle }: { neighborhoodId:number|null; paused:boolean; snapshotTick:number; onClose:()=>void; onSelectBuilding:(id:number)=>void; onSelectIncident:(id:number)=>void; onSelectVehicle:(id:number)=>void }) {
++ const [data,setData]=useState<NeighborhoodDetail|null>(null); const [loading,setLoading]=useState(false); const [refreshing,setRefreshing]=useState(false);
++ useEffect(()=>{ if(neighborhoodId===null){setData(null);return;} let disposed=false,inFlight=false; const initial=data?.id!==neighborhoodId; if(initial)setData(null); const refresh=async(first:boolean)=>{if(inFlight)return;inFlight=true;first?setLoading(true):setRefreshing(true);try{const next=await getNeighborhood(neighborhoodId);if(!disposed)setData(next);}finally{inFlight=false;if(!disposed){setLoading(false);setRefreshing(false);}}};void refresh(initial);const timer=paused?null:window.setInterval(()=>void refresh(false),1500);return()=>{disposed=true;if(timer!==null)window.clearInterval(timer);};},[neighborhoodId,paused,paused?snapshotTick:0]);
++ if(neighborhoodId===null)return null;
++ return <div className="citizen-modal-overlay" role="dialog" aria-modal="true" aria-label="Fiche quartier" onMouseDown={onClose}><section className="citizen-modal neighborhood-modal" onMouseDown={(event)=>event.stopPropagation()}><header className="citizen-modal-header"><div><div className="eyebrow">Quartier · #{neighborhoodId}</div><h2>{data?.name??"Chargement…"}</h2><p>{data?`${data.population} habitants · attractivité ${number.format(data.attractiveness)} %`:"Récupération des données"}</p></div><div className="citizen-modal-actions">{data&&<span className={`live-status${refreshing?" refreshing":""}${paused?" paused":""}`}><i />{paused?"En pause":"En direct"}</span>}<button onClick={onClose}>Fermer</button></div></header>
++ <div className="citizen-modal-body">{loading&&!data?<div className="profile-loading">Chargement du quartier…</div>:!data?<div className="profile-loading">Quartier introuvable.</div>:<div className="neighborhood-grid">
++  <section className="profile-section"><h3>Profil territorial</h3><dl className="profile-facts"><div><dt>Revenu moyen</dt><dd>{euro.format(data.averageIncome)}</dd></div><div><dt>Chômage</dt><dd>{number.format(data.unemploymentRate)} %</dd></div><div><dt>Loyer moyen</dt><dd>{euro.format(data.averageRent)}</dd></div><div><dt>Temps de transport</dt><dd>{number.format(data.averageTransportMinutes)} min</dd></div><div><dt>Réponse policière</dt><dd>{number.format(data.averageResponseMinutes)} min</dd></div><div><dt>Éclairage</dt><dd>{number.format(data.lighting)} %</dd></div></dl><Gauge label="Sécurité ressentie" value={data.safetyPerception}/><Gauge label="Attractivité" value={data.attractiveness}/><Gauge label="Pression des services" value={data.servicePressure} danger/></section>
++  <section className="profile-section"><h3>Accès et activité</h3><Gauge label="Couverture policière" value={data.policeCoverage}/><Gauge label="Accès aux soins" value={data.healthcareAccess}/><Gauge label="Accès aux commerces" value={data.commerceAccess}/><Gauge label="Criminalité" value={data.criminality} danger/><dl className="profile-facts"><div><dt>Activité commerciale</dt><dd>{number.format(data.commercialActivity)}</dd></div><div><dt>Entreprises</dt><dd>{data.businesses.length}</dd></div><div><dt>Services</dt><dd>{data.services.length}</dd></div><div><dt>Patrouilles</dt><dd>{data.patrols.length}</dd></div></dl><div className="neighborhood-links">{data.patrols.map((row)=><button key={row.id} onClick={()=>onSelectVehicle(row.id)}>Unité #{row.id} · {row.status}</button>)}</div></section>
++  <section className="profile-section profile-section-wide"><h3>Entreprises et services</h3><div className="neighborhood-entities">{[...data.businesses,...data.services].map((row)=><button key={`${row.type}-${row.id}`} onClick={()=>onSelectBuilding(row.id)}><span><strong>{row.name}</strong><small>{row.type.replace(/_/g," ")}</small></span><b>Service {number.format(row.serviceLevel)} %</b></button>)}</div></section>
++  <section className="profile-section"><h3>Incidents récents</h3><div className="neighborhood-incidents">{data.incidents.length===0?<p className="muted">Aucun incident enregistré.</p>:data.incidents.slice(0,12).map((row)=><button key={row.id} onClick={()=>onSelectIncident(row.id)}><span><strong>{row.title}</strong><small>{row.status}</small></span><b>{row.severity}</b></button>)}</div></section>
++  <section className="profile-section"><h3>Tendances journalières</h3>{data.history.length===0?<p className="muted">Les premières tendances seront disponibles à la fin de la journée.</p>:<div className="neighborhood-history">{data.history.slice(-14).reverse().map((row)=><article key={row.day}><b>J{row.day}</b><span>Sécurité {number.format(row.safetyPerception)} %</span><span>Crime {number.format(row.criminality)}</span><span>Attractivité {number.format(row.attractiveness)} %</span></article>)}</div>}</section>
++ </div>}</div></section></div>;
++}
+diff -ruN city-simulator-v0.10.1/frontend/src/components/NeighborhoodMonitoring.css city-simulator-v0.11.0/frontend/src/components/NeighborhoodMonitoring.css
+--- city-simulator-v0.10.1/frontend/src/components/NeighborhoodMonitoring.css	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.11.0/frontend/src/components/NeighborhoodMonitoring.css	2026-07-29 15:26:42.000000000 +0200
+@@ -0,0 +1 @@
++.neighborhood-modal{width:min(1080px,95vw);height:min(850px,92vh)}.neighborhood-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.neighborhood-gauge{display:grid;gap:5px;margin:10px 0}.neighborhood-gauge span{display:flex;justify-content:space-between;color:#aeb9c8;font-size:11px}.neighborhood-gauge i{height:7px;background:#263143;border-radius:99px;overflow:hidden}.neighborhood-gauge em{display:block;height:100%;background:#58ad78}.neighborhood-gauge em.danger{background:#d7a34d}.neighborhood-links,.neighborhood-entities,.neighborhood-incidents{display:grid;gap:7px}.neighborhood-entities{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}.neighborhood-entities button,.neighborhood-incidents button{display:flex;justify-content:space-between;gap:10px;text-align:left;padding:10px;background:#141d29}.neighborhood-entities span,.neighborhood-incidents span{min-width:0}.neighborhood-entities strong,.neighborhood-entities small,.neighborhood-incidents strong,.neighborhood-incidents small{display:block}.neighborhood-entities small,.neighborhood-incidents small{color:#91a0b4;margin-top:3px}.neighborhood-history{display:grid;gap:6px;max-height:260px;overflow:auto}.neighborhood-history article{display:grid;grid-template-columns:42px repeat(3,1fr);gap:6px;padding:8px;background:#141d29;border-radius:6px;font-size:10px}.neighborhood-history span{color:#a6b2c2}@media(max-width:760px){.neighborhood-grid{grid-template-columns:1fr}.neighborhood-history article{grid-template-columns:40px 1fr 1fr}.neighborhood-history span:last-child{display:none}}
+diff -ruN city-simulator-v0.10.1/frontend/src/map/CityMap.tsx city-simulator-v0.11.0/frontend/src/map/CityMap.tsx
+--- city-simulator-v0.10.1/frontend/src/map/CityMap.tsx	2026-07-28 20:45:18.000000000 +0200
++++ city-simulator-v0.11.0/frontend/src/map/CityMap.tsx	2026-07-29 15:27:51.000000000 +0200
+@@ -7,6 +7,7 @@
+   SelectedEntity,
+   VehicleSummary,
+ } from "../types/city";
++import { thematicLabel, thematicRatio, thematicValue, type ThematicLayer } from "../monitoring/neighborhoods";
+ 
+ interface CityMapProps {
+   snapshot: CitySnapshot | null;
+@@ -15,6 +16,8 @@
+   onSelectVehicle: (vehicleId: number) => void;
+   onSelectIncident: (incidentId: number) => void;
+   onSelectBuilding: (buildingId: number) => void;
++  onSelectNeighborhood: (neighborhoodId: number) => void;
++  thematicLayer: ThematicLayer;
+   showCitizens: boolean;
+   showBuildings: boolean;
+   showRoads: boolean;
+@@ -47,6 +50,7 @@
+   background: Graphics;
+   grid: Graphics;
+   roadsLayer: Container;
++  thematicLayer: Container;
+   transitLayer: Container;
+   trafficLayer: Container;
+   buildingsLayer: Container;
+@@ -183,6 +187,7 @@
+   const background = new Graphics();
+   const grid = new Graphics();
+   const roadsLayer = new Container();
++  const thematicLayer = new Container();
+   const transitLayer = new Container();
+   const trafficLayer = new Container();
+   const buildingsLayer = new Container();
+@@ -195,6 +200,7 @@
+   world.addChild(
+     background,
+     grid,
++    thematicLayer,
+     roadsLayer,
+     transitLayer,
+     trafficLayer,
+@@ -212,6 +218,7 @@
+     background,
+     grid,
+     roadsLayer,
++    thematicLayer,
+     transitLayer,
+     trafficLayer,
+     buildingsLayer,
+@@ -285,6 +292,26 @@
+     .join("|");
+ }
+ 
++function drawNeighborhoodTheme(scene: SceneState, snapshot: CitySnapshot, layer: ThematicLayer, onSelect: (id: number) => void): void {
++  destroyChildren(scene.thematicLayer);
++  if (layer === "none") { scene.thematicLayer.visible = false; return; }
++  const goodWhenHigh = new Set<ThematicLayer>(["averageIncome", "safetyPerception", "accessibility", "healthcareAccess", "commercialActivity"]);
++  snapshot.neighborhoods.neighborhoods.forEach((row) => {
++    const ratio = thematicRatio(row, snapshot.neighborhoods.neighborhoods, layer);
++    const severity = goodWhenHigh.has(layer) ? 1 - ratio : ratio;
++    const color = severity > .66 ? 0xd65353 : severity > .33 ? 0xd8a947 : 0x4eaa72;
++    const area = new Graphics(); area.beginFill(color, .30); area.lineStyle(2, color, .72);
++    area.drawRect(row.bounds.xMin * CELL_SIZE, row.bounds.yMin * CELL_SIZE, (row.bounds.xMax - row.bounds.xMin + 1) * CELL_SIZE, (row.bounds.yMax - row.bounds.yMin + 1) * CELL_SIZE); area.endFill();
++    area.eventMode = "static"; area.cursor = "pointer"; area.on("pointertap", () => onSelect(row.id)); scene.thematicLayer.addChild(area);
++    const value = thematicValue(row, layer);
++    const formatted = layer === "averageIncome" || layer === "averageRent" ? `${Math.round(value)} €` : layer === "averageResponseMinutes" ? `${value.toFixed(1)} min` : layer === "commercialActivity" ? value.toFixed(0) : `${value.toFixed(1)} %`;
++    const label = new Text(`${row.name}
++${thematicLabel(layer)} : ${formatted}`, new TextStyle({ fontFamily: "Arial", fontSize: 11, fontWeight: "bold", fill: 0xffffff, align: "center", stroke: 0x11151d, strokeThickness: 3 }));
++    label.anchor.set(.5); label.x = (row.bounds.xMin + row.bounds.xMax + 1) / 2 * CELL_SIZE; label.y = (row.bounds.yMin + row.bounds.yMax + 1) / 2 * CELL_SIZE; scene.thematicLayer.addChild(label);
++  });
++  scene.thematicLayer.visible = true;
++}
++
+ function drawRoads(scene: SceneState, snapshot: CitySnapshot): void {
+   const signature = `${snapshot.map.width}:${snapshot.map.height}:${snapshot.roads.cells.length}`;
+   if (signature === scene.roadSignature) return;
+@@ -394,6 +421,8 @@
+   onSelectVehicle,
+   onSelectIncident,
+   onSelectBuilding,
++  onSelectNeighborhood,
++  thematicLayer,
+   showCitizens,
+   showBuildings,
+   showRoads,
+@@ -415,11 +444,13 @@
+   const onSelectVehicleRef = useRef(onSelectVehicle);
+   const onSelectIncidentRef = useRef(onSelectIncident);
+   const onSelectBuildingRef = useRef(onSelectBuilding);
++  const onSelectNeighborhoodRef = useRef(onSelectNeighborhood);
+ 
+   onSelectCitizenRef.current = onSelectCitizen;
+   onSelectVehicleRef.current = onSelectVehicle;
+   onSelectIncidentRef.current = onSelectIncident;
+   onSelectBuildingRef.current = onSelectBuilding;
++  onSelectNeighborhoodRef.current = onSelectNeighborhood;
+ 
+   useEffect(() => {
+     const host = hostRef.current;
+@@ -456,6 +487,7 @@
+     if (!app || !scene || !snapshot) return;
+ 
+     updateMapGeometry(scene, snapshot.map.width, snapshot.map.height);
++    drawNeighborhoodTheme(scene, snapshot, thematicLayer, (id) => onSelectNeighborhoodRef.current(id));
+     drawRoads(scene, snapshot);
+     drawTransit(scene, snapshot);
+     drawTraffic(scene, snapshot);
+@@ -596,6 +628,7 @@
+   }, [
+     snapshot,
+     selectedEntity,
++    thematicLayer,
+     showBuildings,
+     showCitizens,
+     showIncidents,
+diff -ruN city-simulator-v0.10.1/frontend/src/monitoring/metrics.test.ts city-simulator-v0.11.0/frontend/src/monitoring/metrics.test.ts
+--- city-simulator-v0.10.1/frontend/src/monitoring/metrics.test.ts	2026-07-29 13:25:42.000000000 +0200
++++ city-simulator-v0.11.0/frontend/src/monitoring/metrics.test.ts	2026-07-29 15:28:20.000000000 +0200
+@@ -5,7 +5,7 @@
+ describe("buildMetricGroups", () => {
+   it("keeps every monitoring view compact and uniquely addressable", () => {
+     const groups = buildMetricGroups(stats);
+-    expect(groups.map((group) => group.id)).toEqual(["summary", "housing", "economy", "health", "mobility", "social", "security"]);
++    expect(groups.map((group) => group.id)).toEqual(["summary", "housing", "economy", "health", "mobility", "social", "neighborhoods", "security"]);
+     expect(groups.every((group) => group.metrics.length === 6)).toBe(true);
+     expect(groups.every((group) => new Set(group.metrics.map((metric) => metric.id)).size === group.metrics.length)).toBe(true);
+   });
+diff -ruN city-simulator-v0.10.1/frontend/src/monitoring/metrics.ts city-simulator-v0.11.0/frontend/src/monitoring/metrics.ts
+--- city-simulator-v0.10.1/frontend/src/monitoring/metrics.ts	2026-07-29 14:56:39.000000000 +0200
++++ city-simulator-v0.11.0/frontend/src/monitoring/metrics.ts	2026-07-29 15:27:26.000000000 +0200
+@@ -7,7 +7,8 @@
+   | "health"
+   | "mobility"
+   | "social"
+-  | "security";
++  | "security"
++  | "neighborhoods";
+ export type MetricGroupId =
+   | "summary"
+   | "housing"
+@@ -15,7 +16,8 @@
+   | "health"
+   | "mobility"
+   | "social"
+-  | "security";
++  | "security"
++  | "neighborhoods";
+ export type CityStats = CitySnapshot["stats"];
+ 
+ export interface MetricCardModel {
+@@ -127,6 +129,18 @@
+       ],
+     },
+     {
++      id: "neighborhoods",
++      label: "Quartiers",
++      metrics: [
++        card("district-safety", "Sécurité moyenne", `${number.format(stats.averageNeighborhoodSafety)} %`, "neighborhoods"),
++        card("district-gap", "Écart de sécurité", `${number.format(stats.neighborhoodSafetyGap)} pts`, "neighborhoods"),
++        card("district-attractiveness", "Attractivité moyenne", `${number.format(stats.averageNeighborhoodAttractiveness)} %`, "neighborhoods"),
++        card("district-pressure", "Pression maximale", `${number.format(stats.highestServicePressure)} %`, "neighborhoods"),
++        card("district-response", "Réponse la plus lente", `${number.format(stats.slowestNeighborhoodResponseMinutes)} min`, "neighborhoods"),
++        card("district-health", "Accès soins minimal", `${number.format(stats.lowestHealthcareAccess)} %`, "neighborhoods"),
++      ],
++    },
++    {
+       id: "security",
+       label: "Sécurité",
+       metrics: [
+diff -ruN city-simulator-v0.10.1/frontend/src/monitoring/neighborhoods.test.ts city-simulator-v0.11.0/frontend/src/monitoring/neighborhoods.test.ts
+--- city-simulator-v0.10.1/frontend/src/monitoring/neighborhoods.test.ts	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.11.0/frontend/src/monitoring/neighborhoods.test.ts	2026-07-29 15:25:17.000000000 +0200
+@@ -0,0 +1,3 @@
++import { describe,expect,it } from "vitest"; import { thematicRatio,thematicValue } from "./neighborhoods"; import type { NeighborhoodSummary } from "../types/city";
++const base={id:1,name:"A",bounds:{xMin:0,yMin:0,xMax:1,yMax:1},lighting:50,population:10,averageIncome:1000,unemploymentRate:10,averageRent:400,commercialActivity:20,criminality:4,safetyPerception:60,policeCoverage:30,averageResponseMinutes:8,healthcareAccess:20,commerceAccess:80,averageTransportMinutes:10,attractiveness:50,servicePressure:50} satisfies NeighborhoodSummary;
++describe("neighborhood thematic maps",()=>{it("derives accessibility from real service access",()=>expect(thematicValue(base,"accessibility")).toBe(50));it("normalizes values between neighborhoods",()=>{const other={...base,id:2,averageRent:800};expect(thematicRatio(base,[base,other],"averageRent")).toBe(0);expect(thematicRatio(other,[base,other],"averageRent")).toBe(1);});});
+diff -ruN city-simulator-v0.10.1/frontend/src/monitoring/neighborhoods.ts city-simulator-v0.11.0/frontend/src/monitoring/neighborhoods.ts
+--- city-simulator-v0.10.1/frontend/src/monitoring/neighborhoods.ts	1970-01-01 01:00:00.000000000 +0100
++++ city-simulator-v0.11.0/frontend/src/monitoring/neighborhoods.ts	2026-07-29 15:28:20.000000000 +0200
+@@ -0,0 +1,7 @@
++import type { NeighborhoodSummary } from "../types/city";
++export type ThematicLayer = "none" | "averageIncome" | "unemploymentRate" | "criminality" | "safetyPerception" | "averageResponseMinutes" | "accessibility" | "averageRent" | "healthcareAccess" | "commercialActivity";
++export const THEMATIC_OPTIONS: Array<[ThematicLayer, string]> = [["none","Aucune"],["averageIncome","Revenus"],["unemploymentRate","Chômage"],["criminality","Criminalité"],["safetyPerception","Sécurité ressentie"],["averageResponseMinutes","Temps de réponse"],["accessibility","Accessibilité"],["averageRent","Loyers"],["healthcareAccess","Accès aux soins"],["commercialActivity","Fréquentation commerciale"]];
++export function thematicValue(row: NeighborhoodSummary, layer: ThematicLayer): number { return layer === "accessibility" ? (row.healthcareAccess + row.commerceAccess) / 2 : layer === "none" ? 0 : row[layer]; }
++export function thematicRange(rows: NeighborhoodSummary[], layer: ThematicLayer): [number, number] { const values=rows.map((row)=>thematicValue(row,layer)); return values.length ? [Math.min(...values),Math.max(...values)] : [0,1]; }
++export function thematicRatio(row: NeighborhoodSummary, rows: NeighborhoodSummary[], layer: ThematicLayer): number { const [low,high]=thematicRange(rows,layer); return high===low ? .5 : Math.max(0,Math.min(1,(thematicValue(row,layer)-low)/(high-low))); }
++export const thematicLabel = (layer: ThematicLayer) => THEMATIC_OPTIONS.find(([value])=>value===layer)?.[1] ?? layer;
+diff -ruN city-simulator-v0.10.1/frontend/src/styles.css city-simulator-v0.11.0/frontend/src/styles.css
+--- city-simulator-v0.10.1/frontend/src/styles.css	2026-07-29 13:45:18.000000000 +0200
++++ city-simulator-v0.11.0/frontend/src/styles.css	2026-07-29 15:27:26.000000000 +0200
+@@ -864,3 +864,5 @@
+ .healthcare-grid dd { color: #ff8999; }
+ 
+ .business-status-searching, .business-status-temporary { color: #f4c86d; }
++
++.thematic-select{display:grid;gap:6px;color:#9eacbd;font-size:11px}.thematic-select select{width:100%;padding:8px;color:#eef3f8;background:#141d29;border:1px solid #344054;border-radius:7px}.neighborhood-shortcuts{display:grid;gap:5px;margin:8px 0 14px}.neighborhood-shortcuts button{display:flex;justify-content:space-between;gap:8px;padding:8px;text-align:left;background:#17212d}.neighborhood-shortcuts button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.neighborhood-shortcuts button b{flex:none;color:#8fc7a4;font-size:10px}
+diff -ruN city-simulator-v0.10.1/frontend/src/types/city.ts city-simulator-v0.11.0/frontend/src/types/city.ts
+--- city-simulator-v0.10.1/frontend/src/types/city.ts	2026-07-29 15:05:26.000000000 +0200
++++ city-simulator-v0.11.0/frontend/src/types/city.ts	2026-07-29 15:27:51.000000000 +0200
+@@ -139,6 +139,7 @@
+   hospitalizedPatients: number;
+   patientsTreatedToday: number;
+   housing: HomeSummary | null;
++  neighborhoodId: number;
+ }
+ 
+ export interface VehicleSummary {
+@@ -153,6 +154,7 @@
+   lineId: number | null;
+   crewIds: number[];
+   healthCaseId: number | null;
++  patrolNeighborhoodId: number | null;
+ }
+ 
+ export interface BusStopSummary {
+@@ -233,6 +235,7 @@
+   policeAction: string | null;
+   policeOfficerIds: number[];
+   detainedIds: number[];
++  neighborhoodId: number;
+ }
+ 
+ export interface HealthCaseSummary {
+@@ -310,6 +313,22 @@
+ export interface CommunicationMetrics { sentToday: number; deliveredToday: number; phoneCallsToday: number; smsToday: number; emailsToday: number; lettersToday: number; unreadCommunications: number; communicationRepliesToday: number; }
+ export interface CommunicationOverview { metrics: CommunicationMetrics; recent: CommunicationSummary[]; }
+ 
++export interface NeighborhoodSummary {
++  id: number; name: string; bounds: { xMin: number; yMin: number; xMax: number; yMax: number }; lighting: number;
++  population: number; averageIncome: number; unemploymentRate: number; averageRent: number; commercialActivity: number;
++  criminality: number; safetyPerception: number; policeCoverage: number; averageResponseMinutes: number;
++  healthcareAccess: number; commerceAccess: number; averageTransportMinutes: number; attractiveness: number; servicePressure: number;
++}
++export interface NeighborhoodOverview { tick: number; neighborhoods: NeighborhoodSummary[]; metrics: { averageSafety: number; averageAttractiveness: number; highestServicePressure: number; slowestResponseMinutes: number; lowestHealthcareAccess: number; safetyGap: number }; }
++export interface NeighborhoodDetail extends NeighborhoodSummary {
++  kind: "neighborhood";
++  buildings: Array<{ id: number; name: string; type: BuildingSummary["type"]; serviceLevel: number }>;
++  businesses: Array<{ id: number; name: string; type: BuildingSummary["type"]; revenueToday: number; serviceLevel: number }>;
++  services: Array<{ id: number; name: string; type: BuildingSummary["type"]; serviceLevel: number }>;
++  incidents: IncidentSummary[]; patrols: VehicleSummary[];
++  history: Array<Omit<NeighborhoodSummary, "id" | "name" | "bounds" | "lighting"> & { day: number }>;
++}
++
+ export interface CitySnapshot {
+   type: "city_snapshot";
+   tick: number;
+@@ -377,6 +396,7 @@
+     activeSocialEvents: number;
+     socialGatheringsCompleted: number;
+     sentToday: number; deliveredToday: number; phoneCallsToday: number; smsToday: number; emailsToday: number; lettersToday: number; unreadCommunications: number; communicationRepliesToday: number;
++    averageNeighborhoodSafety: number; averageNeighborhoodAttractiveness: number; highestServicePressure: number; slowestNeighborhoodResponseMinutes: number; lowestHealthcareAccess: number; neighborhoodSafetyGap: number;
+   };
+   citizens: CitizenSummary[];
+   buildings: BuildingSummary[];
+@@ -404,6 +424,7 @@
+   housing: HousingOverview;
+   justice: JusticeOverview;
+   communications: CommunicationOverview;
++  neighborhoods: NeighborhoodOverview;
+   incidents: IncidentSummary[];
+   events: CityEvent[];
+   simulation: {
+@@ -431,6 +452,7 @@
+   | "housing"
+   | "justice"
+   | "communications"
++  | "neighborhoods"
+   | "incidents"
+   | "events"
+   | "simulation"

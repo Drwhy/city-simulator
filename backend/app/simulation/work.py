@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .banking import available_funds, deposit, withdraw
 from .economy import record_purchase, record_salary_payment, record_work_minute
 from .models import Activity, BuildingType, BusinessStatus, CareStatus, Citizen, PoliceMeasure, TravelStage, VehicleStatus, VehicleType
 
@@ -151,7 +152,7 @@ def update_work_and_consumption(world: "World") -> None:
             if citizen.financial_stress >= 55.0 or citizen.workplace_id is None:
                 goods_budget *= 0.35
                 goods_wanted *= 0.5
-            available_credit = max(0.0, citizen.money + citizen.overdraft_limit)
+            available_credit = available_funds(citizen, allow_credit=True)
             food_bought = min(food_wanted, market.food_stock, available_credit / 3.2, food_budget / 3.2)
             food_cost = round(food_bought * 3.2, 2)
             remaining_credit = max(0.0, available_credit - food_cost)
@@ -161,7 +162,9 @@ def update_work_and_consumption(world: "World") -> None:
             if cost <= 0:
                 citizen.needs.stress = min(100.0, citizen.needs.stress + 2.0)
                 continue
-            citizen.money = round(citizen.money - cost, 2)
+            paid = withdraw(world, citizen, cost, label=f"Achats à {market.name}", transaction_type="purchase", counterparty_id=market.id, allow_credit=True)
+            if paid + 0.01 < cost:
+                continue
             record_purchase(world, citizen, food_cost=food_cost, goods_cost=goods_cost)
             citizen.food_units += food_bought
             citizen.goods_units += goods_bought
@@ -190,7 +193,7 @@ def update_work_and_consumption(world: "World") -> None:
         ratio = min(1.0, citizen.minutes_worked_today / scheduled_minutes)
         if ratio >= 0.45:
             pay = round(citizen.salary_daily * ratio, 2)
-            citizen.money = round(citizen.money + pay, 2)
+            deposit(world, citizen, pay, label=f"Salaire — {world.buildings[citizen.workplace_id].name}", transaction_type="salary", counterparty_id=citizen.workplace_id, cash_share=0.15)
             record_salary_payment(world, citizen, pay)
             if ratio >= 0.82:
                 citizen.shifts_completed += 1

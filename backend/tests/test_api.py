@@ -40,6 +40,31 @@ def test_api_exposes_city_and_commands(tmp_path) -> None:
         assert economy.json()["businesses"]
         assert "unemploymentRate" in economy.json()["metrics"]
 
+        banking = client.get("/api/banking")
+        assert banking.status_code == 200
+        assert banking.json()["bank"]["reserves"] > 0
+        assert banking.json()["metrics"]["deposits"] > 0
+
+        crime = client.get("/api/crime")
+        assert crime.status_code == 200
+        assert crime.json()["metrics"]["organizations"] >= 1
+        faction_id = crime.json()["organizations"][0]["id"]
+        faction = client.get(f"/api/crime/factions/{faction_id}")
+        assert faction.status_code == 200
+        assert faction.json()["members"]
+        assert faction.json()["markets"]
+
+        housing = client.get("/api/housing")
+        assert housing.status_code == 200
+        assert housing.json()["metrics"]["vacancyRate"] > 0
+        household_id = housing.json()["households"][0]["id"]
+        household = client.get(f"/api/households/{household_id}")
+        assert household.status_code == 200
+        assert household.json()["home"]["rentMonthly"] > 0
+        home_id = household.json()["home"]["id"]
+        home = client.get(f"/api/buildings/{home_id}")
+        assert home.json()["housing"]["households"]
+
         healthcare = client.get("/api/healthcare")
         assert healthcare.status_code == 200
         assert healthcare.json()["hospital"]["name"] == "Centre médical Saint-Roch"
@@ -57,6 +82,9 @@ def test_api_exposes_city_and_commands(tmp_path) -> None:
         assert "openPositions" in payload["stats"]
         assert "medianSalary" in payload["stats"]
         assert "economy" in payload
+        assert "banking" in payload
+        assert "crime" in payload
+        assert payload["simulation"]["maxCitizenCount"] == 5000
 
         assert client.post("/api/simulation/pause").status_code == 200
         assert client.post("/api/simulation/speed", json={"speed": 20}).status_code == 200
@@ -93,9 +121,14 @@ def test_websocket_stream_contains_mobility_data(tmp_path) -> None:
             delta = websocket.receive_json()
             assert delta["type"] == "city_delta"
             assert "economy" in delta
+            assert "banking" in delta
+            assert "crime" in delta
             assert "health" in delta
+            assert "housing" in delta
+            assert "justice" in delta
             assert "unemploymentRate" in delta["stats"]
             assert "medicalStaffOnDuty" in delta["stats"]
+            assert "medianRent" in delta["stats"]
             assert "cells" not in delta["roads"]
 
 

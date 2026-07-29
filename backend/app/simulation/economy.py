@@ -29,8 +29,12 @@ EMPLOYER_TYPES = {
     BuildingType.PUBLIC,
     BuildingType.POLICE,
     BuildingType.HOSPITAL,
+    BuildingType.COURT,
+    BuildingType.DETENTION_CENTER,
+    BuildingType.BANK,
+    BuildingType.SHELTER,
 }
-PUBLIC_EMPLOYER_TYPES = {BuildingType.PUBLIC, BuildingType.POLICE, BuildingType.HOSPITAL}
+PUBLIC_EMPLOYER_TYPES = {BuildingType.PUBLIC, BuildingType.POLICE, BuildingType.HOSPITAL, BuildingType.COURT, BuildingType.DETENTION_CENTER, BuildingType.SHELTER}
 MIN_JOB_CHANGE_MINUTES = 7 * 24 * 60
 MAX_APPLICATION_HISTORY = 40
 MAX_FINANCIAL_HISTORY = 30
@@ -44,6 +48,10 @@ JOB_PROFILES: dict[BuildingType, tuple[str, float]] = {
     BuildingType.PUBLIC: ("Agent municipal", 92.0),
     BuildingType.POLICE: ("Policier municipal", 108.0),
     BuildingType.HOSPITAL: ("Infirmier", 118.0),
+    BuildingType.COURT: ("Greffier", 112.0),
+    BuildingType.DETENTION_CENTER: ("Surveillant", 106.0),
+    BuildingType.BANK: ("Conseiller bancaire", 116.0),
+    BuildingType.SHELTER: ("Travailleur social", 98.0),
 }
 
 
@@ -61,7 +69,19 @@ def assigned_staff_count(world: World, building_id: int) -> int:
 
 def job_offer(building: Building, employee_index: int = 0) -> tuple[str, float, int, int, tuple[int, ...]]:
     title, salary = JOB_PROFILES[building.building_type]
-    if building.building_type in {BuildingType.POLICE, BuildingType.HOSPITAL}:
+    variants = {
+        BuildingType.OFFICE: ["Analyste", "Comptable", "Développeur", "Assistant administratif", "Architecte"],
+        BuildingType.FACTORY: ["Ouvrier", "Technicien", "Mécanicien", "Logisticien", "Contrôleur qualité"],
+        BuildingType.SHOP: ["Vendeur", "Caissier", "Responsable de rayon", "Préparateur de commandes"],
+        BuildingType.CAFE: ["Serveur", "Cuisinier", "Barista", "Responsable de salle"],
+        BuildingType.PUBLIC: ["Agent municipal", "Urbaniste", "Bibliothécaire", "Jardinier municipal"],
+        BuildingType.BANK: ["Conseiller bancaire", "Analyste crédit", "Caissier bancaire", "Responsable conformité"],
+        BuildingType.SHELTER: ["Travailleur social", "Éducateur", "Agent d’accueil"],
+    }.get(building.building_type)
+    if variants:
+        title = variants[employee_index % len(variants)]
+        salary += (employee_index % len(variants)) * 3.0
+    if building.building_type in {BuildingType.POLICE, BuildingType.HOSPITAL, BuildingType.DETENTION_CENTER}:
         start_hour, end_hour = ((6, 14) if employee_index % 2 == 0 else (14, 22))
         work_days = (1, 2, 3, 4, 5, 6, 7)
     elif building.building_type == BuildingType.FACTORY:
@@ -250,7 +270,7 @@ def _generated_revenue(building: Building) -> float:
 def _close_household_finances(world: World, completed_day: int) -> None:
     for household in world.households.values():
         members = [world.citizens[citizen_id] for citizen_id in household.member_ids]
-        household.debt = round(sum(max(0.0, -citizen.money) for citizen in members), 2)
+        household.debt = round(sum(max(0.0, -citizen.money) for citizen in members) + household.rent_arrears, 2)
         expenses = (
             household.recurring_expenses_today
             + household.food_expenses_today
@@ -284,20 +304,21 @@ def _close_household_finances(world: World, completed_day: int) -> None:
 
 
 def _charge_recurring_household_expenses(world: World) -> None:
+    from .banking import available_funds, withdraw
+    from .housing import charge_daily_rent
     for household in world.households.values():
         members = [world.citizens[citizen_id] for citizen_id in household.member_ids]
+        rent_paid = charge_daily_rent(world, household)
         charge = round(8.0 + len(members) * 5.5, 2)
         remaining = charge
-        for citizen in sorted(members, key=lambda item: item.money, reverse=True):
-            available = max(0.0, citizen.money + citizen.overdraft_limit)
-            paid = min(remaining, available)
-            citizen.money = round(citizen.money - paid, 2)
+        for citizen in sorted(members, key=lambda item: available_funds(item, allow_credit=True), reverse=True):
+            paid = withdraw(world, citizen, remaining, label="Charges courantes du foyer", transaction_type="household_charge", allow_credit=True)
             citizen.expenses_today = round(citizen.expenses_today + paid, 2)
             remaining = round(remaining - paid, 2)
             if remaining <= 0:
                 break
-        household.recurring_expenses_today = round(charge - remaining, 2)
-        household.total_expenses = round(household.total_expenses + charge - remaining, 2)
+        household.recurring_expenses_today = round(rent_paid + charge - remaining, 2)
+        household.total_expenses = round(household.total_expenses + rent_paid + charge - remaining, 2)
         if remaining > 0:
             household.debt = round(household.debt + remaining, 2)
 
@@ -405,6 +426,9 @@ def _application_score(world: World, citizen: Citizen, building: Building) -> fl
     schedule_fit = 8.0 if 6 <= start_hour <= 9 and end_hour <= 19 else 2.0
     current_salary = max(1.0, citizen.salary_daily)
     salary_gain = (salary - current_salary) / current_salary * 18.0 if citizen.workplace_id else salary / 12.0
+    criminal_record_penalty = min(18.0, citizen.criminal_record_count * 4.0 + citizen.probation_violations * 6.0)
+    if building.building_type in {BuildingType.POLICE, BuildingType.COURT, BuildingType.DETENTION_CENTER}:
+        criminal_record_penalty *= 1.4
     return round(
         experience * 0.65
         + citizen.job_performance * 0.34
@@ -412,6 +436,7 @@ def _application_score(world: World, citizen: Citizen, building: Building) -> fl
         + schedule_fit
         + salary_gain
         - distance * 0.55
+        - criminal_record_penalty
         + world.rng.uniform(-2.0, 2.0),
         2,
     )
@@ -488,6 +513,12 @@ def assign_employment(
         application.status = JobApplicationStatus.ACCEPTED
         application.resolved_tick = world.tick
         application.reason = "Candidature retenue."
+    for other_id in citizen.application_ids:
+        other = world.job_applications.get(other_id)
+        if other is not None and other.id != (application.id if application else -1) and other.status == JobApplicationStatus.PENDING:
+            other.status = JobApplicationStatus.WITHDRAWN
+            other.resolved_tick = world.tick
+            other.reason = "Retirée automatiquement : le citoyen possède déjà un emploi."
     world.hires_today += 1
     world._emit(
         "employee_hired",

@@ -12,7 +12,9 @@ export type Activity =
   | "shopping"
   | "waiting_medical"
   | "in_treatment"
-  | "hospitalized";
+  | "hospitalized"
+  | "community_service"
+  | "kidnapped";
 
 export type TransportMode = "walk" | "car" | "bus";
 export type TravelStage =
@@ -105,12 +107,16 @@ export interface CitizenSummary {
   careStatus: string;
   pain: number;
   activeHealthCaseId: number | null;
+  crimeOrganizationId: number | null;
+  criminalRole: string | null;
+  addictionLevel: number;
+  substanceUseRisk: number;
 }
 
 export interface BuildingSummary {
   id: number;
   name: string;
-  type: "home" | "office" | "factory" | "shop" | "cafe" | "park" | "public" | "police" | "hospital";
+  type: "home" | "office" | "factory" | "shop" | "cafe" | "park" | "public" | "police" | "hospital" | "court" | "detention_center" | "bank" | "shelter";
   x: number;
   y: number;
   width: number;
@@ -137,6 +143,8 @@ export interface BuildingSummary {
   patientsWaiting: number;
   hospitalizedPatients: number;
   patientsTreatedToday: number;
+  housing: HomeSummary | null;
+  neighborhoodId: number;
 }
 
 export interface VehicleSummary {
@@ -151,6 +159,7 @@ export interface VehicleSummary {
   lineId: number | null;
   crewIds: number[];
   healthCaseId: number | null;
+  patrolNeighborhoodId: number | null;
 }
 
 export interface BusStopSummary {
@@ -194,7 +203,22 @@ export interface HouseholdSummary {
   expensesToday: number;
   debt: number;
   financialStress: number;
+  status: "stable" | "searching" | "temporary" | "homeless";
+  rentMonthly: number;
+  rentArrears: number;
+  incomeMonthly: number;
+  commonBudget: number;
+  overcrowded: boolean;
+  commuteDistance: number;
+  moves: number;
+  searchReason: string | null;
 }
+
+export interface HousingRecord { tick: number; eventType: string; label: string; fromHomeId: number | null; toHomeId: number; reason: string; rentBefore: number; rentAfter: number; memberIds: number[]; }
+export interface HomeSummary { id: number; name: string; capacity: number; residentCount: number; availablePlaces: number; rentMonthly: number; condition: number; comfort: number; ownerType: string; serviceDistance: number; safety: number; available: boolean; }
+export interface HousingMetrics { medianRent: number; vacancyRate: number; overcrowdedHouseholds: number; distressedHouseholds: number; movesToday: number; averageHomeWorkDistance: number; searchingHouseholds: number; temporaryHouseholds: number; homelessCitizens: number; homelessHouseholds: number; }
+export interface HousingOverview { tick: number; metrics: HousingMetrics; homes: HomeSummary[]; households: HouseholdSummary[]; }
+export interface HouseholdDetail extends HouseholdSummary { kind: "household"; membersList: Array<{id:number;name:string}|null>; expenses: { recurringToday:number; foodToday:number; goodsToday:number; rentDueToday:number; rentPaidToday:number }; reserves:number; home:HomeSummary; financialHistory:HouseholdFinancialRecord[]; housingHistory:HousingRecord[]; temporaryHostHouseholdId:number|null; }
 
 export interface IncidentSummary {
   id: number;
@@ -216,6 +240,7 @@ export interface IncidentSummary {
   policeAction: string | null;
   policeOfficerIds: number[];
   detainedIds: number[];
+  neighborhoodId: number;
 }
 
 export interface HealthCaseSummary {
@@ -281,6 +306,72 @@ export interface EconomyOverview {
   businesses: EconomyBusinessSummary[];
 }
 
+export type CommunicationChannel = "phone_call" | "sms" | "email" | "letter";
+export type CommunicationTone = "friendly" | "practical" | "apology" | "invitation" | "conflict";
+export type CommunicationStatus = "queued" | "ringing" | "delivered" | "read" | "replied" | "failed";
+export interface CommunicationSummary {
+  id: number; threadId: number; sender: { id: number; name: string }; recipient: { id: number; name: string };
+  channel: CommunicationChannel; tone: CommunicationTone; subject: string; body: string; status: CommunicationStatus;
+  createdTick: number; deliveryTick: number; readTick: number | null; repliedTick: number | null; replyToId: number | null; replyDepth: number;
+  durationMinutes: number; cost: number; failureReason: string | null; violatesOrder: boolean;
+}
+export interface CommunicationMetrics { sentToday: number; deliveredToday: number; phoneCallsToday: number; smsToday: number; emailsToday: number; lettersToday: number; unreadCommunications: number; communicationRepliesToday: number; }
+export interface CommunicationOverview { metrics: CommunicationMetrics; recent: CommunicationSummary[]; }
+
+export interface NeighborhoodSummary {
+  id: number; name: string; bounds: { xMin: number; yMin: number; xMax: number; yMax: number }; lighting: number;
+  population: number; averageIncome: number; unemploymentRate: number; averageRent: number; commercialActivity: number;
+  criminality: number; safetyPerception: number; policeCoverage: number; averageResponseMinutes: number;
+  healthcareAccess: number; commerceAccess: number; averageTransportMinutes: number; attractiveness: number; servicePressure: number;
+}
+export interface NeighborhoodOverview { tick: number; neighborhoods: NeighborhoodSummary[]; metrics: { averageSafety: number; averageAttractiveness: number; highestServicePressure: number; slowestResponseMinutes: number; lowestHealthcareAccess: number; safetyGap: number }; }
+export interface NeighborhoodDetail extends NeighborhoodSummary {
+  kind: "neighborhood";
+  buildings: Array<{ id: number; name: string; type: BuildingSummary["type"]; serviceLevel: number }>;
+  businesses: Array<{ id: number; name: string; type: BuildingSummary["type"]; revenueToday: number; serviceLevel: number }>;
+  services: Array<{ id: number; name: string; type: BuildingSummary["type"]; serviceLevel: number }>;
+  incidents: IncidentSummary[]; patrols: VehicleSummary[];
+  history: Array<Omit<NeighborhoodSummary, "id" | "name" | "bounds" | "lighting"> & { day: number }>;
+}
+
+export interface CrimeMetrics {
+  organizations: number; factionMembers: number; criminalMarkets: number; operations: number;
+  organizedCrimesToday: number; activeKidnappings: number; ransomPaidToday: number;
+  illegalSalesToday: number; drugSalesToday: number; illegalRevenueToday: number;
+  policeSeizuresToday: number; exposedCitizens: number; dependentCitizens: number;
+  highRiskCitizens: number; contestedNeighborhoods: number; detectedTransactions: number;
+}
+export interface CrimeOrganizationSummary {
+  id:number; name:string; factionType:string; leaderId:number; leaderName:string; memberCount:number;
+  territoryId:number; territoryIds:number[]; treasury:number; revenueToday:number; expensesToday:number;
+  notoriety:number; policeHeat:number; cohesion:number; violence:number; sophistication:number;
+  recruitmentPressure:number; membersRecruited:number; specialties:string[]; inventory:Record<string,number>;
+  rivalIds:number[]; allyIds:number[]; marketCount:number; customers:number; active:boolean;
+}
+export interface CriminalMarketSummary {
+  id:number; organizationId:number; organizationName:string; neighborhoodId:number; neighborhoodName:string;
+  commodity:string; supply:number; demand:number; unitPrice:number; policePressure:number;
+  transactionsToday:number; revenueToday:number; seizedToday:number; drugMarket:boolean; active:boolean;
+}
+export interface IllegalTransactionSummary {
+  id:number; tick:number; organizationId:number; organizationName:string; marketId:number;
+  seller:{id:number;name:string}; buyer:{id:number;name:string}; commodity:string; quantity:number;
+  unitPrice:number; total:number; neighborhoodId:number; buildingId:number|null; detected:boolean; incidentId:number|null;
+}
+export interface CrimeOperationSummary {
+  id:number; organizationId:number; organizationName:string; type:string; status:string; perpetratorIds:number[];
+  victimIds:number[]; buildingId:number|null; neighborhoodId:number|null; commodity:string|null; quantity:number;
+  amount:number; detected:boolean; incidentId:number|null; startedTick:number|null; resolvedTick:number|null; outcome:string|null;
+}
+export interface CrimeOverview {
+  tick:number; metrics:CrimeMetrics; organizations:CrimeOrganizationSummary[]; markets:CriminalMarketSummary[];
+  transactions:IllegalTransactionSummary[]; operations:CrimeOperationSummary[];
+  relations:Array<{firstId:number;firstName:string;secondId:number;secondName:string;tension:number;trust:number;conflictCount:number;lastConflictTick:number|null;truceUntilTick:number|null}>;
+  territories:Array<{neighborhoodId:number;neighborhoodName:string;contestedness:number;factions:Array<{organizationId:number;name:string;influence:number}>}>;
+  commodities:Array<{commodity:string;transactions:number;revenue:number;supply:number}>;
+  history:Array<{day:number;organizedCrimes:number;illegalSales:number;drugSales:number;illegalRevenue:number;policeSeizures:number;dependentCitizens:number}>;
+}
+
 export interface CitySnapshot {
   type: "city_snapshot";
   tick: number;
@@ -308,6 +399,16 @@ export interface CitySnapshot {
     casesFiledToday: number;
     casesAwaitingHearing: number;
     casesDecided: number;
+    complaintsFiled: number;
+    hearingsToday: number;
+    courtCapacityToday: number;
+    courtStaffOnDuty: number;
+    activeSentences: number;
+    citizensOnProbation: number;
+    restrainingOrders: number;
+    detainedCitizens: number;
+    detentionCapacity: number;
+    probationViolationsToday: number;
     employedCitizens: number;
     workersOnDuty: number;
     operationalWorkplaces: number;
@@ -317,6 +418,9 @@ export interface CitySnapshot {
     marketFoodStock: number;
     marketGoodsStock: number;
     activeMedicalCases: number; medicalEmergencies: number; patientsWaiting: number; hospitalizedPatients: number; hospitalBeds: number; medicalStaffOnDuty: number; ambulancesAvailable: number; ambulanceDispatchesToday: number; averageMedicalWaitMinutes: number;
+    medianRent: number; vacancyRate: number; overcrowdedHouseholds: number; distressedHouseholds: number; movesToday: number; averageHomeWorkDistance: number; searchingHouseholds: number; temporaryHouseholds: number; homelessCitizens: number; homelessHouseholds: number;
+    deposits: number; savings: number; citizenDebt: number; borrowers: number; loansIssuedToday: number; defaultsToday: number;
+    organizations: number; factionMembers: number; criminalMarkets: number; operations: number; organizedCrimesToday: number; activeKidnappings: number; ransomPaidToday: number; illegalSalesToday: number; drugSalesToday: number; illegalRevenueToday: number; policeSeizuresToday: number; exposedCitizens: number; dependentCitizens: number; highRiskCitizens: number; contestedNeighborhoods: number; detectedTransactions: number;
     activityCounts: Record<string, number>;
     transportModeCounts: Record<TransportMode, number>;
     tripCountsToday: Record<TransportMode, number>;
@@ -336,6 +440,8 @@ export interface CitySnapshot {
     socialAcceptancesToday: number;
     activeSocialEvents: number;
     socialGatheringsCompleted: number;
+    sentToday: number; deliveredToday: number; phoneCallsToday: number; smsToday: number; emailsToday: number; lettersToday: number; unreadCommunications: number; communicationRepliesToday: number;
+    averageNeighborhoodSafety: number; averageNeighborhoodAttractiveness: number; highestServicePressure: number; slowestNeighborhoodResponseMinutes: number; lowestHealthcareAccess: number; neighborhoodSafetyGap: number;
   };
   citizens: CitizenSummary[];
   buildings: BuildingSummary[];
@@ -359,7 +465,13 @@ export interface CitySnapshot {
     households: HouseholdSummary[];
   };
   economy: EconomyOverview;
+  banking: { tick: number; bank: { id: number | null; name: string | null; reserves: number; outstandingLoans: number; interestIncome: number }; metrics: { deposits: number; savings: number; citizenDebt: number; borrowers: number; loansIssuedToday: number; defaultsToday: number } };
+  crime: CrimeOverview;
   health: HealthOverview;
+  housing: HousingOverview;
+  justice: JusticeOverview;
+  communications: CommunicationOverview;
+  neighborhoods: NeighborhoodOverview;
   incidents: IncidentSummary[];
   events: CityEvent[];
   simulation: {
@@ -367,6 +479,8 @@ export interface CitySnapshot {
     speed: number;
     allowedSpeeds: number[];
     hasSave: boolean;
+    citizenCount: number;
+    maxCitizenCount: number;
   };
 }
 
@@ -383,7 +497,13 @@ export type CityDelta = Pick<
   | "vehicles"
   | "social"
   | "economy"
+  | "banking"
+  | "crime"
   | "health"
+  | "housing"
+  | "justice"
+  | "communications"
+  | "neighborhoods"
   | "incidents"
   | "events"
   | "simulation"
@@ -405,6 +525,9 @@ export interface CitizenDetail extends CitizenSummary {
   jobTitle: string | null;
   salaryDaily: number;
   money: number;
+  banking: { cash:number; balance:number; savings:number; debt:number; creditScore:number; history:Array<{tick:number;transactionType:string;amount:number;balanceAfter:number;label:string;counterpartyId:number|null}> };
+  housingSituation: { isHomeless:boolean; homelessSinceTick:number|null; previousHomeId:number|null; foodInsecurityDays:number };
+  organizedCrime: { organizationId:number|null; kidnappedUntilTick:number|null; kidnappedByOrganizationId:number|null };
   health: number;
   medical: { condition: CitizenSummary["healthCondition"]; careStatus: string; pain: number; injurySeverity: number; illnessSeverity: number; activeCaseId: number | null; medicalLeaveUntilTick: number | null; incapacityUntilTick: number | null; hospitalizedUntilTick: number | null; history: Array<{ tick: number; eventType: string; label: string; severity: number; source: string; incidentId: number | null; hospitalId: number | null; incapacityMinutes: number }> };
   employment: {
@@ -496,6 +619,7 @@ export interface CitizenDetail extends CitizenSummary {
     financialHistory: HouseholdFinancialRecord[];
     members: Array<{ id: number; name: string }>;
   } | null;
+  communications: { phoneNumber: string; emailAddress: string; unreadCount: number; messages: CommunicationSummary[]; };
   social: {
     interactionsToday: number;
     invitationsSent: number;
@@ -526,6 +650,10 @@ export interface CitizenDetail extends CitizenSummary {
       caseId: number | null;
     }>;
     cases: JudicialCaseSummary[];
+    sentences: JudicialSentenceSummary[];
+    criminalRecordCount: number;
+    probationViolations: number;
+    communityServiceMinutes: number;
   };
   transport: {
     mode: TransportMode;
@@ -589,7 +717,9 @@ export interface BuildingDetail extends BuildingSummary {
     satisfaction: number;
   }>;
   occupants: Array<{ id: number; name: string }>;
+  housing: (HomeSummary & { residents: Array<{id:number;name:string}|null>; households: HouseholdSummary[]; arrears:number; history:HousingRecord[] }) | null;
   healthcare: { beds: number; queue: HealthCaseSummary[]; hospitalized: Array<{ id: number; name: string } | null>; patientsTreatedToday: number; ambulances: VehicleSummary[] } | null;
+  justice: { institutionType: "court"; dailyCapacity: number; hearingsToday: number; queue: JudicialCaseSummary[] } | { institutionType: "detention_center"; capacity: number; detained: Array<{ id: number; name: string } | null>; activeSentences: JudicialSentenceSummary[] } | null;
   services: {
     operational: boolean;
     staffOnDuty: number;
@@ -615,7 +745,47 @@ export interface BuildingDetail extends BuildingSummary {
 }
 
 export type InvestigationStatus = "open" | "suspect_identified" | "arrested" | "referred" | "closed";
-export type JudicialCaseStatus = "filed" | "awaiting_hearing" | "decided" | "dismissed";
+export type JudicialCaseStatus = "filed" | "prosecutor_review" | "awaiting_hearing" | "in_hearing" | "decided" | "dismissed";
+export type SentenceType = "judicial_warning" | "fine" | "compensation" | "probation" | "community_service" | "restraining_order" | "short_detention" | "long_detention";
+export type SentenceStatus = "pending" | "active" | "completed" | "violated";
+
+export interface JudicialSentenceSummary {
+  id: number;
+  caseId: number;
+  citizen: { id: number; name: string } | null;
+  type: SentenceType;
+  label: string;
+  status: SentenceStatus;
+  startTick: number;
+  endTick: number | null;
+  amount: number;
+  beneficiary: { id: number; name: string } | null;
+  requiredMinutes: number;
+  completedMinutes: number;
+  violationCount: number;
+}
+
+export interface JusticeMetrics {
+  complaintsFiled: number;
+  casesAwaitingHearing: number;
+  hearingsToday: number;
+  courtCapacityToday: number;
+  courtStaffOnDuty: number;
+  activeSentences: number;
+  citizensOnProbation: number;
+  restrainingOrders: number;
+  detainedCitizens: number;
+  detentionCapacity: number;
+  probationViolationsToday: number;
+}
+
+export interface JusticeOverview {
+  metrics: JusticeMetrics;
+  court: BuildingSummary | null;
+  detentionCenter: BuildingSummary | null;
+  queue: JudicialCaseSummary[];
+  activeSentences: JudicialSentenceSummary[];
+}
 
 export interface ConflictHistoryEntry {
   otherId?: number;
@@ -643,6 +813,7 @@ export interface EvidenceDetail {
 export interface JudicialCaseSummary {
   id: number;
   investigationId: number;
+  complaintId: number | null;
   incidentId: number;
   defendant: { id: number; name: string } | null;
   charges: string[];
@@ -653,7 +824,17 @@ export interface JudicialCaseSummary {
   decidedTick: number | null;
   verdict: string | null;
   sentence: string | null;
+  prosecutorReviewTick: number | null;
+  prosecutorDecision: string | null;
+  priority: number;
+  delayCount: number;
+  sentences: JudicialSentenceSummary[];
+  timeline: Array<{ tick: number; eventType: string; label: string; detail: string }>;
   defendantName: string | null;
+}
+
+export interface JudicialCaseDetail extends JudicialCaseSummary {
+  kind: "case";
 }
 
 export interface InvestigationDetail {

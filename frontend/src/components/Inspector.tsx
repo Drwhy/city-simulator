@@ -1,4 +1,8 @@
-import type { BuildingDetail, CitizenDetail, IncidentDetail, InspectorEntity, VehicleDetail } from "../types/city";
+import { IncidentInspector } from "./inspectors/IncidentInspector";
+import { VehicleInspector } from "./inspectors/VehicleInspector";
+import { BuildingInspector } from "./inspectors/BuildingInspector";
+import { moneyFormatter, NeedBar } from "./inspectors/shared";
+import type { CitizenDetail, InspectorEntity } from "../types/city";
 
 interface InspectorProps {
   entity: InspectorEntity | null;
@@ -8,6 +12,7 @@ interface InspectorProps {
   onSelectCitizen: (citizenId: number) => void;
   onSelectVehicle: (vehicleId: number) => void;
   onSelectIncident: (incidentId: number) => void;
+  onSelectHousehold: (householdId: number) => void;
   standalone?: boolean;
 }
 
@@ -44,17 +49,6 @@ const STAGE_LABELS: Record<string, string> = {
   driving: "Trajet en voiture",
 };
 
-const VEHICLE_STATUS_LABELS: Record<string, string> = {
-  parked: "Stationné",
-  driving: "En circulation",
-  in_service: "En service",
-  stopped: "Hors service",
-  responding: "En intervention",
-  on_scene: "Sur place",
-  returning: "Retour à la base",
-  transporting: "Transport vers l’hôpital",
-};
-
 const RELATIONSHIP_LABELS: Record<string, string> = {
   unknown: "Inconnu",
   acquaintance: "Connaissance",
@@ -67,34 +61,6 @@ const SOCIAL_EVENT_LABELS: Record<string, string> = {
   coffee: "Sortie au café",
   park_meetup: "Rencontre au parc",
 };
-
-const moneyFormatter = new Intl.NumberFormat("fr-FR", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
-
-const BUSINESS_STATUS_LABELS: Record<string, string> = {
-  healthy: "Saine",
-  fragile: "Fragile",
-  deficit: "Déficitaire",
-  closed: "Fermée",
-};
-
-function NeedBar({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="need-row">
-      <div className="need-label">
-        <span>{label}</span>
-        <strong>{Math.round(value)} %</strong>
-      </div>
-      <div className="progress">
-        <div className="progress-value" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
-      </div>
-    </div>
-  );
-}
 
 function CitizenInspector({
   citizen,
@@ -241,331 +207,6 @@ function CitizenInspector({
   );
 }
 
-function VehicleInspector({
-  vehicle,
-  onSelectCitizen,
-  onSelectIncident,
-}: {
-  vehicle: VehicleDetail;
-  onSelectCitizen: (citizenId: number) => void;
-  onSelectIncident: (incidentId: number) => void;
-}) {
-  const title = vehicle.type === "bus"
-    ? `Bus #${vehicle.id}`
-    : vehicle.type === "police"
-      ? `Unité de police #${vehicle.id}`
-      : vehicle.type === "ambulance" ? `Ambulance #${vehicle.id}` : `Voiture #${vehicle.id}`;
-  return (
-    <div className="inspector-content">
-      <div className="eyebrow">Véhicule</div>
-      <h2>{title}</h2>
-      <p className="subtitle">
-        {vehicle.type === "bus"
-          ? vehicle.line?.name ?? "Transport public"
-          : vehicle.type === "police" ? "Patrouille municipale" : vehicle.type === "ambulance" ? "Secours médical" : "Véhicule particulier"}
-      </p>
-
-      <dl className="facts">
-        <div><dt>État</dt><dd>{VEHICLE_STATUS_LABELS[vehicle.status] ?? vehicle.status}</dd></div>
-        <div><dt>Occupation</dt><dd>{vehicle.occupancy} / {vehicle.capacity}</dd></div>
-        <div><dt>Destination</dt><dd>{vehicle.target?.name ?? "Circuit régulier"}</dd></div>
-        <div><dt>Retard cumulé</dt><dd>{vehicle.delayMinutes} min</dd></div>
-        <div><dt>Distance du jour</dt><dd>{vehicle.distanceToday} cases</dd></div>
-        <div><dt>Progression</dt><dd>{vehicle.routeProgress.toFixed(0)} %</dd></div>
-      </dl>
-
-      {vehicle.incident && (
-        <button className="entity-link incident-link" onClick={() => onSelectIncident(vehicle.incident!.id)}>
-          Intervention : {vehicle.incident.title}
-        </button>
-      )}
-
-      {vehicle.owner && (
-        <button className="entity-link" onClick={() => onSelectCitizen(vehicle.owner!.id)}>
-          Propriétaire : {vehicle.owner.name}
-        </button>
-      )}
-
-      {(vehicle.type === "police" || vehicle.type === "ambulance") && (
-        <>
-          <h3>{vehicle.type === "ambulance" ? "Équipage soignant citoyen" : "Équipage citoyen"}</h3>
-          {vehicle.crew.length === 0 ? <p className="muted">Aucun agent affecté : l'unité ne peut pas intervenir.</p> : (
-            <div className="passenger-list">
-              {vehicle.crew.map((officer) => (
-                <button key={officer.id} onClick={() => onSelectCitizen(officer.id)}>
-                  {officer.name} · {officer.onDuty ? "en service" : "hors service"}
-                </button>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      <h3>{vehicle.type === "police" ? "Personnes transportées" : vehicle.type === "ambulance" ? "Patient transporté" : "Passagers"}</h3>
-      {vehicle.passengers.length === 0 ? (
-        <p className="muted">Aucun passager actuellement.</p>
-      ) : (
-        <div className="passenger-list">
-          {vehicle.passengers.map((passenger) => (
-            <button key={passenger.id} onClick={() => onSelectCitizen(passenger.id)}>
-              {passenger.name}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function IncidentInspector({
-  incident,
-  onSelectCitizen,
-  onSelectVehicle,
-}: {
-  incident: IncidentDetail;
-  onSelectCitizen: (citizenId: number) => void;
-  onSelectVehicle: (vehicleId: number) => void;
-}) {
-  const statusLabels: Record<string, string> = {
-    active: "Actif, non signalé",
-    reported: "Signalé",
-    responding: "Police en route",
-    on_scene: "Police sur place",
-    resolved: "Résolu",
-    expired: "Archivé",
-  };
-  const involved = incident.involved.filter((person): person is { id: number; name: string } => person !== null);
-  const witnesses = incident.witnesses.filter((person): person is { id: number; name: string } => person !== null);
-  return (
-    <div className="inspector-content incident-inspector">
-      <div className="eyebrow">Incident #{incident.id}</div>
-      <h2>{incident.title}</h2>
-      <p className={`incident-severity incident-severity-${incident.severity}`}>
-        {incident.severity === "danger" ? "Grave" : "À surveiller"} · {statusLabels[incident.status] ?? incident.status}
-      </p>
-      <p className="incident-description">{incident.description}</p>
-
-      <dl className="facts">
-        <div><dt>Lieu</dt><dd>{incident.building?.name ?? `Case ${incident.x}, ${incident.y}`}</dd></div>
-        <div><dt>Signalé</dt><dd>{incident.reported ? "Oui" : "Non"}</dd></div>
-        <div><dt>Visible encore</dt><dd>{incident.remainingMinutes} min</dd></div>
-        <div><dt>Niveau conflit</dt><dd>{incident.conflictLevel || "—"}</dd></div>
-      </dl>
-
-      {incident.offender && (
-        <button className="entity-link danger-link" onClick={() => onSelectCitizen(incident.offender!.id)}>
-          Auteur présumé : {incident.offender.name}
-        </button>
-      )}
-
-      {incident.victims.length > 0 && <h3>Victimes</h3>}
-      <div className="passenger-list">
-        {incident.victims.filter((person): person is { id: number; name: string } => person !== null).map((person) => (
-          <button key={person.id} onClick={() => onSelectCitizen(person.id)}>{person.name}</button>
-        ))}
-      </div>
-
-      <h3>Personnes impliquées</h3>
-      <div className="passenger-list">
-        {involved.slice(0, 10).map((person) => (
-          <button key={person.id} onClick={() => onSelectCitizen(person.id)}>{person.name}</button>
-        ))}
-      </div>
-
-      {witnesses.length > 0 && (
-        <>
-          <h3>Témoins</h3>
-          <p className="muted">{witnesses.map((person) => person.name).join(", ")}</p>
-        </>
-      )}
-
-      {incident.policeVehicle && (
-        <button className="entity-link police-link" onClick={() => onSelectVehicle(incident.policeVehicle!.id)}>
-          Voir l’unité de police #{incident.policeVehicle.id}
-        </button>
-      )}
-      {incident.policeOfficers.length > 0 && (
-        <>
-          <h3>Agents intervenants</h3>
-          <div className="passenger-list">
-            {incident.policeOfficers.filter((person): person is { id: number; name: string } => person !== null).map((person) => (
-              <button key={person.id} onClick={() => onSelectCitizen(person.id)}>{person.name}</button>
-            ))}
-          </div>
-        </>
-      )}
-      {incident.policeAction && <p className="decision"><strong>Mesure immédiate :</strong> {incident.policeAction}</p>}
-      {incident.detained.length > 0 && (
-        <div className="passenger-list">
-          {incident.detained.filter((person): person is { id: number; name: string } => person !== null).map((person) => (
-            <button key={person.id} onClick={() => onSelectCitizen(person.id)}>Personne retenue : {person.name}</button>
-          ))}
-        </div>
-      )}
-
-      {incident.investigation && (
-        <>
-          <h3>Enquête #{incident.investigation.id}</h3>
-          <dl className="facts">
-            <div><dt>Statut</dt><dd>{incident.investigation.status}</dd></div>
-            <div><dt>Confiance</dt><dd>{Math.round(incident.investigation.confidence)} %</dd></div>
-            <div><dt>Éléments</dt><dd>{incident.investigation.evidence.length}</dd></div>
-          </dl>
-          {incident.investigation.leadSuspect && (
-            <button className="entity-link danger-link" onClick={() => onSelectCitizen(incident.investigation!.leadSuspect!.id)}>
-              Suspect principal : {incident.investigation.leadSuspect.name}
-            </button>
-          )}
-          {incident.investigation.evidence.length > 0 && (
-            <>
-              <h3>Éléments recueillis</h3>
-              <div className="evidence-list">
-                {incident.investigation.evidence.map((item) => (
-                  <article key={item.id}>
-                    <div><strong>{item.type.replace(/_/g, " ")}</strong><b>{Math.round(item.reliability)} %</b></div>
-                    <p>{item.description}</p>
-                    {item.citizen && (
-                      <button onClick={() => onSelectCitizen(item.citizen!.id)}>{item.citizen.name}</button>
-                    )}
-                  </article>
-                ))}
-              </div>
-            </>
-          )}
-          {incident.investigation.notes.length > 0 && (
-            <>
-              <h3>Notes d’enquête</h3>
-              <ul className="investigation-notes">
-                {incident.investigation.notes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}
-              </ul>
-            </>
-          )}
-          {incident.investigation.case && (
-            <div className="case-summary">
-              <h3>Dossier judiciaire #{incident.investigation.case.id}</h3>
-              <dl className="facts">
-                <div><dt>Statut</dt><dd>{incident.investigation.case.status}</dd></div>
-                <div><dt>Charges</dt><dd>{incident.investigation.case.charges.join(", ")}</dd></div>
-                <div><dt>Solidité</dt><dd>{Math.round(incident.investigation.case.evidenceScore)} %</dd></div>
-                {incident.investigation.case.verdict && <div><dt>Verdict</dt><dd>{incident.investigation.case.verdict}</dd></div>}
-                {incident.investigation.case.sentence && <div><dt>Peine</dt><dd>{incident.investigation.case.sentence}</dd></div>}
-              </dl>
-            </div>
-          )}
-        </>
-      )}
-
-      {incident.resolution && (
-        <>
-          <h3>Résolution</h3>
-          <p className="decision">{incident.resolution}</p>
-        </>
-      )}
-    </div>
-  );
-}
-
-function BuildingInspector({
-  building,
-  onSelectCitizen,
-}: {
-  building: BuildingDetail;
-  onSelectCitizen: (citizenId: number) => void;
-}) {
-  const isEmployer = building.finance.employeeCapacity > 0;
-  const resultClass = building.finance.resultToday >= 0 ? "finance-positive" : "finance-negative";
-
-  return (
-    <div className="inspector-content building-inspector">
-      <div className="eyebrow">Bâtiment #{building.id}</div>
-      <h2>{building.name}</h2>
-      {isEmployer && (
-        <p className={`business-status business-status-${building.finance.status}`}>
-          Entreprise {BUSINESS_STATUS_LABELS[building.finance.status] ?? building.finance.status}
-        </p>
-      )}
-      <p className={`service-status ${building.services.operational ? "operational" : "degraded"}`}>
-        {building.services.operational ? "Service opérationnel" : "Service dégradé : personnel insuffisant"}
-      </p>
-      <dl className="facts">
-        <div><dt>Occupation</dt><dd>{building.occupancy} / {building.capacity}</dd></div>
-        <div><dt>Personnel présent</dt><dd>{building.services.staffOnDuty} / {building.services.employeesRequired}</dd></div>
-        <div><dt>Recettes du jour</dt><dd>{moneyFormatter.format(building.services.revenueToday)}</dd></div>
-        {building.type === "shop" && <div><dt>Stock nourriture</dt><dd>{building.services.foodStock.toFixed(0)} unités</dd></div>}
-        {building.type === "shop" && <div><dt>Stock biens courants</dt><dd>{building.services.goodsStock.toFixed(0)} unités</dd></div>}
-      </dl>
-      {building.healthcare && <>
-        <h3>Monitoring hospitalier</h3>
-        <dl className="facts healthcare-grid">
-          <div><dt>Lits occupés</dt><dd>{building.healthcare.hospitalized.length} / {building.healthcare.beds}</dd></div>
-          <div><dt>File d’attente</dt><dd>{building.healthcare.queue.length}</dd></div>
-          <div><dt>Patients traités aujourd’hui</dt><dd>{building.healthcare.patientsTreatedToday}</dd></div>
-          <div><dt>Ambulances suivies</dt><dd>{building.healthcare.ambulances.length}</dd></div>
-        </dl>
-        <h3>File de consultation</h3>
-        <div className="passenger-list">{building.healthcare.queue.map((item) => <button key={item.id} onClick={() => onSelectCitizen(item.citizen.id)}>{item.citizen.name} · gravité {Math.round(item.severity)} % · {item.waitingMinutes} min</button>)}</div>
-        <h3>Patients hospitalisés</h3>
-        <div className="passenger-list">{building.healthcare.hospitalized.filter((person): person is { id: number; name: string } => person !== null).map((person) => <button key={person.id} onClick={() => onSelectCitizen(person.id)}>{person.name}</button>)}</div>
-      </>}
-      {isEmployer && <>
-        <h3>Économie de l’établissement</h3>
-        <dl className="facts business-financial-grid">
-          <div><dt>Trésorerie</dt><dd>{moneyFormatter.format(building.finance.cash)}</dd></div>
-          <div><dt>Recettes cumulées</dt><dd>{moneyFormatter.format(building.finance.totalRevenue)}</dd></div>
-          <div><dt>Masse salariale du jour</dt><dd>{moneyFormatter.format(building.finance.payrollToday)}</dd></div>
-          <div><dt>Coûts fixes du jour</dt><dd>{moneyFormatter.format(building.finance.fixedCostsToday)}</dd></div>
-          <div className={resultClass}><dt>Résultat du jour</dt><dd>{moneyFormatter.format(building.finance.resultToday)}</dd></div>
-          <div><dt>Postes</dt><dd>{building.employees.length} / {building.finance.employeeCapacity}</dd></div>
-          <div><dt>Effectif cible</dt><dd>{building.finance.targetEmployees}</dd></div>
-          <div><dt>Postes ouverts</dt><dd>{building.finance.openPositions}</dd></div>
-        </dl>
-        <NeedBar label="Niveau de service" value={building.finance.serviceLevel} />
-        <h3>Historique financier</h3>
-        {building.finance.financialHistory.length === 0 ? <p className="muted">Le premier bilan sera clôturé en fin de journée.</p> : (
-          <div className="financial-history">
-            {[...building.finance.financialHistory].reverse().slice(0, 10).map((record) => (
-              <article className="financial-history-row" key={record.day}>
-                <strong>Jour {record.day}</strong>
-                <span>Recettes {moneyFormatter.format(record.revenue)}</span>
-                <span>Salaires {moneyFormatter.format(record.payroll)}</span>
-                <span>Fixes {moneyFormatter.format(record.fixedCosts)}</span>
-                <b className={record.result >= 0 ? "finance-positive" : "finance-negative"}>{moneyFormatter.format(record.result)}</b>
-              </article>
-            ))}
-          </div>
-        )}
-        <h3>Mouvements de personnel</h3>
-        {building.finance.employmentHistory.length === 0 ? <p className="muted">Aucun recrutement, départ ou licenciement enregistré.</p> : (
-          <div className="economy-history">
-            {[...building.finance.employmentHistory].reverse().slice(0, 12).map((record, index) => (
-              <article className={`economy-card employment-${record.eventType}`} key={`${record.tick}-${record.eventType}-${index}`}>
-                <div><strong>{record.label}</strong><span>{record.jobTitle ?? "Sans fonction"}</span></div>
-                <div><b>{moneyFormatter.format(record.salaryDaily)} / jour</b><span>{record.reason}</span></div>
-                <small>Tick {record.tick}</small>
-              </article>
-            ))}
-          </div>
-        )}
-      </>}
-      <h3>Employés</h3>
-      {building.employees.length === 0 ? <p className="muted">Aucun employé affecté.</p> : (
-        <div className="employee-list">
-          {building.employees.map((employee) => (
-            <button key={employee.id} onClick={() => onSelectCitizen(employee.id)}>
-              <span><strong>{employee.name}</strong><small>{employee.jobTitle ?? "Sans fonction"} · {employee.shift} · perf. {Math.round(employee.performance)} % · sat. {Math.round(employee.satisfaction)} %</small></span>
-              <b className={employee.onDuty ? "on-duty" : "off-duty"}>{employee.onDuty ? "En service" : "Hors service"}</b>
-            </button>
-          ))}
-        </div>
-      )}
-      <h3>Occupants</h3>
-      <div className="passenger-list">
-        {building.occupants.map((person) => <button key={person.id} onClick={() => onSelectCitizen(person.id)}>{person.name}</button>)}
-      </div>
-    </div>
-  );
-}
-
 export function Inspector({
   entity,
   loading,
@@ -573,6 +214,7 @@ export function Inspector({
   onSelectCitizen,
   onSelectVehicle,
   onSelectIncident,
+  onSelectHousehold,
   standalone = false,
   paused = false,
 }: InspectorProps) {
@@ -617,7 +259,7 @@ export function Inspector({
           onSelectVehicle={onSelectVehicle}
         />
       ) : (
-        <BuildingInspector building={entity} onSelectCitizen={onSelectCitizen} />
+        <BuildingInspector building={entity} onSelectCitizen={onSelectCitizen} onSelectHousehold={onSelectHousehold} />
       )}
     </aside>
   );
